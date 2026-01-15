@@ -1,8 +1,9 @@
-import { router } from "expo-router";
+import { useRouter } from "expo-router";
 import { useState } from "react";
 import { Text, TextInput, TouchableOpacity, View } from "react-native";
 
-export default function LoginPage() {
+export default function LoginScreen() {
+    const router = useRouter();
     const [phoneNumber, setPhoneNumber] = useState("");
 
     const isValidPhone = phoneNumber.length >= 10 && phoneNumber.length <= 11;
@@ -48,6 +49,12 @@ export default function LoginPage() {
             {/* Continue button */}
             <TouchableOpacity
                 disabled={!isValidPhone}
+                onPress={() =>
+                    router.push({
+                        pathname: "/login/login-password" as any,
+                        params: { phone: phoneNumber },
+                    })
+                }
                 className={`mt-8 py-4 rounded-full ${
                     isValidPhone ? "bg-blue-600" : "bg-gray-300"
                 }`}

@@ -1,8 +1,9 @@
-import { router } from "expo-router";
+import { useRouter } from "expo-router";
 import { useState } from "react";
 import { Text, TextInput, TouchableOpacity, View } from "react-native";
 
-export default function RegisterPage() {
+export default function RegisterScreen() {
+    const router = useRouter();
     const [phoneNumber, setPhoneNumber] = useState("");
     const [termsChecked, setTermsChecked] = useState(false);
     const [policyChecked, setPolicyChecked] = useState(false);
@@ -109,6 +110,12 @@ export default function RegisterPage() {
             {/* Continue button */}
             <TouchableOpacity
                 disabled={!isFormValid}
+                onPress={() =>
+                    router.push({
+                        pathname: "/register/verify-otp" as any,
+                        params: { phone: phoneNumber },
+                    })
+                }
                 className={`mt-8 py-4 rounded-full ${
                     isFormValid ? "bg-blue-600" : "bg-gray-300"
                 }`}
