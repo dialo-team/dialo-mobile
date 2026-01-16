@@ -61,7 +61,7 @@ export default function UpdateAvatarScreen() {
 
             {/* Skip */}
             <TouchableOpacity
-                onPress={() => router.push("/(user)/home" as any)}
+                onPress={() => router.push("/(tabs)" as any)}
                 className="h-14 bg-gray-100 rounded-full items-center justify-center mt-4 mb-6"
             >
                 <Text className="font-semibold text-gray-700">Bỏ qua</Text>
