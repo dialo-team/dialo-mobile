@@ -1,3 +1,4 @@
+import { useRouter } from "expo-router";
 import { useState } from "react";
 import {
     ScrollView,
@@ -20,6 +21,7 @@ type MenuItem = {
 export default function ProfileScreen() {
     const [searchText, setSearchText] = useState("");
 
+    const router = useRouter();
     const menuItems: MenuItem[] = [
         {
             id: "1",
@@ -117,7 +119,11 @@ export default function ProfileScreen() {
                                 Xem trang cá nhân
                             </Text>
                         </View>
-                        <TouchableOpacity>
+                        <TouchableOpacity
+                            onPress={() =>
+                                router.push("/profile/edit-profile" as any)
+                            }
+                        >
                             <Text className="text-gray-400 text-xl">👥</Text>
                         </TouchableOpacity>
                     </View>
@@ -158,6 +164,18 @@ export default function ProfileScreen() {
                                 )}
                             </TouchableOpacity>
                         ))}
+                    </View>
+
+                    {/* Logout Button */}
+                    <View className="mt-6 px-4">
+                        <TouchableOpacity
+                            onPress={() => router.replace("/")}
+                            className="bg-blue-600 py-4 rounded-lg items-center"
+                        >
+                            <Text className="text-white font-semibold text-base">
+                                Đăng xuất
+                            </Text>
+                        </TouchableOpacity>
                     </View>
                 </ScrollView>
             </View>
