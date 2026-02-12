@@ -19,7 +19,7 @@ export default function TabsLayout() {
             }}
         >
             <Tabs.Screen
-                name="index"
+                name="message/index"
                 options={{
                     tabBarLabel: "Tin nhắn",
                     tabBarIcon: ({ color }) => (
@@ -30,7 +30,7 @@ export default function TabsLayout() {
                 }}
             />
             <Tabs.Screen
-                name="contacts"
+                name="contact/index"
                 options={{
                     tabBarLabel: "Danh bạ",
                     tabBarIcon: ({ color }) => (
@@ -41,7 +41,7 @@ export default function TabsLayout() {
                 }}
             />
             <Tabs.Screen
-                name="discover"
+                name="discover/index"
                 options={{
                     tabBarLabel: "Khám phá",
                     tabBarIcon: ({ color }) => (
@@ -52,7 +52,7 @@ export default function TabsLayout() {
                 }}
             />
             <Tabs.Screen
-                name="profile"
+                name="profile/index"
                 options={{
                     tabBarLabel: "Cá nhân",
                     tabBarIcon: ({ color }) => (
@@ -60,6 +60,12 @@ export default function TabsLayout() {
                             <Text style={{ fontSize: 24, color }}>👤</Text>
                         </View>
                     ),
+                }}
+            />
+            <Tabs.Screen
+                name="edit-profile/index"
+                options={{
+                    tabBarButton: () => null,
                 }}
             />
         </Tabs>

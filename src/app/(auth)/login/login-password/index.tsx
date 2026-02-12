@@ -75,7 +75,7 @@ export default function LoginWithPasswordScreen() {
                         disabled={!isValid}
                         onPress={() => {
                             // Giả sử mật khẩu đúng
-                            router.replace("/(tabs)" as any);
+                            router.replace("/(tabs)/message" as any);
                         }}
                         className={`mt-8 py-4 rounded-full ${
                             isValid ? "bg-blue-600" : "bg-gray-300"
