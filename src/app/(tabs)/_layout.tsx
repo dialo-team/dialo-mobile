@@ -52,17 +52,6 @@ export default function TabsLayout() {
                 }}
             />
             <Tabs.Screen
-                name="timeline"
-                options={{
-                    tabBarLabel: "Nhật ký",
-                    tabBarIcon: ({ color }) => (
-                        <View className="items-center">
-                            <Text style={{ fontSize: 24, color }}>🕐</Text>
-                        </View>
-                    ),
-                }}
-            />
-            <Tabs.Screen
                 name="profile"
                 options={{
                     tabBarLabel: "Cá nhân",
