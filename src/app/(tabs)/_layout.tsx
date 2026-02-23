@@ -63,9 +63,33 @@ export default function TabsLayout() {
                 }}
             />
             <Tabs.Screen
-                name="edit-profile/index"
+                name="profile/edit-profile/index"
                 options={{
-                    tabBarButton: () => null,
+                    href: null,
+                }}
+            />
+            <Tabs.Screen
+                name="profile/account-security/index"
+                options={{
+                    href: null,
+                }}
+            />
+            <Tabs.Screen
+                name="profile/privacy/index"
+                options={{
+                    href: null,
+                }}
+            />
+            <Tabs.Screen
+                name="profile/setting/index"
+                options={{
+                    href: null,
+                }}
+            />
+            <Tabs.Screen
+                name="contact/add-friend/index"
+                options={{
+                    href: null,
                 }}
             />
         </Tabs>
