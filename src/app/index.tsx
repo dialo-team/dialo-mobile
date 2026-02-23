@@ -7,7 +7,7 @@ export default function StartPage() {
         <View className="flex-1 bg-white px-6">
             {/* Logo */}
             <View className="flex-1 items-center justify-center">
-                <Text className="text-4xl font-bold text-blue-600">Dialo</Text>
+                <Text className="text-6xl font-bold text-blue-600">Dialo</Text>
             </View>
 
             {/* Buttons */}

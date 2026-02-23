@@ -16,6 +16,7 @@ type MenuItem = {
     subtitle: string;
     bgColor: string;
     showArrow?: boolean;
+    route?: string;
 };
 
 export default function ProfileScreen() {
@@ -69,6 +70,7 @@ export default function ProfileScreen() {
             subtitle: "",
             bgColor: "bg-blue-600",
             showArrow: true,
+            route: "/profile/account-security",
         },
         {
             id: "7",
@@ -77,6 +79,7 @@ export default function ProfileScreen() {
             subtitle: "",
             bgColor: "bg-blue-500",
             showArrow: true,
+            route: "/profile/privacy",
         },
     ];
 
@@ -84,11 +87,9 @@ export default function ProfileScreen() {
         <SafeAreaView className="flex-1 bg-white">
             <View className="flex-1 bg-gray-50">
                 {/* Header */}
-                <View className="bg-gray-800 px-4 pt-3 pb-3">
-                    <Text className="text-white text-sm mb-3">UserMenu</Text>
-
+                <View className="bg-blue-600 px-4 pt-10 pb-3">
                     {/* Search Bar */}
-                    <View className="flex-row items-center bg-blue-600 rounded-lg px-4 py-3">
+                    <View className="flex-row items-center bg-sky-900 rounded-lg px-4 py-3">
                         <Text className="text-white text-lg mr-3">🔍</Text>
                         <TextInput
                             placeholder="Tìm kiếm"
@@ -97,7 +98,12 @@ export default function ProfileScreen() {
                             value={searchText}
                             onChangeText={setSearchText}
                         />
-                        <TouchableOpacity className="ml-3">
+                        <TouchableOpacity
+                            onPress={() =>
+                                router.push("/profile/setting" as any)
+                            }
+                            className="ml-3"
+                        >
                             <Text className="text-white text-xl">⚙️</Text>
                         </TouchableOpacity>
                     </View>
@@ -105,7 +111,12 @@ export default function ProfileScreen() {
 
                 <ScrollView className="flex-1">
                     {/* User Profile Card */}
-                    <View className="bg-white mx-4 mt-4 rounded-lg p-4 flex-row items-center">
+                    <TouchableOpacity
+                        onPress={() =>
+                            router.push("/profile/edit-profile" as any)
+                        }
+                        className="bg-white mx-4 mt-4 rounded-lg p-4 flex-row items-center"
+                    >
                         <View className="w-12 h-12 rounded-full bg-green-500 items-center justify-center">
                             <Text className="text-white font-bold text-lg">
                                 TI
@@ -119,20 +130,21 @@ export default function ProfileScreen() {
                                 Xem trang cá nhân
                             </Text>
                         </View>
-                        <TouchableOpacity
-                            onPress={() =>
-                                router.push("/profile/edit-profile" as any)
-                            }
-                        >
+                        <View>
                             <Text className="text-gray-400 text-xl">👥</Text>
-                        </TouchableOpacity>
-                    </View>
+                        </View>
+                    </TouchableOpacity>
 
                     {/* Menu Items */}
                     <View className="mt-4">
                         {menuItems.map((item) => (
                             <TouchableOpacity
                                 key={item.id}
+                                onPress={() => {
+                                    if (item.route) {
+                                        router.push(item.route as any);
+                                    }
+                                }}
                                 className="bg-white px-4 py-3 flex-row items-center border-b border-gray-100"
                             >
                                 {/* Icon */}

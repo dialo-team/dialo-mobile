@@ -70,7 +70,7 @@ export default function MessagesScreen() {
                 {/* Header */}
                 <View className="bg-blue-600 px-4 pt-12 pb-4">
                     {/* Search Bar */}
-                    <View className="flex-row items-center bg-blue-500 rounded-lg px-4 py-2">
+                    <View className="flex-row items-center bg-sky-900 rounded-lg px-4 py-2">
                         <Text className="text-white text-lg mr-3">🔍</Text>
                         <TextInput
                             placeholder="Tìm kiếm"

@@ -98,17 +98,21 @@ export default function UpdateAvatarScreen() {
 
                 {/* Update button */}
                 <TouchableOpacity
-                    onPress={pickImage}
+                    onPress={
+                        image
+                            ? () => router.replace("/(tabs)/message" as any)
+                            : pickImage
+                    }
                     className="h-14 bg-blue-600 rounded-full items-center justify-center"
                 >
                     <Text className="text-white font-semibold text-base">
-                        Cập nhật
+                        {image ? "Tiếp tục" : "Cập nhật"}
                     </Text>
                 </TouchableOpacity>
 
                 {/* Skip */}
                 <TouchableOpacity
-                    onPress={() => router.replace("/(tabs)" as any)}
+                    onPress={() => router.replace("/(tabs)/message" as any)}
                     className="h-14 bg-gray-100 rounded-full items-center justify-center mt-4 mb-6"
                 >
                     <Text className="font-semibold text-gray-700">Bỏ qua</Text>
