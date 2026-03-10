@@ -6,8 +6,8 @@ export default function RootLayout() {
     return (
         <SafeAreaProvider>
             <Stack screenOptions={{ headerShown: false }}>
+                <Stack.Screen name="(auth)" />
                 <Stack.Screen name="(tabs)" />
-                <Stack.Screen name="edit-profile" />
             </Stack>
         </SafeAreaProvider>
     );
