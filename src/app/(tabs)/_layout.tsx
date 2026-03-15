@@ -86,9 +86,23 @@ export default function TabsLayout() {
                 }}
             />
             <Tabs.Screen
-                name="contact/add-friend/index"
+                name="contact/friend/add/index"
                 options={{
                     href: null,
+                }}
+            />
+            <Tabs.Screen
+                name="contact/friend/new/index"
+                options={{
+                    href: null,
+                    tabBarStyle: { display: "none" },
+                }}
+            />
+            <Tabs.Screen
+                name="message/qr-scanner/index"
+                options={{
+                    href: null,
+                    tabBarStyle: { display: "none" },
                 }}
             />
         </Tabs>

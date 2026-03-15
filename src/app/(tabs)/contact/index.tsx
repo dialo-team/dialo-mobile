@@ -56,7 +56,7 @@ export default function ContactsScreen() {
                     Tìm kiếm
                 </Text>
                 <TouchableOpacity
-                    onPress={() => router.push("/contact/add-friend" as any)}
+                    onPress={() => router.push("/contact/friend/add" as any)}
                 >
                     <Feather name="user-plus" size={24} color="white" />
                 </TouchableOpacity>

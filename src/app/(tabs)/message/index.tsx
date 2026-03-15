@@ -1,6 +1,17 @@
-import { Plus, ScanQrCode, Search } from "lucide-react-native";
-import { useState } from "react";
+import { useRouter } from "expo-router";
 import {
+    Calendar,
+    Folder,
+    Plus,
+    ScanQrCode,
+    Search,
+    UsersRound,
+    Video,
+} from "lucide-react-native";
+import React, { useState } from "react";
+import {
+    Modal,
+    Pressable,
     ScrollView,
     Text,
     TextInput,
@@ -20,7 +31,9 @@ type Conversation = {
 };
 
 export default function MessagesScreen() {
+    const router = useRouter();
     const [searchText, setSearchText] = useState("");
+    const [showMenu, setShowMenu] = useState(false);
 
     const conversations: Conversation[] = [
         {
@@ -65,6 +78,35 @@ export default function MessagesScreen() {
         return colors[avatar as keyof typeof colors] || "bg-gray-500";
     };
 
+    const plusMenu = [
+        {
+            id: "1",
+            icon: <Plus size={20} color="gray" />,
+            title: "Thêm bạn",
+            route: "/contact/friend/add",
+        },
+        {
+            id: "2",
+            icon: <UsersRound size={20} color="gray" />,
+            title: "Tạo nhóm",
+        },
+        {
+            id: "3",
+            icon: <Folder size={20} color="gray" />,
+            title: "My Documents",
+        },
+        {
+            id: "4",
+            icon: <Calendar size={20} color="gray" />,
+            title: "Lịch Zalo",
+        },
+        {
+            id: "5",
+            icon: <Video size={20} color="gray" />,
+            title: "Tạo cuộc gọi nhóm",
+        },
+    ];
+
     return (
         <SafeAreaView className="flex-1 bg-white">
             <View className="flex-row items-center px-3 py-2 bg-blue-600">
@@ -76,10 +118,18 @@ export default function MessagesScreen() {
                     value={searchText}
                     onChangeText={setSearchText}
                 />
-                <TouchableOpacity className="ml-3">
+
+                <TouchableOpacity
+                    className="ml-3"
+                    onPress={() => router.push("/message/qr-scanner" as any)}
+                >
                     <ScanQrCode size={24} color="white" />
                 </TouchableOpacity>
-                <TouchableOpacity className="ml-3">
+
+                <TouchableOpacity
+                    className="ml-3"
+                    onPress={() => setShowMenu(!showMenu)}
+                >
                     <Plus size={24} color="white" />
                 </TouchableOpacity>
             </View>
@@ -136,6 +186,36 @@ export default function MessagesScreen() {
                     </TouchableOpacity>
                 ))}
             </ScrollView>
+
+            <Modal visible={showMenu} transparent animationType="fade">
+                <Pressable
+                    className="flex-1 bg-black/20"
+                    onPress={() => setShowMenu(false)}
+                >
+                    <View className="absolute top-16 right-3 bg-white rounded-xl w-56 shadow-lg">
+                        {plusMenu.map((item, index) => (
+                            <TouchableOpacity
+                                key={item.id}
+                                className={`px-4 py-3 flex-row items-center ${
+                                    index !== 0
+                                        ? "border-t border-gray-100"
+                                        : ""
+                                }`}
+                                onPress={() => {
+                                    if (item.route) {
+                                        router.push(item.route as any);
+                                    }
+                                }}
+                            >
+                                {item.icon}
+                                <Text className="text-base ml-1">
+                                    {item.title}
+                                </Text>
+                            </TouchableOpacity>
+                        ))}
+                    </View>
+                </Pressable>
+            </Modal>
         </SafeAreaView>
     );
 }
