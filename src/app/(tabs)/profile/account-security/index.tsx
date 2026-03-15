@@ -1,10 +1,13 @@
-import {
-    FontAwesome5,
-    Ionicons,
-    MaterialCommunityIcons,
-    MaterialIcons,
-} from "@expo/vector-icons";
 import { useRouter } from "expo-router";
+import {
+    ChevronRight,
+    KeyRound,
+    Lock,
+    MoveLeft,
+    ScanQrCode,
+    ShieldHalf,
+    TriangleAlert,
+} from "lucide-react-native";
 import React, { useState } from "react";
 import {
     Image,
@@ -28,7 +31,7 @@ export default function AccountSecurityScreen() {
                     onPress={() => router.push("/profile" as any)}
                     hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
                 >
-                    <Ionicons name="arrow-back" size={20} color="white" />
+                    <MoveLeft size={24} color="white" />
                 </TouchableOpacity>
                 <Text className="text-white text-[18px] font-medium ml-4">
                     Tài khoản và bảo mật
@@ -55,11 +58,7 @@ export default function AccountSecurityScreen() {
                                 Phan Nhật Tiến
                             </Text>
                         </View>
-                        <MaterialIcons
-                            name="chevron-right"
-                            size={24}
-                            color="#C4C4C4"
-                        />
+                        <ChevronRight size={24} color="#C4C4C4" />
                     </TouchableOpacity>
 
                     {/* Số điện thoại */}
@@ -72,11 +71,7 @@ export default function AccountSecurityScreen() {
                                 (+84) 906 766 050
                             </Text>
                         </View>
-                        <MaterialIcons
-                            name="chevron-right"
-                            size={24}
-                            color="#C4C4C4"
-                        />
+                        <ChevronRight size={24} color="#C4C4C4" />
                     </TouchableOpacity>
 
                     {/* Email */}
@@ -89,11 +84,7 @@ export default function AccountSecurityScreen() {
                                 Chưa liên kết
                             </Text>
                         </View>
-                        <MaterialIcons
-                            name="chevron-right"
-                            size={24}
-                            color="#C4C4C4"
-                        />
+                        <ChevronRight size={24} color="#C4C4C4" />
                     </TouchableOpacity>
 
                     {/* Mã QR */}
@@ -101,17 +92,8 @@ export default function AccountSecurityScreen() {
                         <Text className="flex-1 text-base font-normal text-black">
                             Mã QR của tôi
                         </Text>
-                        <MaterialCommunityIcons
-                            name="qrcode-scan"
-                            size={20}
-                            color="#888"
-                            className="mr-2"
-                        />
-                        <MaterialIcons
-                            name="chevron-right"
-                            size={24}
-                            color="#C4C4C4"
-                        />
+                        <ScanQrCode size={24} color="#888" />
+                        <ChevronRight size={24} color="#C4C4C4" />
                     </TouchableOpacity>
                 </View>
 
@@ -127,11 +109,7 @@ export default function AccountSecurityScreen() {
                     {/* Kiểm tra bảo mật */}
                     <TouchableOpacity className="flex-row items-center px-4 py-3 border-b border-gray-100">
                         <View className="w-8">
-                            <FontAwesome5
-                                name="shield-alt"
-                                size={20}
-                                color="#666"
-                            />
+                            <ShieldHalf size={24} color="#666" />
                         </View>
                         <View className="flex-1">
                             <Text className="text-base font-normal text-black mb-[2px]">
@@ -141,23 +119,14 @@ export default function AccountSecurityScreen() {
                                 3 vấn đề bảo mật cần xử lý
                             </Text>
                         </View>
-                        <MaterialIcons
-                            name="warning"
-                            size={20}
-                            color="#E58A00"
-                            className="mr-1"
-                        />
-                        <MaterialIcons
-                            name="chevron-right"
-                            size={24}
-                            color="#C4C4C4"
-                        />
+                        <TriangleAlert size={24} color="#E58A00" />
+                        <ChevronRight size={24} color="#C4C4C4" />
                     </TouchableOpacity>
 
                     {/* Khóa Zalo */}
                     <TouchableOpacity className="flex-row items-center px-4 py-4">
                         <View className="w-8">
-                            <FontAwesome5 name="lock" size={20} color="#666" />
+                            <Lock size={24} color="#666" />
                         </View>
                         <Text className="flex-1 text-base font-normal text-black">
                             Khóa Zalo
@@ -165,11 +134,7 @@ export default function AccountSecurityScreen() {
                         <Text className="text-[14px] text-gray-500 mr-1">
                             Đang tắt
                         </Text>
-                        <MaterialIcons
-                            name="chevron-right"
-                            size={24}
-                            color="#C4C4C4"
-                        />
+                        <ChevronRight size={24} color="#C4C4C4" />
                     </TouchableOpacity>
                 </View>
 
@@ -211,26 +176,18 @@ export default function AccountSecurityScreen() {
                                 Quản lý các thiết bị bạn sử dụng...
                             </Text>
                         </View>
-                        <MaterialIcons
-                            name="chevron-right"
-                            size={24}
-                            color="#C4C4C4"
-                        />
+                        <ChevronRight size={24} color="#C4C4C4" />
                     </TouchableOpacity>
 
                     {/* Mật khẩu */}
                     <TouchableOpacity className="flex-row items-center px-4 py-4">
                         <View className="w-8">
-                            <FontAwesome5 name="key" size={18} color="#666" />
+                            <KeyRound size={24} color="#666" />
                         </View>
                         <Text className="flex-1 text-base font-normal text-black">
                             Mật khẩu
                         </Text>
-                        <MaterialIcons
-                            name="chevron-right"
-                            size={24}
-                            color="#C4C4C4"
-                        />
+                        <ChevronRight size={24} color="#C4C4C4" />
                     </TouchableOpacity>
                 </View>
             </ScrollView>

@@ -1,5 +1,6 @@
 import { Tabs } from "expo-router";
-import { Text, View } from "react-native";
+import { BookSearch, MessageCircle, User, Users } from "lucide-react-native";
+import { View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 export default function TabsLayout() {
@@ -25,9 +26,7 @@ export default function TabsLayout() {
                 options={{
                     tabBarLabel: "Tin nhắn",
                     tabBarIcon: ({ color }) => (
-                        <View className="items-center">
-                            <Text style={{ fontSize: 24, color }}>💬</Text>
-                        </View>
+                        <MessageCircle size={24} color={color} />
                     ),
                 }}
             />
@@ -37,7 +36,7 @@ export default function TabsLayout() {
                     tabBarLabel: "Danh bạ",
                     tabBarIcon: ({ color }) => (
                         <View className="items-center">
-                            <Text style={{ fontSize: 24, color }}>📱</Text>
+                            <Users size={24} color={color} />
                         </View>
                     ),
                 }}
@@ -47,9 +46,7 @@ export default function TabsLayout() {
                 options={{
                     tabBarLabel: "Khám phá",
                     tabBarIcon: ({ color }) => (
-                        <View className="items-center">
-                            <Text style={{ fontSize: 24, color }}>⊞</Text>
-                        </View>
+                        <BookSearch size={24} color={color} />
                     ),
                 }}
             />
@@ -59,7 +56,7 @@ export default function TabsLayout() {
                     tabBarLabel: "Cá nhân",
                     tabBarIcon: ({ color }) => (
                         <View className="items-center">
-                            <Text style={{ fontSize: 24, color }}>👤</Text>
+                            <User size={24} color={color} />
                         </View>
                     ),
                 }}

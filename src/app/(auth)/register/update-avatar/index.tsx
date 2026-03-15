@@ -1,6 +1,6 @@
-import { Ionicons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
 import { useLocalSearchParams, useRouter } from "expo-router";
+import { MoveLeft } from "lucide-react-native";
 import { useState } from "react";
 import { Alert, Image, Text, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -62,7 +62,7 @@ export default function UpdateAvatarScreen() {
                     onPress={() => router.back()}
                     className="mt-2"
                 >
-                    <Ionicons name="arrow-back" size={24} />
+                    <MoveLeft size={24} color="gray" />
                 </TouchableOpacity>
 
                 {/* Title */}

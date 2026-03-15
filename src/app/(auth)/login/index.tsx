@@ -1,4 +1,5 @@
 import { useRouter } from "expo-router";
+import { MoveLeft } from "lucide-react-native";
 import { useState } from "react";
 import { Text, TextInput, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -7,12 +8,26 @@ export default function LoginScreen() {
     const router = useRouter();
     const [phoneNumber, setPhoneNumber] = useState("");
 
-    const isValidPhone = phoneNumber.length >= 10 && phoneNumber.length <= 11;
-
     const handlePhoneInput = (text: string) => {
         const numbersOnly = text.replace(/[^0-9]/g, "");
-        setPhoneNumber(numbersOnly);
+
+        // Nếu bắt đầu từ 0: tối đa 10 ký tự
+        if (numbersOnly.startsWith("0")) {
+            setPhoneNumber(numbersOnly.slice(0, 10));
+        }
+        // Nếu bắt đầu từ số khác 0: tối đa 9 ký tự
+        else if (numbersOnly.length > 0) {
+            setPhoneNumber(numbersOnly.slice(0, 9));
+        }
+        // Nếu rỗng
+        else {
+            setPhoneNumber("");
+        }
     };
+
+    const isValidPhone =
+        (phoneNumber.startsWith("0") && phoneNumber.length === 10) ||
+        (!phoneNumber.startsWith("0") && phoneNumber.length === 9);
 
     return (
         <SafeAreaView
@@ -25,7 +40,7 @@ export default function LoginScreen() {
                 {/* Header */}
                 <View className="h-14 justify-center">
                     <TouchableOpacity onPress={() => router.back()}>
-                        <Text className="text-2xl">←</Text>
+                        <MoveLeft size={24} color="gray" />
                     </TouchableOpacity>
                 </View>
 
@@ -39,8 +54,7 @@ export default function LoginScreen() {
                 {/* Phone input */}
                 <View className="mt-10 flex-row items-center border-b border-blue-500 pb-2">
                     <TouchableOpacity className="flex-row items-center pr-3">
-                        <Text className="text-base">+84</Text>
-                        <Text className="ml-1 text-gray-400">▼</Text>
+                        <Text className="text-base">+84 |</Text>
                     </TouchableOpacity>
 
                     <TextInput
@@ -49,7 +63,7 @@ export default function LoginScreen() {
                         className="flex-1 text-base px-2"
                         value={phoneNumber}
                         onChangeText={handlePhoneInput}
-                        maxLength={11}
+                        maxLength={10}
                     />
                 </View>
 
@@ -75,15 +89,8 @@ export default function LoginScreen() {
                     </Text>
                 </TouchableOpacity>
 
-                {/* Illustration */}
-                <View className="flex-1 items-center justify-center">
-                    <View className="w-28 h-28 bg-blue-100 rounded-3xl items-center justify-center">
-                        <Text className="text-3xl">💬</Text>
-                    </View>
-                </View>
-
                 {/* Register link */}
-                <View className="items-center">
+                <View className=" flex-1 justify-end items-center pb-10">
                     <Text className="text-gray-500">
                         Bạn chưa có tài khoản?{" "}
                         <Text

@@ -1,5 +1,6 @@
-import { AntDesign, Feather, MaterialIcons } from "@expo/vector-icons";
+import { Feather, MaterialIcons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
+import { ChevronRight, X } from "lucide-react-native";
 import { Text, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
@@ -13,7 +14,7 @@ export default function ForgotPasswordPage() {
                     onPress={() => router.back()}
                     hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
                 >
-                    <AntDesign name="close" size={20} color="black" />
+                    <X size={24} color="black" />
                 </TouchableOpacity>
             </View>
 
@@ -44,8 +45,7 @@ export default function ForgotPasswordPage() {
                     </Text>
                 </View>
 
-                {/* Icon mũi tên bên phải */}
-                <MaterialIcons name="chevron-right" size={24} color="#C4C4C4" />
+                <ChevronRight size={24} color="gray" />
             </TouchableOpacity>
 
             {/* Option 2: Sử dụng email liên kết (Trạng thái mờ/Disabled) */}

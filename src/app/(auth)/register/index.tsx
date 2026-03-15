@@ -1,4 +1,5 @@
 import { useRouter } from "expo-router";
+import { Check, MoveLeft } from "lucide-react-native";
 import { useState } from "react";
 import { Text, TextInput, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -8,14 +9,28 @@ export default function RegisterScreen() {
     const [phoneNumber, setPhoneNumber] = useState("");
     const [termsChecked, setTermsChecked] = useState(false);
     const [policyChecked, setPolicyChecked] = useState(false);
-
-    const isValidPhone = phoneNumber.length >= 10 && phoneNumber.length <= 11;
-    const isFormValid = isValidPhone && termsChecked && policyChecked;
+    const isValidPhone =
+        (phoneNumber.startsWith("0") && phoneNumber.length === 10) ||
+        (!phoneNumber.startsWith("0") && phoneNumber.length === 9);
 
     const handlePhoneInput = (text: string) => {
         const numbersOnly = text.replace(/[^0-9]/g, "");
-        setPhoneNumber(numbersOnly);
+
+        // Nếu bắt đầu từ 0: tối đa 10 ký tự
+        if (numbersOnly.startsWith("0")) {
+            setPhoneNumber(numbersOnly.slice(0, 10));
+        }
+        // Nếu bắt đầu từ số khác 0: tối đa 9 ký tự
+        else if (numbersOnly.length > 0) {
+            setPhoneNumber(numbersOnly.slice(0, 9));
+        }
+        // Nếu rỗng
+        else {
+            setPhoneNumber("");
+        }
     };
+
+    const isFormValid = isValidPhone && termsChecked && policyChecked;
 
     return (
         <SafeAreaView
@@ -28,7 +43,7 @@ export default function RegisterScreen() {
                 {/* Header */}
                 <View className="h-14 justify-center">
                     <TouchableOpacity onPress={() => router.back()}>
-                        <Text className="text-2xl">←</Text>
+                        <MoveLeft size={24} color="gray" />
                     </TouchableOpacity>
                 </View>
 
@@ -44,7 +59,6 @@ export default function RegisterScreen() {
                     {/* Country code */}
                     <TouchableOpacity className="flex-row items-center px-4 bg-blue-50">
                         <Text className="text-base">+84</Text>
-                        <Text className="ml-1 text-gray-400">▼</Text>
                     </TouchableOpacity>
 
                     {/* Divider */}
@@ -57,7 +71,7 @@ export default function RegisterScreen() {
                         className="flex-1 px-4 py-4 text-base"
                         value={phoneNumber}
                         onChangeText={handlePhoneInput}
-                        maxLength={11}
+                        maxLength={10}
                     />
                 </View>
 
@@ -65,20 +79,16 @@ export default function RegisterScreen() {
                 <View className="mt-6 space-y-3">
                     <TouchableOpacity
                         onPress={() => setTermsChecked(!termsChecked)}
-                        className="flex-row items-start"
+                        className="flex-row items-start pb-4"
                     >
                         <View
-                            className={`w-5 h-5 border-2 rounded-full mr-3 items-center justify-center ${
+                            className={`w-7 h-7 border-2 rounded-full mr-3 items-center justify-center mt-3 ${
                                 termsChecked
                                     ? "border-blue-600 bg-blue-600"
                                     : "border-gray-300"
                             }`}
                         >
-                            {termsChecked && (
-                                <Text className="text-white text-xs font-bold">
-                                    ✓
-                                </Text>
-                            )}
+                            {termsChecked && <Check size={16} color="white" />}
                         </View>
                         <Text className="text-gray-600 flex-1">
                             Tôi đồng ý với các{" "}
@@ -93,17 +103,13 @@ export default function RegisterScreen() {
                         className="flex-row items-start"
                     >
                         <View
-                            className={`w-5 h-5 border-2 rounded-full mr-3 items-center justify-center ${
+                            className={`w-7 h-7 border-2 rounded-full mr-3 items-center justify-center mt-3 ${
                                 policyChecked
                                     ? "border-blue-600 bg-blue-600"
                                     : "border-gray-300"
                             }`}
                         >
-                            {policyChecked && (
-                                <Text className="text-white text-xs font-bold">
-                                    ✓
-                                </Text>
-                            )}
+                            {policyChecked && <Check size={16} color="white" />}
                         </View>
                         <Text className="text-gray-600 flex-1">
                             Tôi đồng ý với{" "}
@@ -136,15 +142,8 @@ export default function RegisterScreen() {
                     </Text>
                 </TouchableOpacity>
 
-                {/* Illustration */}
-                <View className="flex-1 items-center justify-center">
-                    <View className="w-32 h-32 bg-blue-100 rounded-3xl items-center justify-center">
-                        <Text className="text-4xl">💬</Text>
-                    </View>
-                </View>
-
                 {/* Login link */}
-                <View className="items-center mb-6">
+                <View className="flex-1 justify-end items-center pb-10">
                     <Text className="text-gray-500">
                         Bạn đã có tài khoản?{" "}
                         <Text

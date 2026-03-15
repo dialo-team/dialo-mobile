@@ -1,10 +1,17 @@
-import {
-    Feather,
-    Ionicons,
-    MaterialCommunityIcons,
-    MaterialIcons,
-} from "@expo/vector-icons";
+import { MaterialIcons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
+import {
+    Ban,
+    Calendar,
+    ChevronLeft,
+    CircleQuestionMark,
+    MessageSquareText,
+    Phone,
+    Proportions,
+    SquarePen,
+    User,
+    UserPlus,
+} from "lucide-react-native";
 import React from "react";
 import { ScrollView, Text, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -19,19 +26,13 @@ export default function PrivacyScreen() {
                 {
                     id: "1",
                     title: "Sinh nhật",
-                    icon: <Feather name="calendar" size={20} color="#555" />,
+                    icon: <Calendar size={22} color="#555" />,
                     hasChevron: true,
                 },
                 {
                     id: "2",
                     title: "Hiện trạng thái truy cập",
-                    icon: (
-                        <MaterialCommunityIcons
-                            name="account-outline"
-                            size={22}
-                            color="#555"
-                        />
-                    ),
+                    icon: <User size={22} color="#555" />,
                     rightText: "Đang bật",
                 },
             ],
@@ -42,31 +43,19 @@ export default function PrivacyScreen() {
                 {
                     id: "3",
                     title: "Hiện trạng thái “Đã xem”",
-                    icon: (
-                        <MaterialCommunityIcons
-                            name="chat-check-outline"
-                            size={20}
-                            color="#555"
-                        />
-                    ),
+                    icon: <CircleQuestionMark size={20} color="#555" />,
                     rightText: "Đang bật",
                 },
                 {
                     id: "4",
                     title: "Cho phép nhắn tin",
-                    icon: (
-                        <MaterialCommunityIcons
-                            name="message-text-outline"
-                            size={20}
-                            color="#555"
-                        />
-                    ),
+                    icon: <MessageSquareText size={20} color="#555" />,
                     rightText: "Mọi người",
                 },
                 {
                     id: "5",
                     title: "Cho phép gọi điện",
-                    icon: <Feather name="phone" size={20} color="#555" />,
+                    icon: <Phone size={20} color="#555" />,
                     rightText: "Bạn bè và người lạ\ntừng liên hệ",
                 },
             ],
@@ -77,13 +66,13 @@ export default function PrivacyScreen() {
                 {
                     id: "6",
                     title: "Cho phép xem và bình luận",
-                    icon: <Feather name="edit" size={20} color="#555" />,
+                    icon: <SquarePen size={20} color="#555" />,
                     hasChevron: true,
                 },
                 {
                     id: "7",
                     title: "Chặn và ẩn",
-                    icon: <Feather name="slash" size={20} color="#555" />,
+                    icon: <Ban size={20} color="#555" />,
                     hasChevron: true,
                 },
             ],
@@ -94,7 +83,7 @@ export default function PrivacyScreen() {
                 {
                     id: "8",
                     title: "Quản lý nguồn tìm kiếm và kết bạn",
-                    icon: <Feather name="user-plus" size={20} color="#555" />,
+                    icon: <UserPlus size={20} color="#555" />,
                     hasChevron: true,
                 },
             ],
@@ -105,7 +94,7 @@ export default function PrivacyScreen() {
                 {
                     id: "9",
                     title: "Tiện ích",
-                    icon: <Feather name="layout" size={20} color="#555" />,
+                    icon: <Proportions size={20} color="#555" />,
                     hasChevron: true,
                 },
             ],
@@ -120,7 +109,7 @@ export default function PrivacyScreen() {
                     hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
                     onPress={() => router.push("/(tabs)/profile" as any)}
                 >
-                    <Ionicons name="chevron-back" size={20} color="white" />
+                    <ChevronLeft size={24} color="white" />
                 </TouchableOpacity>
                 <Text className="text-white text-[18px] font-medium ml-2">
                     Quyền riêng tư

@@ -1,4 +1,5 @@
 import { useLocalSearchParams, useRouter } from "expo-router";
+import { MoveLeft } from "lucide-react-native";
 import { useState } from "react";
 import {
     KeyboardAvoidingView,
@@ -38,7 +39,7 @@ export default function LoginWithPasswordScreen() {
                     {/* Header */}
                     <View className="h-14 justify-center">
                         <TouchableOpacity onPress={() => router.back()}>
-                            <Text className="text-2xl">←</Text>
+                            <MoveLeft size={24} color="gray" />
                         </TouchableOpacity>
                     </View>
 
@@ -90,15 +91,8 @@ export default function LoginWithPasswordScreen() {
                         </Text>
                     </TouchableOpacity>
 
-                    {/* Illustration */}
-                    <View className="flex-1 items-center justify-center">
-                        <View className="w-32 h-32 bg-blue-100 rounded-3xl items-center justify-center">
-                            <Text className="text-4xl">💬</Text>
-                        </View>
-                    </View>
-
                     {/* Forgot password */}
-                    <View className="items-center mb-6">
+                    <View className="flex-1 justify-end items-center pb-10">
                         <TouchableOpacity
                             onPress={() =>
                                 router.push("/login/forgot-password" as any)

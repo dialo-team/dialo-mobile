@@ -138,20 +138,29 @@ export default function AddInforPage() {
                             }
                             maximumDate={new Date()}
                             onChange={(e, date) => {
-                                if (date) setTempBirthday(date);
+                                if (date) {
+                                    setTempBirthday(date);
+                                    // Android: auto update on selection
+                                    if (Platform.OS === "android") {
+                                        setBirthday(date);
+                                        setShowDate(false);
+                                    }
+                                }
                             }}
                         />
-                        <TouchableOpacity
-                            onPress={() => {
-                                setBirthday(tempBirthday);
-                                setShowDate(false);
-                            }}
-                            className="mt-3 h-12 rounded-xl items-center justify-center bg-blue-600"
-                        >
-                            <Text className="text-white font-semibold">
-                                Xác nhận
-                            </Text>
-                        </TouchableOpacity>
+                        {Platform.OS === "ios" && (
+                            <TouchableOpacity
+                                onPress={() => {
+                                    setBirthday(tempBirthday);
+                                    setShowDate(false);
+                                }}
+                                className="mt-3 h-12 rounded-xl items-center justify-center bg-blue-600"
+                            >
+                                <Text className="text-white font-semibold">
+                                    Xác nhận
+                                </Text>
+                            </TouchableOpacity>
+                        )}
                     </View>
                 )}
             </View>

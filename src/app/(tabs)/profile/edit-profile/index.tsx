@@ -1,6 +1,7 @@
 import DateTimePicker from "@react-native-community/datetimepicker";
 import * as ImagePicker from "expo-image-picker";
 import { useRouter } from "expo-router";
+import { MoveLeft } from "lucide-react-native";
 import { useState } from "react";
 import {
     Image,
@@ -61,10 +62,10 @@ export default function EditProfile() {
                 <TouchableOpacity
                     onPress={() => router.push("/profile" as any)}
                 >
-                    <Text className="text-white text-xl mr-4">←</Text>
+                    <MoveLeft size={24} color="white" />
                 </TouchableOpacity>
 
-                <Text className="text-white text-lg font-semibold">
+                <Text className="text-white text-lg font-semibold flex-1 text-center">
                     Thông tin cá nhân
                 </Text>
             </View>

@@ -1,5 +1,6 @@
 import { Feather } from "@expo/vector-icons";
 import { useRouter } from "expo-router"; // Thêm import useRouter
+import { MoveLeft } from "lucide-react-native";
 import React, { useEffect, useState } from "react";
 import {
     KeyboardAvoidingView,
@@ -56,19 +57,14 @@ export default function NewPasswordScreen() {
                 behavior={Platform.OS === "ios" ? "padding" : "height"}
                 className="flex-1"
             >
-                {/* Header - Nút Bỏ qua */}
-                <View className="flex-row justify-end px-5 py-3 mt-2">
-                    <TouchableOpacity
-                        hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                    >
-                        <Text className="text-black font-bold text-[16px]">
-                            Bỏ qua
-                        </Text>
-                    </TouchableOpacity>
+                <View className="px-6">
+                    <View className="h-14 justify-center">
+                        <TouchableOpacity onPress={() => router.back()}>
+                            <MoveLeft size={24} color="black" />
+                        </TouchableOpacity>
+                    </View>
                 </View>
-
-                {/* Tiêu đề chính */}
-                <View className="items-center mt-6 px-4">
+                <View className="items-center mt-4 px-4">
                     <Text className="text-[22px] font-bold text-black mb-3">
                         Tạo mật khẩu đăng nhập
                     </Text>

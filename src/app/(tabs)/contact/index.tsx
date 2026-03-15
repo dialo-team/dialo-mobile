@@ -1,5 +1,6 @@
-import { AntDesign, Feather, FontAwesome5, Ionicons } from "@expo/vector-icons";
+import { AntDesign, Feather } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
+import { Cake, Phone, Search, Users, Video } from "lucide-react-native";
 import React from "react";
 import { Image, ScrollView, Text, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -46,38 +47,11 @@ export default function ContactsScreen() {
         },
     ];
 
-    // Bảng chữ cái bên phải
-    const alphabet = [
-        "★",
-        "A",
-        "B",
-        "C",
-        "D",
-        "Đ",
-        "G",
-        "H",
-        "K",
-        "L",
-        "M",
-        "N",
-        "O",
-        "P",
-        "Q",
-        "R",
-        "S",
-        "T",
-        "U",
-        "V",
-        "X",
-        "Y",
-        "Z",
-    ];
-
     return (
         <SafeAreaView className="flex-1 bg-white">
             {/* Header: Thanh tìm kiếm */}
-            <View className="flex-row items-center px-4 py-3 bg-[#0091FF]">
-                <Ionicons name="search" size={24} color="white" />
+            <View className="flex-row items-center px-4 py-5 bg-blue-600">
+                <Search size={24} color="white" />
                 <Text className="flex-1 text-white text-[16px] ml-3 opacity-80">
                     Tìm kiếm
                 </Text>
@@ -91,8 +65,8 @@ export default function ContactsScreen() {
             <View className="flex-1 bg-white">
                 {/* Tabs: Bạn bè, Nhóm */}
                 <View className="flex-row border-b border-gray-200">
-                    <TouchableOpacity className="flex-1 items-center py-3 border-b-2 border-[#0091FF]">
-                        <Text className="text-[#0091FF] font-medium text-[15px]">
+                    <TouchableOpacity className="flex-1 items-center py-3 border-b-2 border-blue-600">
+                        <Text className="text-blue-600 font-medium text-[15px]">
                             Bạn bè
                         </Text>
                     </TouchableOpacity>
@@ -112,11 +86,7 @@ export default function ContactsScreen() {
                     <View className="py-2">
                         <TouchableOpacity className="flex-row items-center px-4 py-3">
                             <View className="w-10 h-10 rounded-full bg-[#0091FF] items-center justify-center">
-                                <FontAwesome5
-                                    name="user-friends"
-                                    size={16}
-                                    color="white"
-                                />
+                                <Users size={24} color={"white"} />
                             </View>
                             <Text className="text-base font-normal text-black ml-3">
                                 Lời mời kết bạn
@@ -128,11 +98,7 @@ export default function ContactsScreen() {
 
                         <TouchableOpacity className="flex-row items-center px-4 py-3">
                             <View className="w-10 h-10 rounded-full bg-[#0091FF] items-center justify-center">
-                                <FontAwesome5
-                                    name="birthday-cake"
-                                    size={16}
-                                    color="white"
-                                />
+                                <Cake size={24} color={"white"} />
                             </View>
                             <Text className="text-base font-normal text-black ml-3">
                                 Sinh nhật
@@ -202,18 +168,10 @@ export default function ContactsScreen() {
                                     </Text>
                                     <View className="flex-row items-center space-x-4">
                                         <TouchableOpacity className="p-2">
-                                            <Feather
-                                                name="phone"
-                                                size={20}
-                                                color="#666"
-                                            />
+                                            <Phone size={22} color="#666" />
                                         </TouchableOpacity>
                                         <TouchableOpacity className="p-2">
-                                            <Feather
-                                                name="video"
-                                                size={22}
-                                                color="#666"
-                                            />
+                                            <Video size={24} color="#666" />
                                         </TouchableOpacity>
                                     </View>
                                 </TouchableOpacity>
@@ -224,18 +182,6 @@ export default function ContactsScreen() {
                     {/* Padding ảo để không bị che bởi Bottom Tab */}
                     <View className="h-20" />
                 </ScrollView>
-
-                {/* Bảng chữ cái dọc (Alphabet Scroll) bên phải */}
-                <View className="absolute right-0 top-1/4 bottom-0 w-6 items-center bg-white shadow-sm rounded-l-md pt-2">
-                    {alphabet.map((letter, index) => (
-                        <Text
-                            key={index}
-                            className="text-[9px] font-bold text-gray-500 mb-[2px]"
-                        >
-                            {letter}
-                        </Text>
-                    ))}
-                </View>
             </View>
         </SafeAreaView>
     );

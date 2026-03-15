@@ -1,4 +1,5 @@
 import { useLocalSearchParams, useRouter } from "expo-router";
+import { MoveLeft } from "lucide-react-native";
 import { useRef, useState } from "react";
 import {
     KeyboardAvoidingView,
@@ -61,7 +62,7 @@ export default function OTPPasswordScreen() {
                     {/* Header */}
                     <View className="h-14 justify-center">
                         <TouchableOpacity onPress={() => router.back()}>
-                            <Text className="text-2xl">←</Text>
+                            <MoveLeft size={24} color="black" />
                         </TouchableOpacity>
                     </View>
 
