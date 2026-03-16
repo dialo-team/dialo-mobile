@@ -1,5 +1,5 @@
 import { Tabs } from "expo-router";
-import { BookSearch, MessageCircle, User, Users } from "lucide-react-native";
+import { MessageCircle, User, Users } from "lucide-react-native";
 import { View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -38,15 +38,6 @@ export default function TabsLayout() {
                         <View className="items-center">
                             <Users size={24} color={color} />
                         </View>
-                    ),
-                }}
-            />
-            <Tabs.Screen
-                name="discover/index"
-                options={{
-                    tabBarLabel: "Khám phá",
-                    tabBarIcon: ({ color }) => (
-                        <BookSearch size={24} color={color} />
                     ),
                 }}
             />
@@ -100,6 +91,48 @@ export default function TabsLayout() {
             />
             <Tabs.Screen
                 name="message/qr-scanner/index"
+                options={{
+                    href: null,
+                    tabBarStyle: { display: "none" },
+                }}
+            />
+            <Tabs.Screen
+                name="message/chat/[id]"
+                options={{
+                    href: null,
+                    tabBarStyle: { display: "none" },
+                }}
+            />
+            <Tabs.Screen
+                name="message/option/account-option/index"
+                options={{
+                    href: null,
+                    tabBarStyle: { display: "none" },
+                }}
+            />
+            <Tabs.Screen
+                name="message/option/group-option/index"
+                options={{
+                    href: null,
+                    tabBarStyle: { display: "none" },
+                }}
+            />
+            <Tabs.Screen
+                name="contact/friend/[id]"
+                options={{
+                    href: null,
+                    tabBarStyle: { display: "none" },
+                }}
+            />
+            <Tabs.Screen
+                name="message/group-chat/[id]"
+                options={{
+                    href: null,
+                    tabBarStyle: { display: "none" },
+                }}
+            />
+            <Tabs.Screen
+                name="contact/friend/profile-option/index"
                 options={{
                     href: null,
                     tabBarStyle: { display: "none" },

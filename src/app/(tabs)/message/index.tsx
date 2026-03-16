@@ -139,6 +139,16 @@ export default function MessagesScreen() {
                 {conversations.map((conversation) => (
                     <TouchableOpacity
                         key={conversation.id}
+                        onPress={() =>
+                            router.push({
+                                pathname: "/message/group-chat/[id]",
+                                params: {
+                                    id: conversation.id,
+                                    name: conversation.name,
+                                    avatar: conversation.avatar,
+                                },
+                            })
+                        }
                         className="flex-row items-center px-4 py-3 border-b border-gray-100"
                     >
                         {/* Avatar */}

@@ -7,45 +7,94 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 export default function ContactsScreen() {
     const router = useRouter();
-    // Dữ liệu mẫu cho danh bạ
-    const contactsData = [
+    // Dữ liệu phẳng
+    const contacts = [
         {
-            section: "Bạn thân",
-            isStarred: true,
-            data: [
-                {
-                    id: "1",
-                    name: "Angel Nguyễn",
-                    avatar: "https://i.pravatar.cc/150?img=5",
-                },
-            ],
+            id: "1",
+            name: "Angel Nguyễn",
+            avatar: "https://i.pravatar.cc/150?img=5",
         },
+
         {
-            section: "A",
-            data: [
-                {
-                    id: "2",
-                    name: "a zai guột thừa",
-                    avatar: "https://i.pravatar.cc/150?img=11",
-                },
-                {
-                    id: "3",
-                    name: "A. Tí",
-                    avatar: "https://i.pravatar.cc/150?img=12",
-                },
-                {
-                    id: "4",
-                    name: "An",
-                    avatar: "https://i.pravatar.cc/150?img=13",
-                },
-                {
-                    id: "5",
-                    name: "Angel Nguyễn",
-                    avatar: "https://i.pravatar.cc/150?img=5",
-                },
-            ],
+            id: "2",
+            name: "a zai guột thừa",
+            avatar: "https://i.pravatar.cc/150?img=11",
+        },
+        { id: "3", name: "A. Tí", avatar: "https://i.pravatar.cc/150?img=12" },
+        { id: "4", name: "An", avatar: "https://i.pravatar.cc/150?img=13" },
+        {
+            id: "5",
+            name: "Angel Nguyễn",
+            avatar: "https://i.pravatar.cc/150?img=5",
+        },
+
+        {
+            id: "6",
+            name: "Bảo đại ca",
+            avatar: "https://i.pravatar.cc/150?img=21",
+        },
+        { id: "7", name: "Bình", avatar: "https://i.pravatar.cc/150?img=22" },
+        {
+            id: "8",
+            name: "Bích Ngọc",
+            avatar: "https://i.pravatar.cc/150?img=23",
+        },
+
+        { id: "9", name: "Dũng", avatar: "https://i.pravatar.cc/150?img=24" },
+        { id: "10", name: "Diệu", avatar: "https://i.pravatar.cc/150?img=25" },
+        {
+            id: "11",
+            name: "Đạt da đen",
+            avatar: "https://i.pravatar.cc/150?img=26",
+        },
+
+        { id: "12", name: "Tuấn", avatar: "https://i.pravatar.cc/150?img=27" },
+        { id: "13", name: "Trang", avatar: "https://i.pravatar.cc/150?img=28" },
+        {
+            id: "14",
+            name: "Thảo nấm lùn",
+            avatar: "https://i.pravatar.cc/150?img=29",
         },
     ];
+
+    // groupBy chữ cái đầu tiên của tên
+    const groupContacts = (contacts: any[]) => {
+        const grouped: Record<string, any[]> = {};
+
+        contacts.forEach((contact) => {
+            const firstLetter = contact.name[0].toUpperCase();
+
+            if (!grouped[firstLetter]) {
+                grouped[firstLetter] = [];
+            }
+
+            grouped[firstLetter].push(contact);
+        });
+
+        return Object.keys(grouped)
+            .sort()
+            .map((letter) => ({
+                section: letter,
+                data: grouped[letter],
+                isStarred: false,
+            }));
+    };
+
+    // section "Bạn thân"
+    const starredSection = {
+        section: "Bạn thân",
+        isStarred: true,
+        data: [
+            {
+                id: "1",
+                name: "Angel Nguyễn",
+                avatar: "https://i.pravatar.cc/150?img=5",
+            },
+        ],
+    };
+
+    // contactsData dùng cho UI của bạn
+    const contactsData = [starredSection, ...groupContacts(contacts)];
 
     return (
         <SafeAreaView className="flex-1 bg-white">
@@ -158,6 +207,16 @@ export default function ContactsScreen() {
                                 <TouchableOpacity
                                     key={user.id}
                                     className="flex-row items-center px-4 py-2 bg-white"
+                                    onPress={() =>
+                                        router.push({
+                                            pathname: "/message/chat/[id]",
+                                            params: {
+                                                id: user.id,
+                                                name: user.name,
+                                                avatar: user.avatar,
+                                            },
+                                        } as any)
+                                    }
                                 >
                                     <Image
                                         source={{ uri: user.avatar }}

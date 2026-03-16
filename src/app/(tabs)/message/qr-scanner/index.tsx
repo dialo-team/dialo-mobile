@@ -49,7 +49,11 @@ export default function QRScanner() {
                             : ({ data }: { data: string }) => {
                                   setScanned(true);
                                   console.log("QR Data:", data);
-                                  setTimeout(() => router.back(), 500);
+                                  // nếu QR chứa id user, đặt param
+                                  router.push({
+                                      pathname: "/(tabs)/contact/friend/new",
+                                      params: { qr: data },
+                                  });
                               }
                     }
                 />
