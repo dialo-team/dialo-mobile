@@ -138,6 +138,13 @@ export default function TabsLayout() {
                     tabBarStyle: { display: "none" },
                 }}
             />
+            <Tabs.Screen
+                name="contact/friend/requests/index"
+                options={{
+                    href: null,
+                    tabBarStyle: { display: "none" },
+                }}
+            />
         </Tabs>
     );
 }
