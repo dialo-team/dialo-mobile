@@ -24,7 +24,12 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 export default function FriendProfileScreen() {
     const router = useRouter();
-    const { id, name, avatar } = useLocalSearchParams();
+    const {
+        id,
+        name,
+        avatar,
+        openRename: openRenameParam,
+    } = useLocalSearchParams();
     const [openRename, setOpenRename] = useState(false);
 
     const safeName =
@@ -37,6 +42,13 @@ export default function FriendProfileScreen() {
         setDisplayName(safeName);
         setNickname(safeName);
     }, [safeName]);
+
+    useEffect(() => {
+        if (openRenameParam === "1") {
+            setOpenRename(true);
+        }
+    }, [openRenameParam]);
+
     const hasNameChanged =
         nickname.trim() !== safeName.trim() && nickname.trim().length > 0;
 
@@ -79,7 +91,7 @@ export default function FriendProfileScreen() {
                             onPress={() =>
                                 router.push({
                                     pathname: "../friend/profile-option",
-                                    params: { id, name },
+                                    params: { id, name, avatar },
                                 })
                             }
                         />

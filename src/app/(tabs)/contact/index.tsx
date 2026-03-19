@@ -133,7 +133,12 @@ export default function ContactsScreen() {
                 >
                     {/* Lời mời kết bạn & Sinh nhật */}
                     <View className="py-2">
-                        <TouchableOpacity className="flex-row items-center px-4 py-3">
+                        <TouchableOpacity
+                            className="flex-row items-center px-4 py-3"
+                            onPress={() =>
+                                router.push("/contact/friend/requests" as any)
+                            }
+                        >
                             <View className="w-10 h-10 rounded-full bg-[#0091FF] items-center justify-center">
                                 <Users size={24} color={"white"} />
                             </View>
