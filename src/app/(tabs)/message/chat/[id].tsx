@@ -20,6 +20,11 @@ import { SafeAreaView } from "react-native-safe-area-context";
 export default function ChatScreen() {
     const router = useRouter();
     const { id, name, avatar } = useLocalSearchParams();
+    const avatarUrl =
+        typeof avatar === "string" &&
+        (avatar.startsWith("http://") || avatar.startsWith("https://"))
+            ? avatar
+            : null;
 
     return (
         <SafeAreaView className="flex-1 bg-[#e9edf2]">
@@ -75,10 +80,20 @@ export default function ChatScreen() {
             >
                 {/* Message left */}
                 <View className="flex-row mb-3">
-                    <RNImage
-                        source={{ uri: avatar as string }}
-                        className="w-8 h-8 rounded-full mr-2"
-                    />
+                    {avatarUrl ? (
+                        <RNImage
+                            source={{ uri: avatarUrl }}
+                            className="w-8 h-8 rounded-full mr-2"
+                        />
+                    ) : (
+                        <View className="w-8 h-8 rounded-full bg-blue-500 mr-2 items-center justify-center">
+                            <Text className="text-white text-xs font-semibold">
+                                {typeof avatar === "string"
+                                    ? avatar.slice(0, 2).toUpperCase()
+                                    : "?"}
+                            </Text>
+                        </View>
+                    )}
 
                     <View className="bg-white px-4 py-2 rounded-2xl max-w-[70%]">
                         <Text className="text-[15px]">Hello bạn</Text>
@@ -97,10 +112,20 @@ export default function ChatScreen() {
 
                 {/* Message left */}
                 <View className="flex-row mb-3">
-                    <RNImage
-                        source={{ uri: avatar as string }}
-                        className="w-8 h-8 rounded-full mr-2"
-                    />
+                    {avatarUrl ? (
+                        <RNImage
+                            source={{ uri: avatarUrl }}
+                            className="w-8 h-8 rounded-full mr-2"
+                        />
+                    ) : (
+                        <View className="w-8 h-8 rounded-full bg-blue-500 mr-2 items-center justify-center">
+                            <Text className="text-white text-xs font-semibold">
+                                {typeof avatar === "string"
+                                    ? avatar.slice(0, 2).toUpperCase()
+                                    : "?"}
+                            </Text>
+                        </View>
+                    )}
 
                     <View className="bg-white px-4 py-2 rounded-2xl max-w-[70%]">
                         <Text className="text-[15px]">dạo này khoẻ hong</Text>

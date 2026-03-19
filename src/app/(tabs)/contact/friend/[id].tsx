@@ -35,6 +35,8 @@ export default function FriendProfileScreen() {
     const safeName =
         typeof name === "string" ? name : Array.isArray(name) ? name[0] : "";
 
+    const safeId = typeof id === "string" ? id : Array.isArray(id) ? id[0] : "";
+
     const [displayName, setDisplayName] = useState(safeName);
     const [nickname, setNickname] = useState(safeName);
 
@@ -132,7 +134,15 @@ export default function FriendProfileScreen() {
 
             {/* MESSAGE BUTTON */}
             <View className="px-6 pb-6">
-                <TouchableOpacity className="flex-row items-center justify-center bg-gray-100 py-3 rounded-full">
+                <TouchableOpacity
+                    className="flex-row items-center justify-center bg-gray-100 py-3 rounded-full"
+                    onPress={() => {
+                        router.push({
+                            pathname: "/message/chat/[id]",
+                            params: { id: safeId, name: displayName, avatar },
+                        });
+                    }}
+                >
                     <MessageCircle size={20} color="#2563eb" />
                     <Text className="ml-2 text-blue-600 font-medium">
                         Nhắn tin

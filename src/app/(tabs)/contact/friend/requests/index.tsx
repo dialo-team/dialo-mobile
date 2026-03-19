@@ -51,14 +51,27 @@ export default function FriendRequestsScreen() {
     const [activeTab, setActiveTab] = useState<"pending" | "confirmed">(
         "pending",
     );
+    const [pending, setPending] = useState<FriendRequest[]>(pendingRequests);
+    const [confirmed, setConfirmed] =
+        useState<FriendRequest[]>(confirmedFriends);
+
+    const acceptFriend = (id: string) => {
+        setPending((prev) => {
+            const request = prev.find((item) => item.id === id);
+            if (!request) return prev;
+
+            setConfirmed((prevConfirmed) => [request, ...prevConfirmed]);
+            return prev.filter((item) => item.id !== id);
+        });
+    };
+
+    const declineFriend = (id: string) => {
+        setPending((prev) => prev.filter((item) => item.id !== id));
+    };
 
     const currentList = useMemo(() => {
-        if (activeTab === "pending") {
-            return pendingRequests;
-        }
-
-        return confirmedFriends;
-    }, [activeTab]);
+        return activeTab === "pending" ? pending : confirmed;
+    }, [activeTab, pending, confirmed]);
 
     return (
         <SafeAreaView className="flex-1 bg-white">
@@ -87,7 +100,7 @@ export default function FriendRequestsScreen() {
                                 : "text-gray-500"
                         }`}
                     >
-                        Chờ xác nhận ({pendingRequests.length})
+                        Chờ xác nhận ({pending.length})
                     </Text>
                 </TouchableOpacity>
                 <TouchableOpacity
@@ -105,7 +118,7 @@ export default function FriendRequestsScreen() {
                                 : "text-gray-500"
                         }`}
                     >
-                        Bạn đã xác nhận ({confirmedFriends.length})
+                        Bạn đã xác nhận ({confirmed.length})
                     </Text>
                 </TouchableOpacity>
             </View>
@@ -143,12 +156,18 @@ export default function FriendRequestsScreen() {
 
                         {activeTab === "pending" ? (
                             <View className="flex-row">
-                                <TouchableOpacity className="px-3 py-2 rounded-full bg-gray-100 mr-2">
+                                <TouchableOpacity
+                                    className="px-3 py-2 rounded-full bg-gray-100 mr-2"
+                                    onPress={() => declineFriend(item.id)}
+                                >
                                     <Text className="text-gray-700 text-sm">
                                         Từ chối
                                     </Text>
                                 </TouchableOpacity>
-                                <TouchableOpacity className="px-3 py-2 rounded-full bg-blue-600">
+                                <TouchableOpacity
+                                    className="px-3 py-2 rounded-full bg-blue-600"
+                                    onPress={() => acceptFriend(item.id)}
+                                >
                                     <Text className="text-white text-sm">
                                         Đồng ý
                                     </Text>

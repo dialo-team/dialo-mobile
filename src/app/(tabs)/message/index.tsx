@@ -10,6 +10,7 @@ import {
 } from "lucide-react-native";
 import React, { useState } from "react";
 import {
+    Image,
     Modal,
     Pressable,
     ScrollView,
@@ -24,6 +25,7 @@ type Conversation = {
     id: string;
     name: string;
     avatar: string;
+    avatarUrl?: string;
     lastMessage: string;
     time: string;
     unread?: boolean;
@@ -43,6 +45,7 @@ export default function MessagesScreen() {
             lastMessage: "Báo Mới: [APP] Ổ tô mất lái tông...",
             time: "",
             unread: true,
+            isGroup: true,
         },
         {
             id: "2",
@@ -51,6 +54,7 @@ export default function MessagesScreen() {
             lastMessage: "Bạn có một tin nhắn mới...",
             time: "5 giờ",
             unread: true,
+            isGroup: true,
         },
         {
             id: "3",
@@ -58,6 +62,7 @@ export default function MessagesScreen() {
             avatar: "N",
             lastMessage: "Bạn trở thành thành viên của nhóm",
             time: "6 giờ",
+            isGroup: true,
         },
         {
             id: "4",
@@ -65,6 +70,26 @@ export default function MessagesScreen() {
             avatar: "CA",
             lastMessage: "Minh Khôi: [Hình ảnh]",
             time: "9 giờ",
+            isGroup: true,
+        },
+        {
+            id: "5",
+            name: "Angel Nguyễn",
+            avatar: "AN",
+            avatarUrl: "https://i.pravatar.cc/150?img=5",
+            lastMessage: "Anh ơi ăn chưa?",
+            time: "1 giờ",
+            unread: true,
+            isGroup: false,
+        },
+        {
+            id: "6",
+            name: "A. Tí",
+            avatar: "AT",
+            avatarUrl: "https://i.pravatar.cc/150?img=12",
+            lastMessage: "Sáng mai mình gặp nhé",
+            time: "2 giờ",
+            isGroup: false,
         },
     ];
 
@@ -107,13 +132,19 @@ export default function MessagesScreen() {
         },
     ];
 
+    const filteredConversations = conversations.filter((conversation) =>
+        conversation.name
+            .toLowerCase()
+            .includes(searchText.toLowerCase().trim()),
+    );
+
     return (
         <SafeAreaView className="flex-1 bg-white">
-            <View className="flex-row items-center px-3 py-2 bg-blue-600">
+            <View className="flex-row items-center px-4 py-5 bg-blue-600">
                 <Search size={24} color="white" />
                 <TextInput
                     placeholder="Tìm kiếm"
-                    placeholderTextColor="#E3F2FD"
+                    placeholderTextColor="#93C5FD"
                     className="flex-1 text-white text-[16px] ml-3 opacity-80"
                     value={searchText}
                     onChangeText={setSearchText}
@@ -136,36 +167,41 @@ export default function MessagesScreen() {
 
             {/* Conversations List */}
             <ScrollView className="flex-1">
-                {conversations.map((conversation) => (
+                {filteredConversations.map((conversation) => (
                     <TouchableOpacity
                         key={conversation.id}
-                        onPress={() =>
+                        onPress={() => {
+                            const route = conversation.isGroup
+                                ? "/message/group-chat/[id]"
+                                : "/message/chat/[id]";
                             router.push({
-                                pathname: "/message/group-chat/[id]",
+                                pathname: route,
                                 params: {
                                     id: conversation.id,
                                     name: conversation.name,
-                                    avatar: conversation.avatar,
+                                    avatar: conversation.avatarUrl
+                                        ? conversation.avatarUrl
+                                        : conversation.avatar,
                                 },
-                            })
-                        }
+                            });
+                        }}
                         className="flex-row items-center px-4 py-3 border-b border-gray-100"
                     >
                         {/* Avatar */}
                         <View className="relative">
-                            <View
-                                className={`w-12 h-12 rounded-full items-center justify-center ${getAvatarColor(
-                                    conversation.avatar,
-                                )}`}
-                            >
-                                <Text className="text-white font-semibold text-base">
-                                    {conversation.avatar}
-                                </Text>
-                            </View>
-                            {conversation.id === "2" && (
-                                <View className="absolute -bottom-1 -right-1 w-5 h-5 bg-blue-500 rounded-full items-center justify-center border-2 border-white">
-                                    <Text className="text-white text-xs">
-                                        👤
+                            {conversation.avatarUrl ? (
+                                <Image
+                                    source={{ uri: conversation.avatarUrl }}
+                                    className="w-12 h-12 rounded-full"
+                                />
+                            ) : (
+                                <View
+                                    className={`w-12 h-12 rounded-full items-center justify-center ${getAvatarColor(
+                                        conversation.avatar,
+                                    )}`}
+                                >
+                                    <Text className="text-white font-semibold text-base">
+                                        {conversation.avatar}
                                     </Text>
                                 </View>
                             )}
