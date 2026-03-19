@@ -77,14 +77,18 @@ export default function ProfileScreen() {
         },
     ];
 
+    const filteredMenuItems = menuItems.filter((item) =>
+        item.title.toLowerCase().includes(searchText.toLowerCase().trim()),
+    );
+
     return (
         <SafeAreaView className="flex-1 bg-white">
-            <View className="flex-row items-center px-4 py-2 bg-blue-600">
+            <View className="flex-row items-center px-4 py-5 bg-blue-600">
                 <Search size={24} color="white" />
                 <TextInput
                     placeholder="Tìm kiếm"
                     placeholderTextColor="#93C5FD"
-                    className="flex-1 text-white text-base"
+                    className="flex-1 text-white text-[16px] ml-3 opacity-80 text-base"
                     value={searchText}
                     onChangeText={setSearchText}
                 />

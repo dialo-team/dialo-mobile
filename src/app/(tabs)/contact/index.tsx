@@ -1,12 +1,22 @@
 import { AntDesign, Feather } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { Cake, Phone, Search, Users, Video } from "lucide-react-native";
-import React from "react";
-import { Image, ScrollView, Text, TouchableOpacity, View } from "react-native";
+import React, { useState } from "react";
+import {
+    Image,
+    ScrollView,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View,
+} from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 export default function ContactsScreen() {
     const router = useRouter();
+    const [searchText, setSearchText] = useState("");
+    const [activeTab, setActiveTab] = useState<"friends" | "groups">("friends");
+
     // Dữ liệu phẳng
     const contacts = [
         {
@@ -93,17 +103,25 @@ export default function ContactsScreen() {
         ],
     };
 
-    // contactsData dùng cho UI của bạn
-    const contactsData = [starredSection, ...groupContacts(contacts)];
+    // filter contacts by search text
+    const filteredContacts = contacts.filter((contact) =>
+        contact.name.toLowerCase().includes(searchText.toLowerCase().trim()),
+    );
+
+    const contactsData = [starredSection, ...groupContacts(filteredContacts)];
 
     return (
         <SafeAreaView className="flex-1 bg-white">
             {/* Header: Thanh tìm kiếm */}
             <View className="flex-row items-center px-4 py-5 bg-blue-600">
                 <Search size={24} color="white" />
-                <Text className="flex-1 text-white text-[16px] ml-3 opacity-80">
-                    Tìm kiếm
-                </Text>
+                <TextInput
+                    placeholder="Tìm kiếm"
+                    placeholderTextColor="#93C5FD"
+                    className="flex-1 text-white text-[16px] ml-3 opacity-80"
+                    value={searchText}
+                    onChangeText={setSearchText}
+                />
                 <TouchableOpacity
                     onPress={() => router.push("/contact/friend/add" as any)}
                 >
@@ -146,7 +164,7 @@ export default function ContactsScreen() {
                                 Lời mời kết bạn
                             </Text>
                             <Text className="text-gray-400 ml-1 text-base">
-                                (5)
+                                (4)
                             </Text>
                         </TouchableOpacity>
 
