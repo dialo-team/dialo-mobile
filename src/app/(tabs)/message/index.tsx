@@ -141,7 +141,7 @@ export default function MessagesScreen() {
     return (
         <SafeAreaView className="flex-1 bg-white">
             <View className="flex-row items-center px-4 py-5 bg-blue-600">
-                <Search size={24} color="white" />
+                <Search size={26} color="white" />
                 <TextInput
                     placeholder="Tìm kiếm"
                     placeholderTextColor="#93C5FD"
@@ -154,14 +154,14 @@ export default function MessagesScreen() {
                     className="ml-3"
                     onPress={() => router.push("/message/qr-scanner" as any)}
                 >
-                    <ScanQrCode size={24} color="white" />
+                    <ScanQrCode size={26} color="white" />
                 </TouchableOpacity>
 
                 <TouchableOpacity
                     className="ml-3"
                     onPress={() => setShowMenu(!showMenu)}
                 >
-                    <Plus size={24} color="white" />
+                    <Plus size={26} color="white" />
                 </TouchableOpacity>
             </View>
 

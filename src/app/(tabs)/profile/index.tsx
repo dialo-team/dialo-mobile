@@ -84,7 +84,7 @@ export default function ProfileScreen() {
     return (
         <SafeAreaView className="flex-1 bg-white">
             <View className="flex-row items-center px-4 py-5 bg-blue-600">
-                <Search size={24} color="white" />
+                <Search size={26} color="white" />
                 <TextInput
                     placeholder="Tìm kiếm"
                     placeholderTextColor="#93C5FD"
@@ -96,7 +96,7 @@ export default function ProfileScreen() {
                     onPress={() => router.push("/profile/setting" as any)}
                     className="ml-3"
                 >
-                    <Settings size={25} color="white" />
+                    <Settings size={26} color="white" />
                 </TouchableOpacity>
             </View>
 
