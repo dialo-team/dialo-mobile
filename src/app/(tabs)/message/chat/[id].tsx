@@ -172,7 +172,7 @@ export default function ChatScreen() {
     const handleUnsendMessage = () => {
         if (selectedMessage) {
             const updatedMessages = messages.map((msg) =>
-                msg.id === selectedMessage.id
+                msg.id === (selectedMessage as any).id
                     ? {
                           ...msg,
                           text: "Tin nhắn đã được thu hồi",
@@ -511,7 +511,7 @@ export default function ChatScreen() {
                         onChangeText={setMessage}
                         onFocus={() => {
                             setIsFocused(true);
-                            setShowEmojiMenu(false); // Ẩn emoji menu khi bắt đầu gõ
+                            setShowEmojiMenu(false);
                         }}
                         onBlur={() => setIsFocused(false)}
                         className="flex-1 bg-gray-100 px-4 py-2 rounded-full text-[15px]"
@@ -549,53 +549,136 @@ export default function ChatScreen() {
                 <TouchableWithoutFeedback
                     onPress={() => setSelectedMessage(null)}
                 >
-                    <View className="flex-1 bg-black/40 justify-center items-center px-4">
+                    <View className="flex-1 bg-black/80 justify-center px-4">
                         <TouchableWithoutFeedback>
-                            <View className="w-full max-w-[360px]">
-                                {/* Dãy Reaction Cảm xúc */}
-                                <View className="bg-white rounded-full flex-row px-4 py-3 mb-3 justify-between shadow-sm">
-                                    {["❤️", "👍", "😆", "😮", "😢", "😡"].map(
-                                        (emoji) => (
-                                            <TouchableOpacity
-                                                key={emoji}
-                                                onPress={() =>
-                                                    setSelectedMessage(null)
-                                                }
-                                            >
-                                                <Text className="text-3xl">
-                                                    {emoji}
-                                                </Text>
-                                            </TouchableOpacity>
-                                        ),
-                                    )}
-                                </View>
-
-                                {/* Bảng Action Menu */}
-                                <View className="bg-white rounded-3xl p-4 shadow-sm flex-row flex-wrap">
-                                    {actionMenuItems.map((item) => (
-                                        <TouchableOpacity
-                                            key={item.id}
-                                            className="w-[25%] items-center mb-5"
-                                            onPress={() => {
-                                                if (item.label === "Thu hồi") {
-                                                    handleUnsendMessage();
-                                                } else {
-                                                    setSelectedMessage(null);
-                                                }
-                                            }}
+                            <View className="w-full">
+                                {selectedMessage && (
+                                    <View
+                                        className={`w-full mb-4 ${
+                                            (selectedMessage as any).type ===
+                                            "right"
+                                                ? "items-end"
+                                                : "items-start"
+                                        }`}
+                                    >
+                                        <View
+                                            className={`${
+                                                (selectedMessage as any)
+                                                    .type === "right"
+                                                    ? "bg-[#cde7f4]"
+                                                    : "bg-white"
+                                            } px-4 py-2 rounded-2xl max-w-[80%]`}
                                         >
-                                            <View className="relative mb-2">
-                                                <item.icon
-                                                    size={28}
-                                                    color={item.color}
-                                                    strokeWidth={1.5}
+                                            {/* Hiện ảnh nếu có */}
+                                            {(selectedMessage as any)
+                                                .imageUri ? (
+                                                <RNImage
+                                                    source={{
+                                                        uri: (
+                                                            selectedMessage as any
+                                                        ).imageUri,
+                                                    }}
+                                                    style={{
+                                                        width: 150,
+                                                        height: 150,
+                                                        borderRadius: 10,
+                                                        marginBottom: (
+                                                            selectedMessage as any
+                                                        ).text
+                                                            ? 4
+                                                            : 0,
+                                                    }}
+                                                    resizeMode="cover"
                                                 />
-                                            </View>
-                                            <Text className="text-xs text-center text-gray-700">
-                                                {item.label}
-                                            </Text>
-                                        </TouchableOpacity>
-                                    ))}
+                                            ) : null}
+
+                                            {/* Hiện Text nếu có */}
+                                            {(selectedMessage as any).text !==
+                                                "" && (
+                                                <Text
+                                                    className={`text-[15px] ${(selectedMessage as any).isUnsent ? "text-gray-400 italic" : "text-black"}`}
+                                                >
+                                                    {
+                                                        (selectedMessage as any)
+                                                            .text
+                                                    }
+                                                </Text>
+                                            )}
+
+                                            {/* Hiện giờ */}
+                                            {!(selectedMessage as any)
+                                                .isUnsent && (
+                                                <Text
+                                                    className={`text-gray-500 text-[11px] mt-1 ${(selectedMessage as any).type === "right" ? "text-right" : "text-left"}`}
+                                                >
+                                                    {
+                                                        (selectedMessage as any)
+                                                            .time
+                                                    }
+                                                </Text>
+                                            )}
+                                        </View>
+                                    </View>
+                                )}
+
+                                <View className="w-full items-center">
+                                    <View className="w-full max-w-[360px]">
+                                        {/* Dãy Reaction Cảm xúc */}
+                                        <View className="bg-white rounded-full flex-row px-4 py-3 mb-3 justify-between shadow-sm">
+                                            {[
+                                                "❤️",
+                                                "👍",
+                                                "😆",
+                                                "😮",
+                                                "😢",
+                                                "😡",
+                                            ].map((emoji) => (
+                                                <TouchableOpacity
+                                                    key={emoji}
+                                                    onPress={() =>
+                                                        setSelectedMessage(null)
+                                                    }
+                                                >
+                                                    <Text className="text-3xl">
+                                                        {emoji}
+                                                    </Text>
+                                                </TouchableOpacity>
+                                            ))}
+                                        </View>
+
+                                        {/* Bảng Action Menu */}
+                                        <View className="bg-white rounded-3xl p-4 shadow-sm flex-row flex-wrap">
+                                            {actionMenuItems.map((item) => (
+                                                <TouchableOpacity
+                                                    key={item.id}
+                                                    className="w-[25%] items-center mb-5"
+                                                    onPress={() => {
+                                                        if (
+                                                            item.label ===
+                                                            "Thu hồi"
+                                                        ) {
+                                                            handleUnsendMessage();
+                                                        } else {
+                                                            setSelectedMessage(
+                                                                null,
+                                                            );
+                                                        }
+                                                    }}
+                                                >
+                                                    <View className="relative mb-2">
+                                                        <item.icon
+                                                            size={28}
+                                                            color={item.color}
+                                                            strokeWidth={1.5}
+                                                        />
+                                                    </View>
+                                                    <Text className="text-xs text-center text-gray-700">
+                                                        {item.label}
+                                                    </Text>
+                                                </TouchableOpacity>
+                                            ))}
+                                        </View>
+                                    </View>
                                 </View>
                             </View>
                         </TouchableWithoutFeedback>

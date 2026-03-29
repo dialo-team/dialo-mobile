@@ -2,7 +2,7 @@
   "expo": {
     "name": "dialo-mobile",
     "slug": "dialo-mobile",
-    "userInterfaceStyle": "dark",
+    "userInterfaceStyle": "automatic",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
