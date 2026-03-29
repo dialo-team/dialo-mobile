@@ -84,7 +84,7 @@ export default function SettingScreen() {
     return (
         <SafeAreaView className="flex-1 bg-white">
             {/* Header */}
-            <View className="flex-row items-center justify-between px-4 py-3 bg-blue-600">
+            <View className="flex-row items-center justify-between px-4 py-5 bg-blue-600">
                 <View className="flex-row items-center">
                     <TouchableOpacity
                         onPress={() => router.push("/profile" as any)}

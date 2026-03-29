@@ -1,18 +1,13 @@
+import { Video as AVVideo, ResizeMode } from "expo-av";
+import * as ImagePicker from "expo-image-picker";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import {
-    CheckCircle,
-    Clock,
-    Copy,
-    // Import thêm các icon cho menu thao tác
     CornerUpLeft,
-    CornerUpRight,
     Ellipsis,
     FolderDown,
     Image,
-    MessageSquarePlus,
     MoreHorizontal,
     MoveLeft,
-    Pin,
     RotateCcw,
     Search,
     Send,
@@ -22,6 +17,7 @@ import {
 } from "lucide-react-native";
 import { useState } from "react";
 import {
+    Alert,
     KeyboardAvoidingView,
     Modal,
     Platform,
@@ -29,7 +25,7 @@ import {
     ScrollView,
     Text,
     TextInput,
-    TouchableOpacity, // <-- Thêm import Modal
+    TouchableOpacity,
     TouchableWithoutFeedback,
     View,
 } from "react-native";
@@ -42,9 +38,13 @@ export default function GroupChatScreen() {
     const [isFocused, setIsFocused] = useState(false);
     const [message, setMessage] = useState("");
 
-    // State quản lý tin nhắn đang được chọn và log thu hồi
+    // State quản lý tin nhắn đang được chọn
     const [selectedMessage, setSelectedMessage] = useState(null);
     const [unsendMessageState, setUnsendMessageState] = useState(null);
+
+    // State quản lý tin nhắn hình ảnh/video đang được xem phóng to
+    const [viewingMediaMessage, setViewingMediaMessage] = useState(null);
+    const [showHeader, setShowHeader] = useState(true);
 
     // Thêm cờ isUnsent vào dữ liệu mặc định
     const [messages, setMessages] = useState([
@@ -84,11 +84,53 @@ export default function GroupChatScreen() {
             text: message,
             type: "right",
             time: currentTime,
-            isUnsent: false, // Mặc định tin nhắn mới chưa bị thu hồi
+            isUnsent: false,
         };
 
         setMessages([...messages, newMessage]);
         setMessage("");
+    };
+
+    // Hàm xử lý chọn ảnh/video từ máy
+    const handlePickMedia = async () => {
+        const permissionResult =
+            await ImagePicker.requestMediaLibraryPermissionsAsync();
+
+        if (permissionResult.granted === false) {
+            Alert.alert(
+                "Cần cấp quyền",
+                "Bạn cần cho phép ứng dụng truy cập thư viện ảnh để có thể gửi hình/video.",
+                [{ text: "Đã hiểu" }],
+            );
+            return;
+        }
+
+        let result = await ImagePicker.launchImageLibraryAsync({
+            mediaTypes: ["images", "videos"], // Fix cảnh báo deprecated bằng mảng chuẩn
+            allowsEditing: true,
+            quality: 1,
+        });
+
+        if (!result.canceled) {
+            const asset = result.assets[0];
+            const isVideo = asset.type === "video"; // Kiểm tra xem file là video hay ảnh
+
+            const currentTime = new Date().toLocaleTimeString("vi-VN", {
+                hour: "2-digit",
+                minute: "2-digit",
+            });
+
+            const newMediaMessage = {
+                id: Date.now(),
+                text: "",
+                imageUri: !isVideo ? asset.uri : null, // Lưu ảnh
+                videoUri: isVideo ? asset.uri : null, // Lưu video
+                type: "right",
+                time: currentTime,
+                isUnsent: false,
+            };
+            setMessages([...messages, newMediaMessage]);
+        }
     };
 
     // Hàm xử lý thu hồi
@@ -99,6 +141,8 @@ export default function GroupChatScreen() {
                     ? {
                           ...msg,
                           text: "Tin nhắn đã được thu hồi",
+                          imageUri: null,
+                          videoUri: null, // Xóa cả media khi thu hồi
                           isUnsent: true,
                       }
                     : msg,
@@ -112,49 +156,66 @@ export default function GroupChatScreen() {
 
     // Bảng Action Menu
     const actionMenuItems = [
-        { id: 1, icon: CornerUpLeft, label: "Trả lời", color: "#8b5cf6" },
-        { id: 2, icon: CornerUpRight, label: "Chuyển tiếp", color: "#3b82f6" },
         {
-            id: 3,
+            id: 1,
+            icon: CornerUpLeft,
+            label: "Trả lời",
+            color: "#8b5cf6",
+        },
+        {
+            id: 2,
             icon: FolderDown,
             label: "Lưu My\nDocuments",
             color: "#0ea5e9",
         },
-        { id: 4, icon: RotateCcw, label: "Thu hồi", color: "#f97316" },
-        { id: 5, icon: Copy, label: "Sao chép", color: "#3b82f6" },
-        { id: 6, icon: Pin, label: "Ghim", color: "#f97316" },
-        { id: 7, icon: Clock, label: "Nhắc hẹn", color: "#ef4444" },
-        { id: 8, icon: CheckCircle, label: "Chọn nhiều", color: "#3b82f6" },
         {
-            id: 9,
-            icon: MessageSquarePlus,
-            label: "Tạo tin\nnhắn nhanh",
-            color: "#0ea5e9",
+            id: 3,
+            icon: RotateCcw,
+            label: "Thu hồi",
+            color: "#f97316",
         },
-        { id: 10, icon: Trash2, label: "Xóa", color: "#ef4444" },
+        {
+            id: 4,
+            icon: Trash2,
+            label: "Xóa",
+            color: "#ef4444",
+        },
     ];
 
     return (
         <SafeAreaView className="flex-1 bg-[#e9edf2]">
             <KeyboardAvoidingView
                 style={{ flex: 1 }}
-                behavior={Platform.OS === "ios" ? "padding" : undefined}
+                behavior={Platform.OS === "ios" ? "padding" : "height"}
+                keyboardVerticalOffset={Platform.OS === "android" ? 20 : 0}
             >
                 {/* HEADER */}
-                <View className="bg-blue-600 flex-row items-center px-4 py-3 justify-between">
+                <View className="bg-blue-600 flex-row items-center px-4 py-4 justify-between">
                     <View className="flex-row items-center">
                         <TouchableOpacity onPress={() => router.back()}>
                             <MoveLeft size={26} color="white" />
                         </TouchableOpacity>
 
-                        <View className="ml-3">
+                        <TouchableOpacity
+                            className="ml-3"
+                            onPress={() =>
+                                router.push({
+                                    pathname: "../option/group-option",
+                                    params: {
+                                        id,
+                                        name,
+                                        avatar,
+                                    },
+                                })
+                            }
+                        >
                             <Text className="text-white font-semibold text-[16px]">
                                 {name}
                             </Text>
                             <Text className="text-white text-[12px] opacity-80">
                                 Truy cập 4 giờ trước
                             </Text>
-                        </View>
+                        </TouchableOpacity>
                     </View>
 
                     <View className="flex-row items-center ml-9">
@@ -198,17 +259,85 @@ export default function GroupChatScreen() {
 
                                     <TouchableOpacity
                                         activeOpacity={0.8}
+                                        onPress={() => {
+                                            if (msg.imageUri || msg.videoUri)
+                                                setViewingMediaMessage(msg);
+                                        }}
                                         onLongPress={() =>
                                             !msg.isUnsent &&
                                             setSelectedMessage(msg)
                                         }
                                         className="bg-white px-4 py-2 rounded-2xl max-w-[70%]"
                                     >
-                                        <Text
-                                            className={`text-[15px] ${msg.isUnsent ? "text-gray-400 italic" : "text-black"}`}
-                                        >
-                                            {msg.text}
-                                        </Text>
+                                        {/* HIỂN THỊ ẢNH HOẶC VIDEO */}
+                                        {msg.videoUri ? (
+                                            <View
+                                                style={{
+                                                    width: 150,
+                                                    height: 150,
+                                                    borderRadius: 10,
+                                                    marginBottom: 4,
+                                                    overflow: "hidden",
+                                                    backgroundColor: "black",
+                                                }}
+                                            >
+                                                <AVVideo
+                                                    source={{
+                                                        uri: msg.videoUri,
+                                                    }}
+                                                    style={{
+                                                        width: "100%",
+                                                        height: "100%",
+                                                    }}
+                                                    resizeMode={
+                                                        ResizeMode.COVER
+                                                    }
+                                                    shouldPlay={false}
+                                                />
+                                                <View
+                                                    style={{
+                                                        position: "absolute",
+                                                        top: 0,
+                                                        left: 0,
+                                                        right: 0,
+                                                        bottom: 0,
+                                                        justifyContent:
+                                                            "center",
+                                                        alignItems: "center",
+                                                        backgroundColor:
+                                                            "rgba(0,0,0,0.3)",
+                                                    }}
+                                                >
+                                                    <Text
+                                                        style={{
+                                                            color: "white",
+                                                            fontSize: 30,
+                                                        }}
+                                                    >
+                                                        ▶
+                                                    </Text>
+                                                </View>
+                                            </View>
+                                        ) : msg.imageUri ? (
+                                            <RNImage
+                                                source={{ uri: msg.imageUri }}
+                                                style={{
+                                                    width: 150,
+                                                    height: 150,
+                                                    borderRadius: 10,
+                                                    marginBottom: 4,
+                                                }}
+                                                resizeMode="cover"
+                                            />
+                                        ) : null}
+
+                                        {msg.text !== "" && (
+                                            <Text
+                                                className={`text-[15px] ${msg.isUnsent ? "text-gray-400 italic" : "text-black"}`}
+                                            >
+                                                {msg.text}
+                                            </Text>
+                                        )}
                                         {!msg.isUnsent && (
                                             <Text className="text-gray-500 text-[11px] mt-1">
                                                 {msg.time}
@@ -226,16 +355,79 @@ export default function GroupChatScreen() {
                             >
                                 <TouchableOpacity
                                     activeOpacity={0.8}
+                                    onPress={() => {
+                                        if (msg.imageUri || msg.videoUri)
+                                            setViewingMediaMessage(msg);
+                                    }}
                                     onLongPress={() =>
                                         !msg.isUnsent && setSelectedMessage(msg)
                                     }
                                     className="bg-[#cde7f4] px-4 py-2 rounded-2xl max-w-[70%]"
                                 >
-                                    <Text
-                                        className={`text-[15px] ${msg.isUnsent ? "text-gray-400 italic" : "text-black"}`}
-                                    >
-                                        {msg.text}
-                                    </Text>
+                                    {/* HIỂN THỊ ẢNH HOẶC VIDEO */}
+                                    {msg.videoUri ? (
+                                        <View
+                                            style={{
+                                                width: 150,
+                                                height: 150,
+                                                borderRadius: 10,
+                                                marginBottom: 4,
+                                                overflow: "hidden",
+                                                backgroundColor: "black",
+                                            }}
+                                        >
+                                            <AVVideo
+                                                source={{ uri: msg.videoUri }}
+                                                style={{
+                                                    width: "100%",
+                                                    height: "100%",
+                                                }}
+                                                resizeMode={ResizeMode.COVER}
+                                                shouldPlay={false}
+                                            />
+                                            <View
+                                                style={{
+                                                    position: "absolute",
+                                                    top: 0,
+                                                    left: 0,
+                                                    right: 0,
+                                                    bottom: 0,
+                                                    justifyContent: "center",
+                                                    alignItems: "center",
+                                                    backgroundColor:
+                                                        "rgba(0,0,0,0.3)",
+                                                }}
+                                            >
+                                                <Text
+                                                    style={{
+                                                        color: "white",
+                                                        fontSize: 30,
+                                                    }}
+                                                >
+                                                    ▶
+                                                </Text>
+                                            </View>
+                                        </View>
+                                    ) : msg.imageUri ? (
+                                        <RNImage
+                                            source={{ uri: msg.imageUri }}
+                                            style={{
+                                                width: 150,
+                                                height: 150,
+                                                borderRadius: 10,
+                                                marginBottom: 4,
+                                            }}
+                                            resizeMode="cover"
+                                        />
+                                    ) : null}
+
+                                    {msg.text !== "" && (
+                                        <Text
+                                            className={`text-[15px] ${msg.isUnsent ? "text-gray-400 italic" : "text-black"}`}
+                                        >
+                                            {msg.text}
+                                        </Text>
+                                    )}
                                     {!msg.isUnsent && (
                                         <Text className="text-gray-500 text-[11px] mt-1 text-right">
                                             {msg.time}
@@ -270,7 +462,10 @@ export default function GroupChatScreen() {
                                 <Ellipsis size={26} color="#666" />
                             </TouchableOpacity>
 
-                            <TouchableOpacity className="ml-2">
+                            <TouchableOpacity
+                                className="ml-2"
+                                onPress={handlePickMedia}
+                            >
                                 <Image size={26} color="#666" />
                             </TouchableOpacity>
                         </>
@@ -297,6 +492,7 @@ export default function GroupChatScreen() {
                     <View className="flex-1 bg-black/40 justify-center items-center px-4">
                         <TouchableWithoutFeedback>
                             <View className="w-full max-w-[360px]">
+                                {/* Dãy Reaction Cảm xúc */}
                                 <View className="bg-white rounded-full flex-row px-4 py-3 mb-3 justify-between shadow-sm">
                                     {["❤️", "👍", "😆", "😮", "😢", "😡"].map(
                                         (emoji) => (
@@ -314,6 +510,7 @@ export default function GroupChatScreen() {
                                     )}
                                 </View>
 
+                                {/* Bảng Action Menu */}
                                 <View className="bg-white rounded-3xl p-4 shadow-sm flex-row flex-wrap">
                                     {actionMenuItems.map((item) => (
                                         <TouchableOpacity
@@ -351,6 +548,78 @@ export default function GroupChatScreen() {
                         </TouchableWithoutFeedback>
                     </View>
                 </TouchableWithoutFeedback>
+            </Modal>
+
+            {/* MODAL XEM ẢNH/VIDEO PHÓNG TO */}
+            <Modal
+                visible={!!viewingMediaMessage}
+                transparent={true}
+                animationType="fade"
+                onRequestClose={() => setViewingMediaMessage(null)}
+            >
+                {viewingMediaMessage && (
+                    <View className="flex-1 bg-black justify-center items-center">
+                        {/* HEADER */}
+                        {showHeader && (
+                            <View className="absolute top-0 w-full bg-black/60 z-10 px-5 pt-14 pb-4">
+                                <View className="flex-row justify-between items-center">
+                                    <View>
+                                        <Text className="text-white text-[17px] font-semibold">
+                                            {viewingMediaMessage.type ===
+                                            "right"
+                                                ? "Bạn"
+                                                : name}
+                                        </Text>
+                                        <Text className="text-white/70 text-[12px] mt-0.5">
+                                            Đã gửi {viewingMediaMessage.time}
+                                        </Text>
+                                    </View>
+
+                                    <TouchableOpacity
+                                        className="bg-white/10 p-2 rounded-full px-4"
+                                        onPress={() =>
+                                            setViewingMediaMessage(null)
+                                        }
+                                    >
+                                        <Text className="text-white text-base font-semibold">
+                                            Đóng
+                                        </Text>
+                                    </TouchableOpacity>
+                                </View>
+                            </View>
+                        )}
+
+                        {/* KIỂM TRA ĐỂ RENDER VIDEO HOẶC ẢNH */}
+                        <TouchableWithoutFeedback
+                            onPress={() => setShowHeader(!showHeader)}
+                        >
+                            <View className="w-full h-full">
+                                {viewingMediaMessage.videoUri ? (
+                                    <AVVideo
+                                        source={{
+                                            uri: viewingMediaMessage.videoUri,
+                                        }}
+                                        style={{
+                                            width: "100%",
+                                            height: "100%",
+                                        }}
+                                        resizeMode={ResizeMode.CONTAIN}
+                                        useNativeControls={true}
+                                        shouldPlay={true}
+                                    />
+                                ) : (
+                                    <RNImage
+                                        source={{
+                                            uri: viewingMediaMessage.imageUri,
+                                        }}
+                                        className="w-full h-full"
+                                        resizeMode="contain"
+                                    />
+                                )}
+                            </View>
+                        </TouchableWithoutFeedback>
+                    </View>
+                )}
             </Modal>
         </SafeAreaView>
     );

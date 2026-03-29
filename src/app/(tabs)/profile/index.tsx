@@ -1,5 +1,6 @@
 import { useRouter } from "expo-router";
 import {
+    ChevronRight,
     Cloudy,
     Folder,
     LockKeyhole,
@@ -45,7 +46,7 @@ export default function ProfileScreen() {
             id: "2",
             icon: <Folder size={24} color="blue" />,
             title: "My Documents",
-            subtitle: "Lưu trữ các tài nhạn quan trọng",
+            subtitle: "Lưu trữ các tài liệu quan trọng",
             bgColor: "bg-white",
             showArrow: true,
         },
@@ -77,27 +78,31 @@ export default function ProfileScreen() {
         },
     ];
 
-    const filteredMenuItems = menuItems.filter((item) =>
-        item.title.toLowerCase().includes(searchText.toLowerCase().trim()),
-    );
+    // Nhóm các item thành các mảng con, mỗi mảng chứa tối đa 2 phần tử
+    const chunkedMenuItems = [];
+    for (let i = 0; i < menuItems.length; i += 2) {
+        chunkedMenuItems.push(menuItems.slice(i, i + 2));
+    }
 
     return (
         <SafeAreaView className="flex-1 bg-white">
-            <View className="flex-row items-center px-4 py-5 bg-blue-600">
-                <Search size={26} color="white" />
-                <TextInput
-                    placeholder="Tìm kiếm"
-                    placeholderTextColor="#93C5FD"
-                    className="flex-1 text-white text-[16px] ml-3 opacity-80 text-base"
-                    value={searchText}
-                    onChangeText={setSearchText}
-                />
-                <TouchableOpacity
-                    onPress={() => router.push("/profile/setting" as any)}
-                    className="ml-3"
-                >
-                    <Settings size={26} color="white" />
-                </TouchableOpacity>
+            <View className="flex-row items-center justify-between px-4 py-5 bg-blue-600">
+                <View className="flex-row items-center">
+                    <Search size={26} color="white" />
+                    <TextInput
+                        placeholder="Tìm kiếm"
+                        placeholderTextColor="#93C5FD"
+                        className="flex-1 text-white text-[16px] ml-3 opacity-80 text-base"
+                        value={searchText}
+                        onChangeText={setSearchText}
+                    />
+                    <TouchableOpacity
+                        onPress={() => router.push("/profile/setting" as any)}
+                        className="ml-3"
+                    >
+                        <Settings size={26} color="white" />
+                    </TouchableOpacity>
+                </View>
             </View>
 
             <ScrollView className="flex-1 bg-gray-100">
@@ -120,43 +125,57 @@ export default function ProfileScreen() {
                 </TouchableOpacity>
 
                 {/* Menu Items */}
-                <View className="mt-7">
-                    {menuItems.map((item) => (
-                        <TouchableOpacity
-                            key={item.id}
-                            onPress={() => {
-                                if (item.route) {
-                                    router.push(item.route as any);
-                                }
-                            }}
-                            className="bg-white px-4 py-3 flex-row items-center border-b border-gray-100"
+                <View className="mt-5">
+                    {chunkedMenuItems.map((chunk, chunkIndex) => (
+                        <View
+                            key={chunkIndex}
+                            className="mx-4 mb-[8px] bg-white rounded-lg overflow-hidden"
                         >
-                            {/* Icon */}
-                            <View
-                                className={`w-10 h-10 rounded-lg items-center justify-center ${item.bgColor}`}
-                            >
-                                <Text className="text-white text-xl">
-                                    {item.icon}
-                                </Text>
-                            </View>
+                            {chunk.map((item, index) => (
+                                <TouchableOpacity
+                                    key={item.id}
+                                    onPress={() => {
+                                        if (item.route) {
+                                            router.push(item.route as any);
+                                        }
+                                    }}
+                                    // p-4 để kích thước vùng touch bằng với Profile Card
+                                    className={`p-4 flex-row items-center ${
+                                        index === 0 && chunk.length > 1
+                                            ? "border-b border-gray-100"
+                                            : ""
+                                    }`}
+                                >
+                                    {/* Icon */}
+                                    <View
+                                        className={`w-10 h-10 rounded-lg items-center justify-center ${item.bgColor}`}
+                                    >
+                                        <Text className="text-white text-xl">
+                                            {item.icon}
+                                        </Text>
+                                    </View>
 
-                            {/* Content */}
-                            <View className="flex-1 ml-3">
-                                <Text className="text-gray-900 font-medium text-base">
-                                    {item.title}
-                                </Text>
-                                {item.subtitle && (
-                                    <Text className="text-gray-500 text-xs mt-1">
-                                        {item.subtitle}
-                                    </Text>
-                                )}
-                            </View>
+                                    {/* Content */}
+                                    <View className="flex-1 ml-3">
+                                        <Text className="text-gray-900 font-medium text-base">
+                                            {item.title}
+                                        </Text>
+                                        {item.subtitle ? (
+                                            <Text className="text-gray-500 text-xs mt-1">
+                                                {item.subtitle}
+                                            </Text>
+                                        ) : null}
+                                    </View>
 
-                            {/* Arrow */}
-                            {item.showArrow && (
-                                <Text className="text-gray-400 text-lg">›</Text>
-                            )}
-                        </TouchableOpacity>
+                                    {/* Arrow */}
+                                    {item.showArrow && (
+                                        <Text className="text-gray-400 text-lg">
+                                            <ChevronRight size={22} />
+                                        </Text>
+                                    )}
+                                </TouchableOpacity>
+                            ))}
+                        </View>
                     ))}
                 </View>
             </ScrollView>

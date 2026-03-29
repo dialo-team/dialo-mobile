@@ -182,6 +182,7 @@ export default function MessagesScreen() {
                                     avatar: conversation.avatarUrl
                                         ? conversation.avatarUrl
                                         : conversation.avatar,
+                                    from: "message",
                                 },
                             });
                         }}
@@ -248,6 +249,7 @@ export default function MessagesScreen() {
                                         : ""
                                 }`}
                                 onPress={() => {
+                                    setShowMenu(false);
                                     if (item.route) {
                                         router.push(item.route as any);
                                     }

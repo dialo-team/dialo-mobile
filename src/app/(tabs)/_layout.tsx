@@ -80,6 +80,14 @@ export default function TabsLayout() {
                 name="contact/friend/add/index"
                 options={{
                     href: null,
+                    tabBarStyle: { display: "none" },
+                }}
+            />
+            <Tabs.Screen
+                name="contact/friend/add/my-qr/index"
+                options={{
+                    href: null,
+                    tabBarStyle: { display: "none" },
                 }}
             />
             <Tabs.Screen

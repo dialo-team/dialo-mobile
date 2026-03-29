@@ -58,7 +58,7 @@ export default function EditProfile() {
     return (
         <SafeAreaView className="flex-1 bg-gray-100">
             {/* Header */}
-            <View className="bg-blue-600 flex-row items-center px-4 py-3">
+            <View className="bg-blue-600 flex-row items-center px-4 py-5">
                 <TouchableOpacity
                     onPress={() => router.push("/profile" as any)}
                 >

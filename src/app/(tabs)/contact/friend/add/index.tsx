@@ -1,14 +1,15 @@
+import { DEMO_FRIEND_QR_VALUE } from "../../../../../../constants/demoFriendQr";
 import { useRouter } from "expo-router";
 import { ChevronLeft, CircleArrowRight, QrCode } from "lucide-react-native";
 import React, { useState } from "react";
 import {
-    Image,
     ScrollView,
     Text,
     TextInput,
     TouchableOpacity,
     View,
 } from "react-native";
+import QRCode from "react-native-qrcode-svg";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 export default function AddFriendScreen() {
@@ -54,27 +55,34 @@ export default function AddFriendScreen() {
             <ScrollView className="flex-1" showsVerticalScrollIndicator={false}>
                 {/* Vùng chứa Thẻ Mã QR */}
                 <View className="items-center mt-6 mb-8">
-                    {/* Thẻ QR nền xanh xám */}
-                    <View className="bg-[#415C84] w-[260px] rounded-2xl p-5 items-center shadow-sm">
-                        <Text className="text-white text-[16px] font-medium mb-4">
-                            Phan Nhật Tiến
-                        </Text>
+                    <TouchableOpacity
+                        activeOpacity={0.9}
+                        onPress={() =>
+                            router.push(
+                                "/(tabs)/contact/friend/add/my-qr" as any,
+                            )
+                        }
+                    >
+                        {/* Thẻ QR nền xanh xám */}
+                        <View className="bg-[#415C84] w-[260px] rounded-2xl p-5 items-center shadow-sm">
+                            <Text className="text-white text-[16px] font-medium mb-4">
+                                Phan Nhật Tiến
+                            </Text>
 
-                        {/* Khung trắng bọc mã QR */}
-                        <View className="bg-white p-2 rounded-xl mb-4">
-                            {/* Dùng ảnh placeholder cho mã QR */}
-                            <Image
-                                source={{
-                                    uri: "https://upload.wikimedia.org/wikipedia/commons/d/d0/QR_code_for_mobile_English_Wikipedia.svg",
-                                }}
-                                className="w-[140px] h-[140px]"
-                            />
+                            <View className="bg-white p-2 rounded-xl mb-4">
+                                <QRCode
+                                    value={DEMO_FRIEND_QR_VALUE}
+                                    size={140}
+                                    backgroundColor="#FFFFFF"
+                                    color="#000000"
+                                />
+                            </View>
+
+                            <Text className="text-white/80 text-[12px]">
+                                Chạm để xem lớn · Quét mã để thêm bạn Dialo
+                            </Text>
                         </View>
-
-                        <Text className="text-white/80 text-[12px]">
-                            Quét mã để thêm bạn Dialo với tôi
-                        </Text>
-                    </View>
+                    </TouchableOpacity>
                 </View>
 
                 {/* Phần Nhập số điện thoại */}

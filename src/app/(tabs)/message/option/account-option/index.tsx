@@ -24,15 +24,50 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+function paramStr(v: string | string[] | undefined): string | undefined {
+    if (typeof v === "string") return v;
+    if (Array.isArray(v) && v[0] != null) return v[0];
+    return undefined;
+}
+
 export default function ChatOptionsScreen() {
     const router = useRouter();
-    const { id, name, avatar } = useLocalSearchParams();
+    const params = useLocalSearchParams<{
+        id?: string | string[];
+        name?: string | string[];
+        avatar?: string | string[];
+        from?: string | string[];
+    }>();
+    const id = paramStr(params.id);
+    const name = paramStr(params.name);
+    const avatar = paramStr(params.avatar);
+    const from = paramStr(params.from);
+
+    const handleHeaderBack = () => {
+        if (id) {
+            router.replace({
+                pathname: "/(tabs)/message/chat/[id]" as any,
+                params: {
+                    id,
+                    ...(name != null ? { name } : {}),
+                    ...(avatar != null ? { avatar } : {}),
+                },
+            });
+            return;
+        }
+
+        if (router.canGoBack()) {
+            router.back();
+            return;
+        }
+        router.replace("/(tabs)/message" as any);
+    };
 
     return (
         <SafeAreaView className="flex-1 bg-gray-100">
             {/* HEADER */}
             <View className="bg-blue-600 flex-row items-center px-4 py-3">
-                <TouchableOpacity onPress={() => router.back()}>
+                <TouchableOpacity onPress={handleHeaderBack}>
                     <MoveLeft size={24} color="white" />
                 </TouchableOpacity>
 

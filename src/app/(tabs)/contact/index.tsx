@@ -15,8 +15,6 @@ import { SafeAreaView } from "react-native-safe-area-context";
 export default function ContactsScreen() {
     const router = useRouter();
     const [searchText, setSearchText] = useState("");
-    const [activeTab, setActiveTab] = useState<"friends" | "groups">("friends");
-
     // Dữ liệu phẳng
     const contacts = [
         {
@@ -111,7 +109,10 @@ export default function ContactsScreen() {
     const contactsData = [starredSection, ...groupContacts(filteredContacts)];
 
     return (
-        <SafeAreaView className="flex-1 bg-white">
+        <SafeAreaView
+            className="flex-1 bg-white"
+            edges={["top", "left", "right"]}
+        >
             {/* Header: Thanh tìm kiếm */}
             <View className="flex-row items-center px-4 py-5 bg-blue-600">
                 <Search size={26} color="white" />
@@ -148,6 +149,7 @@ export default function ContactsScreen() {
                 <ScrollView
                     className="flex-1"
                     showsVerticalScrollIndicator={false}
+                    contentContainerStyle={{ paddingBottom: 12 }}
                 >
                     {/* Lời mời kết bạn & Sinh nhật */}
                     <View className="py-2">
@@ -237,6 +239,7 @@ export default function ContactsScreen() {
                                                 id: user.id,
                                                 name: user.name,
                                                 avatar: user.avatar,
+                                                from: "contact",
                                             },
                                         } as any)
                                     }
@@ -260,9 +263,6 @@ export default function ContactsScreen() {
                             ))}
                         </View>
                     ))}
-
-                    {/* Padding ảo để không bị che bởi Bottom Tab */}
-                    <View className="h-20" />
                 </ScrollView>
             </View>
         </SafeAreaView>

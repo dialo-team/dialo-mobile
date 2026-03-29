@@ -26,7 +26,7 @@ export default function AccountSecurityScreen() {
     return (
         <SafeAreaView className="flex-1 bg-white">
             {/* Header */}
-            <View className="flex-row items-center px-4 py-3 bg-blue-600">
+            <View className="flex-row items-center px-4 py-5 bg-blue-600">
                 <TouchableOpacity
                     onPress={() => router.push("/profile" as any)}
                     hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}

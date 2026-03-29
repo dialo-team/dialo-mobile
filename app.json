@@ -2,11 +2,11 @@
   "expo": {
     "name": "dialo-mobile",
     "slug": "dialo-mobile",
+    "userInterfaceStyle": "dark",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "dialomobile",
-    "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
       "supportsTablet": true
@@ -48,7 +48,15 @@
           "microphonePermission": "Allow $(PRODUCT_NAME) to access your microphone"
         }
       ],
-      "expo-barcode-scanner"
+      "expo-barcode-scanner",
+      [
+        "expo-media-library",
+        {
+          "photosPermission": "Cho phép Dialo lưu mã QR vào thư viện ảnh của bạn.",
+          "savePhotosPermission": "Cho phép Dialo lưu mã QR vào thư viện ảnh của bạn.",
+          "isAccessMediaLocationEnabled": true
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,

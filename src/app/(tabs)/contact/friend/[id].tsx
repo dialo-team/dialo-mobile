@@ -54,6 +54,26 @@ export default function FriendProfileScreen() {
     const hasNameChanged =
         nickname.trim() !== safeName.trim() && nickname.trim().length > 0;
 
+    // THÊM HÀM NÀY VÀO ĐÂY:
+    const handleHeaderBack = () => {
+        if (safeId) {
+            router.replace({
+                pathname: "/(tabs)/message/option/account-option" as any,
+                params: {
+                    id: safeId,
+                    ...(displayName != null ? { name: displayName } : {}),
+                    ...(avatar != null ? { avatar } : {}),
+                },
+            });
+            return;
+        }
+        if (router.canGoBack()) {
+            router.back();
+            return;
+        }
+        router.replace("/(tabs)/message" as any);
+    };
+
     return (
         <SafeAreaView className="flex-1 bg-white">
             {/* COVER IMAGE */}
@@ -67,7 +87,7 @@ export default function FriendProfileScreen() {
 
                 {/* TOP ICONS */}
                 <View className="absolute top-4 left-4">
-                    <TouchableOpacity onPress={() => router.back()}>
+                    <TouchableOpacity onPress={handleHeaderBack}>
                         <MoveLeft size={28} color="white" />
                     </TouchableOpacity>
                 </View>
@@ -139,7 +159,12 @@ export default function FriendProfileScreen() {
                     onPress={() => {
                         router.push({
                             pathname: "/message/chat/[id]",
-                            params: { id: safeId, name: displayName, avatar },
+                            params: {
+                                id: safeId,
+                                name: displayName,
+                                avatar,
+                                from: "friend",
+                            },
                         });
                     }}
                 >
