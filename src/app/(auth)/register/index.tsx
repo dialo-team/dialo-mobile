@@ -1,7 +1,8 @@
+import { authenticationApi } from "@/src/api/auth/authenticationApi";
 import { useRouter } from "expo-router";
 import { Check, MoveLeft } from "lucide-react-native";
 import { useState } from "react";
-import { Text, TextInput, TouchableOpacity, View } from "react-native";
+import { Alert, Text, TextInput, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 export default function RegisterScreen() {
@@ -31,6 +32,35 @@ export default function RegisterScreen() {
     };
 
     const isFormValid = isValidPhone && termsChecked && policyChecked;
+
+    const handleSignup = async () => {
+        try {
+            let formattedPhone = phoneNumber;
+            if (phoneNumber.startsWith("0")) {
+                formattedPhone = "+84" + phoneNumber.slice(1);
+            } else {
+                formattedPhone = "+84" + phoneNumber;
+            }
+
+            console.log("Số điện thoại gửi lên API:", formattedPhone);
+
+            const response = await authenticationApi.signup({
+                phone: formattedPhone,
+                password: "your_password",
+            });
+
+            console.log("Đăng kí thành công");
+            console.log(JSON.stringify(response, null, 2));
+
+            router.push({
+                pathname: "/register/verify-otp" as any,
+                params: { phone: phoneNumber },
+            });
+        } catch (error) {
+            console.log("Lỗi đăng kí", error);
+            Alert.alert("Lỗi", "Không thể gửi mã OTP");
+        }
+    };
 
     return (
         <SafeAreaView
@@ -123,12 +153,7 @@ export default function RegisterScreen() {
                 {/* Continue button */}
                 <TouchableOpacity
                     disabled={!isFormValid}
-                    onPress={() =>
-                        router.push({
-                            pathname: "/register/verify-otp" as any,
-                            params: { phone: phoneNumber },
-                        })
-                    }
+                    onPress={handleSignup}
                     className={`mt-8 py-4 rounded-full ${
                         isFormValid ? "bg-blue-600" : "bg-gray-300"
                     }`}

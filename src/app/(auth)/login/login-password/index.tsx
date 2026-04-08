@@ -2,6 +2,7 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { MoveLeft } from "lucide-react-native";
 import { useState } from "react";
 import {
+    Alert,
     KeyboardAvoidingView,
     Platform,
     Text,
@@ -10,6 +11,8 @@ import {
     View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+
+import { authenticationApi } from "@/src/api/auth/authenticationApi";
 
 export default function LoginWithPasswordScreen() {
     const router = useRouter();
@@ -23,6 +26,38 @@ export default function LoginWithPasswordScreen() {
     const maskedPhone = phone
         ? String(phone).replace(/(\d{3})\d{3}(\d{3})/, "$1***$2")
         : "";
+
+    const handleLogin = async () => {
+        if (!phone) return;
+        try {
+            // Chuyển params phone sang string để xử lý
+            const phoneStr = String(phone); // Format lại số điện thoại: Thêm +84 và bỏ số 0 ở đầu
+            let formattedPhone = phoneStr;
+            if (phoneStr.startsWith("0")) {
+                formattedPhone = "+84" + phoneStr.slice(1);
+            } else if (!phoneStr.startsWith("+")) {
+                // Đề phòng trường hợp params truyền sang đã có sẵn +84 thì không nối thêm nữa
+                formattedPhone = "+84" + phoneStr;
+            }
+
+            console.log("Số điện thoại gửi lên API Login:", formattedPhone);
+
+            const response = await authenticationApi.signin({
+                phone: formattedPhone, // Gửi số đã format có +84
+                password: password,
+            });
+
+            console.log("Response từ server:", response);
+            Alert.alert("Thành công", "Đăng nhập thành công!");
+            router.replace("/(tabs)/message" as any);
+        } catch (error: any) {
+            console.error("Lỗi API:", error.response?.data || error.message);
+            Alert.alert(
+                "Lỗi",
+                error.response?.data?.message || "Sai mật khẩu hoặc lỗi server",
+            );
+        }
+    };
 
     return (
         <SafeAreaView
@@ -74,10 +109,7 @@ export default function LoginWithPasswordScreen() {
                     {/* Continue */}
                     <TouchableOpacity
                         disabled={!isValid}
-                        onPress={() => {
-                            // Giả sử mật khẩu đúng
-                            router.replace("/(tabs)/message" as any);
-                        }}
+                        onPress={handleLogin}
                         className={`mt-8 py-4 rounded-full ${
                             isValid ? "bg-blue-600" : "bg-gray-300"
                         }`}

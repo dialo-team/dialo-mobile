@@ -1,7 +1,9 @@
+import { authenticationApi } from "@/src/api/auth/authenticationApi";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { MoveLeft } from "lucide-react-native";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
+    Alert,
     KeyboardAvoidingView,
     Platform,
     Text,
@@ -20,6 +22,17 @@ export default function VerifyOtpScreen() {
 
     // Check OTP valid
     const isOtpValid = otp.every((digit) => digit !== "");
+    const [countdown, setCountdown] = useState(50);
+
+    useEffect(() => {
+        if (countdown === 0) return;
+
+        const timer = setInterval(() => {
+            setCountdown((prev) => prev - 1);
+        }, 1000);
+
+        return () => clearInterval(timer);
+    }, [countdown]);
 
     // Handle OTP input
     const handleChange = (text: string, index: number) => {
@@ -46,6 +59,33 @@ export default function VerifyOtpScreen() {
     const maskedPhone = phone
         ? String(phone).replace(/(\d{3})\d{4,5}(\d{3})/, "$1***$2")
         : "";
+
+    const handleVerify = async () => {
+        try {
+            const otpString = otp.join("");
+            const response = await authenticationApi.signupVerify({
+                phone: String(phone),
+                otp: otpString,
+            });
+
+            console.log("Phản hồi từ BE:", response);
+
+            // Kiểm tra logic thực tế từ nội dung Backend trả về
+            if (response.data?.result === true) {
+                console.log("Xác thực thực sự thành công!");
+                router.push("/register/enter-name" as any);
+            } else {
+                // Trường hợp result: false (như bạn vừa gặp)
+                Alert.alert(
+                    "Thông báo",
+                    response.message || "Mã OTP không chính xác",
+                );
+            }
+        } catch (error) {
+            // Chỉ nhảy vào đây nếu lỗi mạng hoặc server sập (500, 404...)
+            Alert.alert("Lỗi", "Không thể kết nối đến máy chủ");
+        }
+    };
 
     return (
         <SafeAreaView
@@ -106,10 +146,7 @@ export default function VerifyOtpScreen() {
                     {/* Continue Button */}
                     <TouchableOpacity
                         disabled={!isOtpValid}
-                        onPress={() => {
-                            // Giả sử OTP đúng
-                            router.push("/register/enter-name" as any);
-                        }}
+                        onPress={handleVerify}
                         className={`mt-10 py-4 rounded-full ${
                             isOtpValid ? "bg-blue-600" : "bg-gray-300"
                         }`}
@@ -127,7 +164,31 @@ export default function VerifyOtpScreen() {
                     <View className="mt-6 items-center">
                         <Text className="text-gray-500">
                             Bạn không nhận được mã?{" "}
-                            <Text className="text-blue-600">Gửi lại (50s)</Text>
+                            <Text
+                                className={`${
+                                    countdown === 0
+                                        ? "text-blue-600"
+                                        : "text-gray-400"
+                                }`}
+                                onPress={async () => {
+                                    if (countdown === 0) {
+                                        try {
+                                            await authenticationApi.signup({
+                                                phone: String(phone),
+                                                password: "your_password",
+                                            });
+                                            setCountdown(50);
+                                        } catch (error) {
+                                            Alert.alert(
+                                                "Lỗi",
+                                                "Không thể gửi lại mã OTP",
+                                            );
+                                        }
+                                    }
+                                }}
+                            >
+                                Gửi lại ({countdown}s)
+                            </Text>
                         </Text>
                     </View>
 
