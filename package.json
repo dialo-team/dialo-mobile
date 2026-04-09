@@ -21,6 +21,7 @@
     "@react-navigation/bottom-tabs": "^7.4.0",
     "@react-navigation/elements": "^2.6.3",
     "@react-navigation/native": "^7.1.8",
+    "axios": "^1.14.0",
     "expo": "~54.0.31",
     "expo-av": "~16.0.8",
     "expo-barcode-scanner": "^13.0.1",
@@ -33,6 +34,7 @@
     "expo-linking": "~8.0.11",
     "expo-media-library": "~18.2.1",
     "expo-router": "~6.0.21",
+    "expo-secure-store": "~15.0.8",
     "expo-splash-screen": "~31.0.13",
     "expo-status-bar": "~3.0.9",
     "expo-symbols": "~1.0.8",
@@ -62,6 +64,7 @@
     "husky": "^9.1.7",
     "lint-staged": "^16.2.7",
     "prettier": "3.7.4",
+    "redis": "^5.11.0",
     "typescript": "~5.9.2"
   },
   "private": true,

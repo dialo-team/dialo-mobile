@@ -37,7 +37,7 @@ export default function LoginWithPasswordScreen() {
             console.log("Số điện thoại gửi lên API Login:", formattedPhone);
 
             const response = await authenticationApi.signin({
-                phone: formattedPhone, // Gửi số đã format có +84
+                phone: String(phone), // Gửi số đã format có +84
                 password: password,
             });
 

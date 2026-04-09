@@ -1,68 +1,62 @@
 import apiClient from "../apiClient";
 import {
     ChangePasswordPayload,
-    ForgotPasswordPhonePayload,
-    ForgotPasswordPhoneVerifyPayload,
+    PasswordResetConfirmPayload,
+    PasswordResetPayload,
+    PasswordResetRequestPayload,
     SigninPayload,
     SigninVerifyPayload,
+    SignoutPayload,
     SignupPayload,
     SignupVerifyPayload,
 } from "./types";
 
 export const authenticationApi = {
     signin: async (data: SigninPayload) => {
-        const response = await apiClient.post("/auth/signin", data);
+        const response = await apiClient.post("/auth/signin/request", data);
         return response.data;
     },
 
     signup: async (data: SignupPayload) => {
-        const response = await apiClient.post("/auth/signup", data);
+        const response = await apiClient.post("/auth/signup/request", data);
         return response.data;
     },
 
     signupVerify: async (data: SignupVerifyPayload) => {
-        const response = await apiClient.post("/auth/signup/verify", data);
+        const response = await apiClient.post("/auth/signup", data);
         return response.data;
     },
 
     signinVerify: async (data: SigninVerifyPayload) => {
-        const response = await apiClient.post("/auth/signin/verify", data);
+        const response = await apiClient.post("/auth/signin", data);
         return response.data;
     },
 
-    forgotPhone: async (
-        data: ForgotPasswordPhonePayload,
-        accessToken?: string,
-    ) => {
+    // 1. Xin OTP reset
+    passwordResetRequest: async (data: PasswordResetRequestPayload) => {
         const response = await apiClient.post(
-            "/auth/forgot/phone",
+            "/auth/password/reset/request",
             data,
-            accessToken
-                ? {
-                      headers: {
-                          Authorization: `Bearer ${accessToken}`,
-                      },
-                  }
-                : undefined,
         );
         return response.data;
     },
 
-    forgotPhoneVerify: async (
-        data: ForgotPasswordPhoneVerifyPayload,
-        accessToken?: string,
-    ) => {
+    // 2. Xác nhận OTP reset (Trả về resetToken)
+    passwordResetConfirm: async (data: PasswordResetConfirmPayload) => {
         const response = await apiClient.post(
-            "/auth/forgot/phone/verify",
+            "/auth/password/reset/confirm",
             data,
-            accessToken
-                ? {
-                      headers: {
-                          Authorization: `Bearer ${accessToken}`,
-                      },
-                  }
-                : undefined,
         );
+        return response.data;
+    },
+
+    // 3. Đặt lại mật khẩu mới (Gắn resetToken vào header)
+    resetPassword: async (data: PasswordResetPayload, resetToken: string) => {
+        const response = await apiClient.post("/auth/password/reset", data, {
+            headers: {
+                Authorization: resetToken,
+            },
+        });
         return response.data;
     },
 
@@ -75,12 +69,19 @@ export const authenticationApi = {
             data,
             accessToken
                 ? {
-                      headers: {
-                          Authorization: `Bearer ${accessToken}`,
-                      },
+                      headers: { Authorization: `Bearer ${accessToken}` },
                   }
                 : undefined,
         );
+        return response.data;
+    },
+
+    signout: async (data: SignoutPayload, accessToken: string) => {
+        const response = await apiClient.post("/auth/signout", data, {
+            headers: {
+                Authorization: `Bearer ${accessToken}`,
+            },
+        });
         return response.data;
     },
 };

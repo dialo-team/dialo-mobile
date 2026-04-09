@@ -68,7 +68,7 @@ export default function LoginVerifyScreen() {
         try {
             const otpString = otp.join("");
             const response = await authenticationApi.signinVerify({
-                phone: formattedPhone,
+                phone: String(phone),
                 otp: otpString,
             });
 
@@ -105,7 +105,7 @@ export default function LoginVerifyScreen() {
 
         try {
             await authenticationApi.signin({
-                phone: formattedPhone,
+                phone: String(phone),
                 password: String(password),
             });
             setCountdown(50);

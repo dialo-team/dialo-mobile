@@ -36,11 +36,11 @@ export default function RegisterScreen() {
         try {
             const formattedPhone = normalizePhoneTo84(phoneNumber);
 
-            console.log("Số điện thoại gửi lên API:", formattedPhone);
+            console.log("Số điện thoại gửi lên API:", String(phoneNumber));
 
             const response = await authenticationApi.signup({
-                phone: formattedPhone,
-                password,
+                phone: String(phoneNumber),
+                password: password,
             });
 
             console.log("Đăng kí thành công");

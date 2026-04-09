@@ -57,23 +57,29 @@ export default function NewPasswordScreen() {
 
     const handleSubmit = async () => {
         if (!isFormValid) return;
+        console.log("Reset Token đang gửi đi:", refreshToken);
 
         if (!refreshToken) {
             Alert.alert(
                 "Thiếu phiên xác thực",
                 "Không tìm thấy phiên xác thực đổi mật khẩu. Vui lòng thực hiện lại bước OTP.",
             );
+
             return;
         }
 
         try {
             setIsSubmitting(true);
-            await authenticationApi.changePassword({
-                newPass: password,
-                refreshToken: String(refreshToken),
-            });
+            await authenticationApi.resetPassword(
+                { password: password },
+                String(refreshToken), // Biến này bạn đang nhận từ route params, chứa resetToken
+            );
             setIsModalVisible(true);
         } catch (error: any) {
+            console.log(
+                "Chi tiết lỗi đổi pass:",
+                error.response?.data || error.message,
+            );
             Alert.alert(
                 "Lỗi",
                 error.response?.data?.message || "Không thể đổi mật khẩu",

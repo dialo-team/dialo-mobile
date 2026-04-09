@@ -1,29 +1,27 @@
-import AsyncStorage from "@react-native-async-storage/async-storage";
+import * as SecureStore from "expo-secure-store";
 
-const ACCESS_TOKEN_KEY = "auth.accessToken";
-const REFRESH_TOKEN_KEY = "auth.refreshToken";
-
-export async function saveAuthTokens(
+export const saveAuthTokens = async (
     accessToken: string,
     refreshToken: string,
-) {
-    await Promise.all([
-        AsyncStorage.setItem(ACCESS_TOKEN_KEY, accessToken),
-        AsyncStorage.setItem(REFRESH_TOKEN_KEY, refreshToken),
-    ]);
-}
+) => {
+    try {
+        await SecureStore.setItemAsync("accessToken", accessToken);
+        await SecureStore.setItemAsync("refreshToken", refreshToken);
+        console.log("Đã lưu token an toàn!");
+    } catch (error) {
+        console.error("Lỗi khi lưu token:", error);
+    }
+};
 
-export async function getAccessToken() {
-    return AsyncStorage.getItem(ACCESS_TOKEN_KEY);
-}
+export const getAccessToken = async () => {
+    return await SecureStore.getItemAsync("accessToken");
+};
 
-export async function getRefreshToken() {
-    return AsyncStorage.getItem(REFRESH_TOKEN_KEY);
-}
+export const getRefreshToken = async () => {
+    return await SecureStore.getItemAsync("refreshToken");
+};
 
-export async function clearAuthTokens() {
-    await Promise.all([
-        AsyncStorage.removeItem(ACCESS_TOKEN_KEY),
-        AsyncStorage.removeItem(REFRESH_TOKEN_KEY),
-    ]);
-}
+export const clearAuthTokens = async () => {
+    await SecureStore.deleteItemAsync("accessToken");
+    await SecureStore.deleteItemAsync("refreshToken");
+};
