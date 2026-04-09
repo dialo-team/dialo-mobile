@@ -85,31 +85,36 @@ export default function ProfileScreen() {
     }
 
     return (
-        <SafeAreaView className="flex-1 bg-white">
-            <View className="flex-row items-center justify-between px-4 py-5 bg-blue-600">
-                <View className="flex-row items-center">
+        <SafeAreaView className="flex-1 bg-slate-50">
+            <View className="px-4 pt-4 pb-5 bg-blue-600">
+                <View className="flex-row items-center bg-blue-500/40 rounded-xl px-3 h-11">
                     <Search size={26} color="white" />
                     <TextInput
                         placeholder="Tìm kiếm"
                         placeholderTextColor="#93C5FD"
-                        className="flex-1 text-white text-[16px] ml-3 opacity-80 text-base"
+                        className="flex-1 text-white text-[16px] ml-3 opacity-90"
                         value={searchText}
                         onChangeText={setSearchText}
                     />
                     <TouchableOpacity
                         onPress={() => router.push("/profile/setting" as any)}
                         className="ml-3"
+                        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                     >
                         <Settings size={26} color="white" />
                     </TouchableOpacity>
                 </View>
             </View>
 
-            <ScrollView className="flex-1 bg-gray-100">
+            <ScrollView
+                className="flex-1 bg-slate-50"
+                showsVerticalScrollIndicator={false}
+            >
                 {/* User Profile Card */}
                 <TouchableOpacity
                     onPress={() => router.push("/profile/edit-profile" as any)}
-                    className="bg-white mx-4 mt-4 rounded-lg p-4 flex-row items-center"
+                    className="bg-white mx-4 mt-4 rounded-2xl p-4 flex-row items-center shadow-sm"
+                    activeOpacity={0.8}
                 >
                     <View className="w-12 h-12 rounded-full bg-green-500 items-center justify-center">
                         <Text className="text-white font-bold text-lg">TI</Text>
@@ -129,7 +134,7 @@ export default function ProfileScreen() {
                     {chunkedMenuItems.map((chunk, chunkIndex) => (
                         <View
                             key={chunkIndex}
-                            className="mx-4 mb-[8px] bg-white rounded-lg overflow-hidden"
+                            className="mx-4 mb-[10px] bg-white rounded-2xl overflow-hidden"
                         >
                             {chunk.map((item, index) => (
                                 <TouchableOpacity
@@ -139,7 +144,7 @@ export default function ProfileScreen() {
                                             router.push(item.route as any);
                                         }
                                     }}
-                                    // p-4 để kích thước vùng touch bằng với Profile Card
+                                    activeOpacity={0.8}
                                     className={`p-4 flex-row items-center ${
                                         index === 0 && chunk.length > 1
                                             ? "border-b border-gray-100"
@@ -147,12 +152,8 @@ export default function ProfileScreen() {
                                     }`}
                                 >
                                     {/* Icon */}
-                                    <View
-                                        className={`w-10 h-10 rounded-lg items-center justify-center ${item.bgColor}`}
-                                    >
-                                        <Text className="text-white text-xl">
-                                            {item.icon}
-                                        </Text>
+                                    <View className="w-10 h-10 rounded-lg items-center justify-center bg-blue-50">
+                                        {item.icon}
                                     </View>
 
                                     {/* Content */}
@@ -169,9 +170,10 @@ export default function ProfileScreen() {
 
                                     {/* Arrow */}
                                     {item.showArrow && (
-                                        <Text className="text-gray-400 text-lg">
-                                            <ChevronRight size={22} />
-                                        </Text>
+                                        <ChevronRight
+                                            size={22}
+                                            color="#9CA3AF"
+                                        />
                                     )}
                                 </TouchableOpacity>
                             ))}

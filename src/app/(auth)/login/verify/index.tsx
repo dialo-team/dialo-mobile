@@ -1,4 +1,5 @@
 import { authenticationApi } from "@/src/api/auth/authenticationApi";
+import { saveAuthTokens } from "@/src/api/auth/authStorage";
 import BackHeader from "@/src/components/ui/BackHeader";
 import PrimaryButton from "@/src/components/ui/PrimaryButton";
 import { maskPhone, normalizePhoneTo84 } from "@/src/utils/phone";
@@ -14,7 +15,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-export default function VerifyOtpScreen() {
+export default function LoginVerifyScreen() {
     const router = useRouter();
     const { phone, password } = useLocalSearchParams<{
         phone?: string;
@@ -22,12 +23,15 @@ export default function VerifyOtpScreen() {
     }>();
 
     const [otp, setOtp] = useState<string[]>(["", "", "", "", "", ""]);
-    const inputs = useRef<TextInput[]>([]);
-
-    // Check OTP valid
-    const isOtpValid = otp.every((digit) => digit !== "");
     const [countdown, setCountdown] = useState(50);
     const [isSubmitting, setIsSubmitting] = useState(false);
+    const inputs = useRef<TextInput[]>([]);
+
+    const isOtpValid = otp.every((digit) => digit !== "");
+
+    const phoneStr = String(phone ?? "");
+    const formattedPhone = normalizePhoneTo84(phoneStr);
+    const maskedPhone = maskPhone(phoneStr);
 
     useEffect(() => {
         if (countdown === 0) return;
@@ -39,58 +43,78 @@ export default function VerifyOtpScreen() {
         return () => clearInterval(timer);
     }, [countdown]);
 
-    // Handle OTP input
     const handleChange = (text: string, index: number) => {
         if (!/^\d?$/.test(text)) return;
 
-        const newOtp = [...otp];
-        newOtp[index] = text;
-        setOtp(newOtp);
+        const nextOtp = [...otp];
+        nextOtp[index] = text;
+        setOtp(nextOtp);
 
-        // Focus next input
         if (text && index < 5) {
             inputs.current[index + 1]?.focus();
         }
     };
 
-    // Handle backspace
     const handleBackspace = (index: number) => {
         if (otp[index] === "" && index > 0) {
             inputs.current[index - 1]?.focus();
         }
     };
 
-    // Mask phone number
-    const maskedPhone = phone ? maskPhone(String(phone)) : "";
-
-    const handleVerify = async () => {
+    const handleVerifySignin = async () => {
+        if (!phone) return;
         setIsSubmitting(true);
+
         try {
             const otpString = otp.join("");
-            const formattedPhone = normalizePhoneTo84(String(phone ?? ""));
-
-            const response = await authenticationApi.signupVerify({
+            const response = await authenticationApi.signinVerify({
                 phone: formattedPhone,
                 otp: otpString,
             });
 
-            console.log("Phản hồi từ BE:", response);
+            const accessToken = response?.data?.accessToken;
+            const refreshToken = response?.data?.refreshToken;
 
-            // Kiểm tra logic thực tế từ nội dung Backend trả về
-            if (response.data?.result === true) {
-                console.log("Xác thực thực sự thành công!");
-                router.push("/register/enter-name" as any);
-            } else {
-                // Trường hợp result: false (như bạn vừa gặp)
-                Alert.alert(
-                    "Thông báo",
-                    response.message || "Mã OTP không chính xác",
-                );
+            if (accessToken && refreshToken) {
+                await saveAuthTokens(accessToken, refreshToken);
+                console.log("Đăng nhập verify thành công:", response);
+                Alert.alert("Thành công", "Đăng nhập thành công!");
+                router.replace("/(tabs)/message" as any);
+                return;
             }
-        } catch (error) {
-            Alert.alert("Lỗi", "Không thể kết nối đến máy chủ");
+
+            Alert.alert("Lỗi", "Xác thực đăng nhập chưa nhận được token.");
+        } catch (error: any) {
+            console.error(
+                "Lỗi signin verify:",
+                error.response?.data || error.message,
+            );
+            Alert.alert(
+                "Lỗi xác thực",
+                error.response?.data?.message ||
+                    "Mã OTP không hợp lệ hoặc đã hết hạn.",
+            );
         } finally {
             setIsSubmitting(false);
+        }
+    };
+
+    const handleResendOtp = async () => {
+        if (!phone || !password) return;
+        if (countdown > 0) return;
+
+        try {
+            await authenticationApi.signin({
+                phone: formattedPhone,
+                password: String(password),
+            });
+            setCountdown(50);
+            Alert.alert("Thành công", "Đã gửi lại mã OTP đăng nhập.");
+        } catch (error: any) {
+            Alert.alert(
+                "Lỗi",
+                error.response?.data?.message || "Không thể gửi lại mã OTP.",
+            );
         }
     };
 
@@ -108,10 +132,9 @@ export default function VerifyOtpScreen() {
                 <View className="flex-1 px-6">
                     <BackHeader onBack={() => router.back()} />
 
-                    {/* Title */}
-                    <View className="mt-4 items-center">
-                        <Text className="text-lg font-semibold">
-                            Nhập mã xác thực
+                    <View className="mt-4 items-center gap-2">
+                        <Text className="text-[22px] font-bold text-gray-900">
+                            Xác thực đăng nhập
                         </Text>
                         <Text className="text-gray-500 mt-2 text-center">
                             Nhập dãy 6 số đang được gửi đến số điện thoại
@@ -121,7 +144,6 @@ export default function VerifyOtpScreen() {
                         </Text>
                     </View>
 
-                    {/* OTP Input */}
                     <View className="flex-row justify-between mt-10">
                         {otp.map((digit, index) => (
                             <TextInput
@@ -150,50 +172,19 @@ export default function VerifyOtpScreen() {
                         loadingLabel="Đang xác thực..."
                         isLoading={isSubmitting}
                         disabled={!isOtpValid}
-                        onPress={handleVerify}
+                        onPress={handleVerifySignin}
                         className="mt-10"
                     />
 
-                    {/* Resend OTP */}
                     <View className="mt-6 items-center">
                         <Text className="text-gray-500">
                             Bạn không nhận được mã?{" "}
                             <Text
-                                className={`${
-                                    countdown === 0
-                                        ? "text-blue-600"
-                                        : "text-gray-400"
-                                }`}
-                                onPress={async () => {
-                                    if (countdown === 0) {
-                                        try {
-                                            await authenticationApi.signup({
-                                                phone: normalizePhoneTo84(
-                                                    String(phone ?? ""),
-                                                ),
-                                                password: String(
-                                                    password ?? "",
-                                                ),
-                                            });
-                                            setCountdown(50);
-                                        } catch (error) {
-                                            Alert.alert(
-                                                "Lỗi",
-                                                "Không thể gửi lại mã OTP",
-                                            );
-                                        }
-                                    }
-                                }}
+                                className={`${countdown === 0 ? "text-blue-600" : "text-gray-400"}`}
+                                onPress={handleResendOtp}
                             >
                                 Gửi lại ({countdown}s)
                             </Text>
-                        </Text>
-                    </View>
-
-                    {/* Support */}
-                    <View className=" flex-1 justify-end items-center pb-10 ">
-                        <Text className="text-blue-600">
-                            Tôi cần hỗ trợ thêm về mã xác thực
                         </Text>
                     </View>
                 </View>

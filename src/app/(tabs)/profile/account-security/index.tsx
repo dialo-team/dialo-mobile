@@ -40,12 +40,15 @@ export default function AccountSecurityScreen() {
 
             {/* Body */}
             <ScrollView
-                className="flex-1 bg-gray-100"
+                className="flex-1 bg-slate-50"
                 showsVerticalScrollIndicator={false}
             >
                 {/* Section 1: Thông tin cá nhân */}
-                <View className="bg-white">
-                    <TouchableOpacity className="flex-row items-center px-4 py-3 border-b border-gray-100">
+                <View className="bg-white mx-3 mt-3 rounded-2xl overflow-hidden">
+                    <TouchableOpacity
+                        className="flex-row items-center px-4 py-3 border-b border-gray-100"
+                        activeOpacity={0.8}
+                    >
                         <Image
                             source={{ uri: "https://i.pravatar.cc/150?img=11" }} // Link ảnh minh họa
                             className="w-[46px] h-[46px] rounded-full mr-3"
@@ -62,7 +65,10 @@ export default function AccountSecurityScreen() {
                     </TouchableOpacity>
 
                     {/* Số điện thoại */}
-                    <TouchableOpacity className="flex-row items-center px-4 py-3 border-b border-gray-100">
+                    <TouchableOpacity
+                        className="flex-row items-center px-4 py-3 border-b border-gray-100"
+                        activeOpacity={0.8}
+                    >
                         <View className="flex-1">
                             <Text className="text-base font-normal text-black mb-[2px]">
                                 Số điện thoại
@@ -75,7 +81,10 @@ export default function AccountSecurityScreen() {
                     </TouchableOpacity>
 
                     {/* Email */}
-                    <TouchableOpacity className="flex-row items-center px-4 py-3 border-b border-gray-100">
+                    <TouchableOpacity
+                        className="flex-row items-center px-4 py-3 border-b border-gray-100"
+                        activeOpacity={0.8}
+                    >
                         <View className="flex-1">
                             <Text className="text-base font-normal text-black mb-[2px]">
                                 Email
@@ -88,7 +97,10 @@ export default function AccountSecurityScreen() {
                     </TouchableOpacity>
 
                     {/* Mã QR */}
-                    <TouchableOpacity className="flex-row items-center px-4 py-4">
+                    <TouchableOpacity
+                        className="flex-row items-center px-4 py-4"
+                        activeOpacity={0.8}
+                    >
                         <Text className="flex-1 text-base font-normal text-black">
                             Mã QR của tôi
                         </Text>
@@ -98,16 +110,19 @@ export default function AccountSecurityScreen() {
                 </View>
 
                 {/* Tiêu đề mục: Bảo mật */}
-                <View className="px-4 py-2 bg-gray-100">
+                <View className="px-4 py-2 mt-1 bg-slate-50">
                     <Text className="text-[13px] font-medium text-[#0091FF]">
                         Bảo mật
                     </Text>
                 </View>
 
                 {/* Section 2: Bảo mật */}
-                <View className="bg-white border-y border-gray-100">
+                <View className="bg-white mx-3 rounded-2xl overflow-hidden">
                     {/* Kiểm tra bảo mật */}
-                    <TouchableOpacity className="flex-row items-center px-4 py-3 border-b border-gray-100">
+                    <TouchableOpacity
+                        className="flex-row items-center px-4 py-3 border-b border-gray-100"
+                        activeOpacity={0.8}
+                    >
                         <View className="w-8">
                             <ShieldHalf size={24} color="#666" />
                         </View>
@@ -124,7 +139,10 @@ export default function AccountSecurityScreen() {
                     </TouchableOpacity>
 
                     {/* Khóa Zalo */}
-                    <TouchableOpacity className="flex-row items-center px-4 py-4">
+                    <TouchableOpacity
+                        className="flex-row items-center px-4 py-4"
+                        activeOpacity={0.8}
+                    >
                         <View className="w-8">
                             <Lock size={24} color="#666" />
                         </View>
@@ -139,14 +157,14 @@ export default function AccountSecurityScreen() {
                 </View>
 
                 {/* Tiêu đề mục: Đăng nhập */}
-                <View className="px-4 py-2 bg-gray-100">
+                <View className="px-4 py-2 mt-1 bg-slate-50">
                     <Text className="text-[13px] font-medium text-[#0091FF]">
                         Đăng nhập
                     </Text>
                 </View>
 
                 {/* Section 3: Đăng nhập */}
-                <View className="bg-white border-y border-gray-100 mb-6">
+                <View className="bg-white mx-3 rounded-2xl overflow-hidden mb-6">
                     {/* Bảo mật 2 lớp */}
                     <View className="flex-row items-center px-4 py-3 border-b border-gray-100">
                         <View className="flex-1 pr-4">
@@ -167,7 +185,10 @@ export default function AccountSecurityScreen() {
                     </View>
 
                     {/* Thiết bị đăng nhập */}
-                    <TouchableOpacity className="flex-row items-center px-4 py-3 border-b border-gray-100">
+                    <TouchableOpacity
+                        className="flex-row items-center px-4 py-3 border-b border-gray-100"
+                        activeOpacity={0.8}
+                    >
                         <View className="flex-1 pr-4">
                             <Text className="text-base font-normal text-black mb-[2px]">
                                 Thiết bị đăng nhập
@@ -180,7 +201,15 @@ export default function AccountSecurityScreen() {
                     </TouchableOpacity>
 
                     {/* Mật khẩu */}
-                    <TouchableOpacity className="flex-row items-center px-4 py-4">
+                    <TouchableOpacity
+                        className="flex-row items-center px-4 py-4"
+                        onPress={() =>
+                            router.push(
+                                "/profile/account-security/change-password" as any,
+                            )
+                        }
+                        activeOpacity={0.8}
+                    >
                         <View className="w-8">
                             <KeyRound size={24} color="#666" />
                         </View>

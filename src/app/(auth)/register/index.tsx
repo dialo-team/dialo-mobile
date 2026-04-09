@@ -1,6 +1,13 @@
 import { authenticationApi } from "@/src/api/auth/authenticationApi";
+import BackHeader from "@/src/components/ui/BackHeader";
+import PrimaryButton from "@/src/components/ui/PrimaryButton";
+import {
+    isValidVietnamPhone,
+    keepPhoneDigitsOnly,
+    normalizePhoneTo84,
+} from "@/src/utils/phone";
 import { useRouter } from "expo-router";
-import { Check, MoveLeft } from "lucide-react-native";
+import { Check } from "lucide-react-native";
 import { useState } from "react";
 import { Alert, Text, TextInput, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -12,25 +19,11 @@ export default function RegisterScreen() {
     const [policyChecked, setPolicyChecked] = useState(false);
     const [password, setPassword] = useState("");
     const [showPassword, setShowPassword] = useState(false);
-    const isValidPhone =
-        (phoneNumber.startsWith("0") && phoneNumber.length === 10) ||
-        (!phoneNumber.startsWith("0") && phoneNumber.length === 9);
+    const [isSubmitting, setIsSubmitting] = useState(false);
+    const isValidPhone = isValidVietnamPhone(phoneNumber);
 
     const handlePhoneInput = (text: string) => {
-        const numbersOnly = text.replace(/[^0-9]/g, "");
-
-        // Nếu bắt đầu từ 0: tối đa 10 ký tự
-        if (numbersOnly.startsWith("0")) {
-            setPhoneNumber(numbersOnly.slice(0, 10));
-        }
-        // Nếu bắt đầu từ số khác 0: tối đa 9 ký tự
-        else if (numbersOnly.length > 0) {
-            setPhoneNumber(numbersOnly.slice(0, 9));
-        }
-        // Nếu rỗng
-        else {
-            setPhoneNumber("");
-        }
+        setPhoneNumber(keepPhoneDigitsOnly(text));
     };
 
     const isValidPassword = password.length >= 6;
@@ -39,13 +32,9 @@ export default function RegisterScreen() {
         isValidPhone && isValidPassword && termsChecked && policyChecked;
 
     const handleSignup = async () => {
+        setIsSubmitting(true);
         try {
-            let formattedPhone = phoneNumber;
-            if (phoneNumber.startsWith("0")) {
-                formattedPhone = "+84" + phoneNumber.slice(1);
-            } else {
-                formattedPhone = "+84" + phoneNumber;
-            }
+            const formattedPhone = normalizePhoneTo84(phoneNumber);
 
             console.log("Số điện thoại gửi lên API:", formattedPhone);
 
@@ -59,11 +48,16 @@ export default function RegisterScreen() {
 
             router.push({
                 pathname: "/register/verify-otp" as any,
-                params: { phone: phoneNumber },
+                params: { phone: phoneNumber, password },
             });
-        } catch (error) {
+        } catch (error: any) {
             console.log("Lỗi đăng kí", error);
-            Alert.alert("Lỗi", "Không thể gửi mã OTP");
+            Alert.alert(
+                "Lỗi",
+                error.response?.data?.message || "Không thể gửi mã OTP",
+            );
+        } finally {
+            setIsSubmitting(false);
         }
     };
 
@@ -75,17 +69,14 @@ export default function RegisterScreen() {
             className="bg-white"
         >
             <View className="flex-1 bg-white px-6">
-                {/* Header */}
-                <View className="h-14 justify-center">
-                    <TouchableOpacity onPress={() => router.back()}>
-                        <MoveLeft size={24} color="gray" />
-                    </TouchableOpacity>
-                </View>
+                <BackHeader onBack={() => router.back()} />
 
-                {/* Title */}
-                <View className="mt-4 items-center">
-                    <Text className="text-lg font-semibold">
+                <View className="mt-4 items-center gap-2">
+                    <Text className="text-[22px] font-bold text-gray-900">
                         Nhập số điện thoại
+                    </Text>
+                    <Text className="text-sm text-gray-500 text-center">
+                        Tạo tài khoản mới và xác thực bằng OTP.
                     </Text>
                 </View>
 
@@ -174,22 +165,14 @@ export default function RegisterScreen() {
                     </TouchableOpacity>
                 </View>
 
-                {/* Continue button */}
-                <TouchableOpacity
+                <PrimaryButton
+                    label="Tiếp tục"
+                    loadingLabel="Đang gửi OTP..."
+                    isLoading={isSubmitting}
                     disabled={!isFormValid}
                     onPress={handleSignup}
-                    className={`mt-8 py-4 rounded-full ${
-                        isFormValid ? "bg-blue-600" : "bg-gray-300"
-                    }`}
-                >
-                    <Text
-                        className={`text-center font-semibold ${
-                            isFormValid ? "text-white" : "text-gray-500"
-                        }`}
-                    >
-                        Tiếp tục
-                    </Text>
-                </TouchableOpacity>
+                    className="mt-8"
+                />
 
                 {/* Login link */}
                 <View className="flex-1 justify-end items-center pb-10">

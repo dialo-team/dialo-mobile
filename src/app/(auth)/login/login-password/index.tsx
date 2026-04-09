@@ -1,5 +1,6 @@
+import BackHeader from "@/src/components/ui/BackHeader";
+import PrimaryButton from "@/src/components/ui/PrimaryButton";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { MoveLeft } from "lucide-react-native";
 import { useState } from "react";
 import {
     Alert,
@@ -13,6 +14,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { authenticationApi } from "@/src/api/auth/authenticationApi";
+import { maskPhone, normalizePhoneTo84 } from "@/src/utils/phone";
 
 export default function LoginWithPasswordScreen() {
     const router = useRouter();
@@ -20,25 +22,17 @@ export default function LoginWithPasswordScreen() {
 
     const [password, setPassword] = useState("");
     const [showPassword, setShowPassword] = useState(false);
+    const [isSubmitting, setIsSubmitting] = useState(false);
 
     const isValid = password.length >= 6;
 
-    const maskedPhone = phone
-        ? String(phone).replace(/(\d{3})\d{3}(\d{3})/, "$1***$2")
-        : "";
+    const maskedPhone = phone ? maskPhone(String(phone)) : "";
 
     const handleLogin = async () => {
         if (!phone) return;
+        setIsSubmitting(true);
         try {
-            // Chuyển params phone sang string để xử lý
-            const phoneStr = String(phone); // Format lại số điện thoại: Thêm +84 và bỏ số 0 ở đầu
-            let formattedPhone = phoneStr;
-            if (phoneStr.startsWith("0")) {
-                formattedPhone = "+84" + phoneStr.slice(1);
-            } else if (!phoneStr.startsWith("+")) {
-                // Đề phòng trường hợp params truyền sang đã có sẵn +84 thì không nối thêm nữa
-                formattedPhone = "+84" + phoneStr;
-            }
+            const formattedPhone = normalizePhoneTo84(String(phone));
 
             console.log("Số điện thoại gửi lên API Login:", formattedPhone);
 
@@ -48,8 +42,17 @@ export default function LoginWithPasswordScreen() {
             });
 
             console.log("Response từ server:", response);
-            Alert.alert("Thành công", "Đăng nhập thành công!");
-            router.replace("/(tabs)/message" as any);
+            Alert.alert(
+                "Xác thực",
+                "Đã gửi mã OTP đăng nhập, vui lòng kiểm tra tin nhắn.",
+            );
+            router.push({
+                pathname: "/login/verify" as any,
+                params: {
+                    phone: String(phone),
+                    password,
+                },
+            });
         } catch (error: any) {
             console.error("Chi tiết lỗi API:", {
                 message: error.message,
@@ -75,6 +78,8 @@ export default function LoginWithPasswordScreen() {
                 "Lỗi đăng nhập",
                 `${errorMessage}\n\n(Status: ${error.response?.status || "unknown"})`,
             );
+        } finally {
+            setIsSubmitting(false);
         }
     };
 
@@ -90,19 +95,13 @@ export default function LoginWithPasswordScreen() {
                 className="flex-1 bg-white"
             >
                 <View className="flex-1 px-6">
-                    {/* Header */}
-                    <View className="h-14 justify-center">
-                        <TouchableOpacity onPress={() => router.back()}>
-                            <MoveLeft size={24} color="gray" />
-                        </TouchableOpacity>
-                    </View>
+                    <BackHeader onBack={() => router.back()} />
 
-                    {/* Title */}
-                    <View className="mt-6 items-center">
-                        <Text className="text-lg font-semibold text-center">
+                    <View className="mt-6 items-center gap-2">
+                        <Text className="text-[22px] font-bold text-center text-gray-900">
                             Nhập mật khẩu của tài khoản gắn với số điện thoại
                         </Text>
-                        <Text className="font-semibold mt-2">
+                        <Text className="font-semibold text-blue-700">
                             {maskedPhone}
                         </Text>
                     </View>
@@ -125,29 +124,26 @@ export default function LoginWithPasswordScreen() {
                         </TouchableOpacity>
                     </View>
 
-                    {/* Continue */}
-                    <TouchableOpacity
+                    <PrimaryButton
+                        label="Tiếp tục"
+                        loadingLabel="Đang gửi OTP..."
+                        isLoading={isSubmitting}
                         disabled={!isValid}
                         onPress={handleLogin}
-                        className={`mt-8 py-4 rounded-full ${
-                            isValid ? "bg-blue-600" : "bg-gray-300"
-                        }`}
-                    >
-                        <Text
-                            className={`text-center font-semibold ${
-                                isValid ? "text-white" : "text-gray-500"
-                            }`}
-                        >
-                            Tiếp tục
-                        </Text>
-                    </TouchableOpacity>
+                        className="mt-8"
+                    />
 
                     {/* Forgot password */}
                     <View className="flex-1 justify-end items-center pb-10">
                         <TouchableOpacity
-                            onPress={() =>
-                                router.push("/login/forgot-password" as any)
-                            }
+                            onPress={() => {
+                                router.push({
+                                    pathname: "/login/forgot-password" as any,
+                                    params: {
+                                        phone: String(phone ?? ""),
+                                    },
+                                });
+                            }}
                         >
                             <Text className="text-blue-600 font-semibold">
                                 Quên mật khẩu?
