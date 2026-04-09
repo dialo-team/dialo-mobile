@@ -1,5 +1,5 @@
 import apiClient from "../apiClient";
-import { SignupPayload } from "./types";
+import { SigninPayload, SignupPayload, SignupVerifyPayload } from "./types";
 
 export const authenticationApi = {
     signin: async (data: SigninPayload) => {

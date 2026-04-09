@@ -63,8 +63,17 @@ export default function VerifyOtpScreen() {
     const handleVerify = async () => {
         try {
             const otpString = otp.join("");
+            const phoneStr = String(phone ?? "");
+            let formattedPhone = phoneStr;
+
+            if (phoneStr.startsWith("0")) {
+                formattedPhone = "+84" + phoneStr.slice(1);
+            } else if (!phoneStr.startsWith("+")) {
+                formattedPhone = "+84" + phoneStr;
+            }
+
             const response = await authenticationApi.signupVerify({
-                phone: String(phone),
+                phone: formattedPhone,
                 otp: otpString,
             });
 
@@ -82,7 +91,6 @@ export default function VerifyOtpScreen() {
                 );
             }
         } catch (error) {
-            // Chỉ nhảy vào đây nếu lỗi mạng hoặc server sập (500, 404...)
             Alert.alert("Lỗi", "Không thể kết nối đến máy chủ");
         }
     };

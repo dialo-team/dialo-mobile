@@ -51,10 +51,29 @@ export default function LoginWithPasswordScreen() {
             Alert.alert("Thành công", "Đăng nhập thành công!");
             router.replace("/(tabs)/message" as any);
         } catch (error: any) {
-            console.error("Lỗi API:", error.response?.data || error.message);
+            console.error("Chi tiết lỗi API:", {
+                message: error.message,
+                status: error.response?.status,
+                statusCode: error.code,
+                data: error.response?.data,
+                errorLog: error,
+            });
+
+            let errorMessage =
+                error.response?.data?.message ||
+                error.response?.data?.error ||
+                error.message ||
+                "Lỗi kết nối";
+
+            // Xử lý 500 error - có thể account chưa verify OTP
+            if (error.response?.status === 500) {
+                errorMessage =
+                    "Tài khoản chưa được xác thực.\nVui lòng hoàn thành đăng ký trước khi đăng nhập.";
+            }
+
             Alert.alert(
-                "Lỗi",
-                error.response?.data?.message || "Sai mật khẩu hoặc lỗi server",
+                "Lỗi đăng nhập",
+                `${errorMessage}\n\n(Status: ${error.response?.status || "unknown"})`,
             );
         }
     };

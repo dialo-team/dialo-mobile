@@ -10,6 +10,8 @@ export default function RegisterScreen() {
     const [phoneNumber, setPhoneNumber] = useState("");
     const [termsChecked, setTermsChecked] = useState(false);
     const [policyChecked, setPolicyChecked] = useState(false);
+    const [password, setPassword] = useState("");
+    const [showPassword, setShowPassword] = useState(false);
     const isValidPhone =
         (phoneNumber.startsWith("0") && phoneNumber.length === 10) ||
         (!phoneNumber.startsWith("0") && phoneNumber.length === 9);
@@ -31,7 +33,10 @@ export default function RegisterScreen() {
         }
     };
 
-    const isFormValid = isValidPhone && termsChecked && policyChecked;
+    const isValidPassword = password.length >= 6;
+
+    const isFormValid =
+        isValidPhone && isValidPassword && termsChecked && policyChecked;
 
     const handleSignup = async () => {
         try {
@@ -46,7 +51,7 @@ export default function RegisterScreen() {
 
             const response = await authenticationApi.signup({
                 phone: formattedPhone,
-                password: "your_password",
+                password,
             });
 
             console.log("Đăng kí thành công");
@@ -104,6 +109,25 @@ export default function RegisterScreen() {
                         maxLength={10}
                     />
                 </View>
+
+                <View className="mt-4 border border-blue-500 rounded-xl px-4">
+                    <TextInput
+                        placeholder="Mật khẩu (tối thiểu 6 ký tự)"
+                        secureTextEntry={!showPassword}
+                        className="py-4 text-base"
+                        value={password}
+                        onChangeText={setPassword}
+                    />
+                </View>
+
+                <TouchableOpacity
+                    onPress={() => setShowPassword((prev) => !prev)}
+                    className="mt-2"
+                >
+                    <Text className="text-blue-600 text-sm">
+                        {showPassword ? "Ẩn mật khẩu" : "Hiện mật khẩu"}
+                    </Text>
+                </TouchableOpacity>
 
                 {/* Terms */}
                 <View className="mt-6 space-y-3">
