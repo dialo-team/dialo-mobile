@@ -70,25 +70,33 @@ export default function VerifyOtpScreen() {
             const formattedPhone = normalizePhoneTo84(String(phone ?? ""));
 
             const response = await authenticationApi.signupVerify({
-                phone: formattedPhone,
+                phone: String(phone),
+                password: password,
                 otp: otpString,
             });
 
             console.log("Phản hồi từ BE:", response);
 
             // Kiểm tra logic thực tế từ nội dung Backend trả về
-            if (response.data?.result === true) {
-                console.log("Xác thực thực sự thành công!");
-                router.push("/register/enter-name" as any);
+            if (
+                response.message === "Đăng ký thành công" ||
+                response.status === 200
+            ) {
+                Alert.alert("Thông báo", "Đăng ký thành công", [
+                    {
+                        text: "OK",
+                        onPress: () =>
+                            router.push("/register/enter-name" as any),
+                    },
+                ]);
             } else {
-                // Trường hợp result: false (như bạn vừa gặp)
                 Alert.alert(
                     "Thông báo",
-                    response.message || "Mã OTP không chính xác",
+                    response.message || "Xác thực thất bại, vui lòng thử lại.",
                 );
             }
         } catch (error) {
-            Alert.alert("Lỗi", "Không thể kết nối đến máy chủ");
+            Alert.alert(error.response?.data?.message || "Có lỗi xảy ra");
         } finally {
             setIsSubmitting(false);
         }

@@ -57,8 +57,9 @@ export default function OTPPasswordScreen() {
 
         const sendOtp = async () => {
             try {
-                await authenticationApi.forgotPhone({
-                    phone: formattedPhone,
+                await authenticationApi.passwordResetRequest({
+                    source: String(phone),
+                    type: "SMS",
                 });
             } catch (error: any) {
                 Alert.alert(
@@ -88,8 +89,9 @@ export default function OTPPasswordScreen() {
 
         try {
             const otpString = otp.join("");
-            const response = await authenticationApi.forgotPhoneVerify({
-                phone: formattedPhone,
+            const response = await authenticationApi.passwordResetConfirm({
+                source: String(phone),
+                type: "SMS",
                 otp: otpString,
             });
 
@@ -121,8 +123,9 @@ export default function OTPPasswordScreen() {
         if (!phone || countdown > 0) return;
 
         try {
-            await authenticationApi.forgotPhone({
-                phone: formattedPhone,
+            await authenticationApi.passwordResetRequest({
+                source: String(phone),
+                type: "SMS",
             });
             setCountdown(50);
             Alert.alert("Thành công", "Đã gửi lại mã OTP.");

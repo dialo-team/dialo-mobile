@@ -1,4 +1,9 @@
-import { clearAuthTokens } from "@/src/api/auth/authStorage";
+import { authenticationApi } from "@/src/api/auth/authenticationApi";
+import {
+    clearAuthTokens,
+    getAccessToken,
+    getRefreshToken,
+} from "@/src/api/auth/authStorage";
 import { useRouter } from "expo-router";
 import {
     Bell,
@@ -17,12 +22,14 @@ import {
     Phone,
     Search,
 } from "lucide-react-native";
-import React from "react";
-import { ScrollView, Text, TouchableOpacity, View } from "react-native";
+import React, { useState } from "react";
+import { Alert, ScrollView, Text, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 export default function SettingScreen() {
     const router = useRouter();
+    const [isSigningOut, setIsSigningOut] = useState(false);
+
     const menuItems = [
         {
             id: 1,
@@ -82,6 +89,41 @@ export default function SettingScreen() {
         },
     ];
 
+    const handleSignOut = () => {
+        Alert.alert(
+            "Đăng xuất",
+            "Bạn có chắc chắn muốn đăng xuất khỏi tài khoản này?",
+            [
+                { text: "Hủy", style: "cancel" },
+                {
+                    text: "Đăng xuất",
+                    style: "destructive",
+                    onPress: async () => {
+                        setIsSigningOut(true);
+                        try {
+                            const accessToken = await getAccessToken();
+                            const refreshToken = await getRefreshToken();
+
+                            if (accessToken && refreshToken) {
+                                await authenticationApi.signout(
+                                    { refreshToken: String(refreshToken) },
+                                    String(accessToken),
+                                );
+                            }
+                        } catch (error) {
+                            console.log("Lỗi từ server khi đăng xuất:", error);
+                        } finally {
+                            // Bắt buộc xóa token ở máy dù gọi API thành công hay thất bại
+                            await clearAuthTokens();
+                            setIsSigningOut(false);
+                            router.replace("/"); // Trở về trang Welcome ban đầu
+                        }
+                    },
+                },
+            ],
+        );
+    };
+
     return (
         <SafeAreaView className="flex-1 bg-white">
             {/* Header */}
@@ -123,7 +165,7 @@ export default function SettingScreen() {
                             <Text className="flex-1 text-[16px] font-normal text-black">
                                 {item.title}
                             </Text>
-                            {/* Nếu mục có rightIcon riêng (như Liên hệ hỗ trợ) thì hiển thị, không thì hiện mũi tên */}
+                            {/* Nếu mục có rightIcon riêng thì hiển thị, không thì hiện mũi tên */}
                             {item.rightIcon ? (
                                 item.rightIcon
                             ) : (
@@ -149,17 +191,16 @@ export default function SettingScreen() {
                     <ChevronRight size={24} color="#C4C4C4" />
                 </TouchableOpacity>
 
+                {/* Đăng xuất */}
                 <View className="flex-1 pt-6 px-12 pb-10 min-h-[150px]">
                     <TouchableOpacity
                         className="bg-gray-200 py-[14px] rounded-full items-center"
-                        onPress={async () => {
-                            await clearAuthTokens();
-                            router.replace("/");
-                        }}
+                        onPress={handleSignOut}
+                        disabled={isSigningOut}
                         activeOpacity={0.85}
                     >
                         <Text className="text-black font-semibold text-[15px]">
-                            Đăng xuất
+                            {isSigningOut ? "Đang xử lý..." : "Đăng xuất"}
                         </Text>
                     </TouchableOpacity>
                 </View>
