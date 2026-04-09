@@ -65,6 +65,12 @@ export default function TabsLayout() {
                 }}
             />
             <Tabs.Screen
+                name="profile/account-security/change-password/index"
+                options={{
+                    href: null,
+                }}
+            />
+            <Tabs.Screen
                 name="profile/privacy/index"
                 options={{
                     href: null,

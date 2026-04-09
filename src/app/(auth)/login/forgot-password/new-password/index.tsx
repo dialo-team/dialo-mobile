@@ -1,8 +1,10 @@
+import { authenticationApi } from "@/src/api/auth/authenticationApi";
 import { Feather } from "@expo/vector-icons";
-import { useRouter } from "expo-router"; // Thêm import useRouter
+import { useLocalSearchParams, useRouter } from "expo-router"; // Thêm import useRouter
 import { MoveLeft } from "lucide-react-native";
 import React, { useEffect, useState } from "react";
 import {
+    Alert,
     KeyboardAvoidingView,
     Modal,
     Platform,
@@ -15,6 +17,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 export default function NewPasswordScreen() {
     const router = useRouter(); // Khởi tạo router
+    const { refreshToken } = useLocalSearchParams<{ refreshToken?: string }>();
 
     // Quản lý trạng thái ẩn/hiện mật khẩu
     const [showPassword, setShowPassword] = useState(false);
@@ -26,6 +29,7 @@ export default function NewPasswordScreen() {
 
     // Quản lý trạng thái hiển thị Modal thành công
     const [isModalVisible, setIsModalVisible] = useState(false);
+    const [isSubmitting, setIsSubmitting] = useState(false);
 
     // Logic kiểm tra mật khẩu hợp lệ:
     const isValidLength = password.length >= 6 && password.length <= 32;
@@ -51,6 +55,34 @@ export default function NewPasswordScreen() {
         }
     }, [isModalVisible, router]);
 
+    const handleSubmit = async () => {
+        if (!isFormValid) return;
+
+        if (!refreshToken) {
+            Alert.alert(
+                "Thiếu phiên xác thực",
+                "Không tìm thấy phiên xác thực đổi mật khẩu. Vui lòng thực hiện lại bước OTP.",
+            );
+            return;
+        }
+
+        try {
+            setIsSubmitting(true);
+            await authenticationApi.changePassword({
+                newPass: password,
+                refreshToken: String(refreshToken),
+            });
+            setIsModalVisible(true);
+        } catch (error: any) {
+            Alert.alert(
+                "Lỗi",
+                error.response?.data?.message || "Không thể đổi mật khẩu",
+            );
+        } finally {
+            setIsSubmitting(false);
+        }
+    };
+
     return (
         <SafeAreaView className="flex-1 bg-white">
             <KeyboardAvoidingView
@@ -69,8 +101,7 @@ export default function NewPasswordScreen() {
                         Tạo mật khẩu đăng nhập
                     </Text>
                     <Text className="text-[15px] text-gray-500 text-center leading-6 mb-8">
-                        Tạo mật khẩu để đăng nhập Dialo tiện lợi hơn trong{"\n"}
-                        lần sau
+                        Đặt mật khẩu mới để bảo vệ tài khoản của bạn tốt hơn.
                     </Text>
                 </View>
 
@@ -153,14 +184,22 @@ export default function NewPasswordScreen() {
 
                     {/* Nút Tiếp tục */}
                     <TouchableOpacity
-                        disabled={!isFormValid}
-                        onPress={() => setIsModalVisible(true)}
-                        className={`h-[48px] rounded-full items-center justify-center ${isFormValid ? "bg-[#0068FF]" : "bg-[#D1D5DB]"}`}
+                        disabled={!isFormValid || isSubmitting}
+                        onPress={handleSubmit}
+                        className={`h-[48px] rounded-full items-center justify-center ${
+                            isFormValid && !isSubmitting
+                                ? "bg-[#0068FF]"
+                                : "bg-[#D1D5DB]"
+                        }`}
                     >
                         <Text
-                            className={`font-medium text-[16px] ${isFormValid ? "text-white" : "text-white/80"}`}
+                            className={`font-medium text-[16px] ${
+                                isFormValid && !isSubmitting
+                                    ? "text-white"
+                                    : "text-white/80"
+                            }`}
                         >
-                            Tiếp tục
+                            {isSubmitting ? "Đang đổi..." : "Tiếp tục"}
                         </Text>
                     </TouchableOpacity>
                 </View>

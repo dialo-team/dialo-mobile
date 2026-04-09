@@ -1,3 +1,4 @@
+import { clearAuthTokens } from "@/src/api/auth/authStorage";
 import { useRouter } from "expo-router";
 import {
     Bell,
@@ -105,15 +106,16 @@ export default function SettingScreen() {
 
             {/* Body */}
             <ScrollView
-                className="flex-1 bg-white"
+                className="flex-1 bg-slate-50"
                 showsVerticalScrollIndicator={false}
             >
                 {/* Danh sách các cài đặt */}
-                <View className="bg-white">
+                <View className="bg-white mx-3 mt-3 rounded-2xl overflow-hidden">
                     {menuItems.map((item) => (
                         <TouchableOpacity
                             key={item.id}
                             className="flex-row items-center px-4 py-4 border-b border-gray-100"
+                            activeOpacity={0.8}
                         >
                             <View className="w-9 items-start justify-center">
                                 {item.icon}
@@ -132,10 +134,13 @@ export default function SettingScreen() {
                 </View>
 
                 {/* Khoảng trống xám */}
-                <View className="h-2 bg-gray-100" />
+                <View className="h-3 bg-slate-50" />
 
                 {/* Chuyển tài khoản */}
-                <TouchableOpacity className="flex-row items-center px-4 py-4 bg-white">
+                <TouchableOpacity
+                    className="flex-row items-center px-4 py-4 bg-white mx-3 rounded-2xl"
+                    activeOpacity={0.8}
+                >
                     {/* View trống để căn lề text bằng với các mục bên trên */}
                     <View className="w-9" />
                     <Text className="flex-1 text-[16px] font-normal text-black">
@@ -147,7 +152,11 @@ export default function SettingScreen() {
                 <View className="flex-1 pt-6 px-12 pb-10 min-h-[150px]">
                     <TouchableOpacity
                         className="bg-gray-200 py-[14px] rounded-full items-center"
-                        onPress={() => router.replace("/")}
+                        onPress={async () => {
+                            await clearAuthTokens();
+                            router.replace("/");
+                        }}
+                        activeOpacity={0.85}
                     >
                         <Text className="text-black font-semibold text-[15px]">
                             Đăng xuất
