@@ -1,7 +1,9 @@
+import { friendApi } from "@/src/api/friend/friendApi"; // Bổ sung import API
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { MoveLeft } from "lucide-react-native";
 import { useState } from "react";
 import {
+    Alert, // Thêm Alert để báo lỗi nếu có
     Modal,
     ScrollView,
     Switch,
@@ -180,11 +182,29 @@ export default function FriendProfileOptionScreen() {
                                     Hủy
                                 </Text>
                             </TouchableOpacity>
+
+                            {/* --- ĐÃ GẮN API XÓA BẠN VÀO ĐÂY --- */}
                             <TouchableOpacity
                                 className="flex-1 py-3 rounded-full bg-red-500 ml-2 items-center"
-                                onPress={() => {
-                                    setShowUnfriendConfirm(false);
-                                    router.replace("/(tabs)/contact" as any);
+                                onPress={async () => {
+                                    if (!id) return;
+                                    try {
+                                        // 1. Gọi API xóa bạn
+                                        await friendApi.unfriend(id);
+
+                                        // 2. Tắt modal và điều hướng về trang danh bạ
+                                        setShowUnfriendConfirm(false);
+                                        router.replace(
+                                            "/(tabs)/contact" as any,
+                                        );
+                                    } catch (error) {
+                                        console.log("Lỗi xóa bạn bè:", error);
+                                        Alert.alert(
+                                            "Lỗi",
+                                            "Không thể xóa bạn lúc này, vui lòng thử lại.",
+                                        );
+                                        setShowUnfriendConfirm(false);
+                                    }
                                 }}
                             >
                                 <Text className="text-white font-medium">

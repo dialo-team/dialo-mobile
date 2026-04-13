@@ -2,14 +2,23 @@ import { userApi } from "@/src/api/user/userApi";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import * as ImagePicker from "expo-image-picker";
 import { useRouter } from "expo-router";
-import { MoveLeft } from "lucide-react-native";
+import {
+    Camera,
+    CircleX,
+    MoreHorizontal,
+    MoveLeft,
+    Pencil,
+    X,
+} from "lucide-react-native";
 import { useEffect, useState } from "react";
 import {
     ActivityIndicator,
     Alert,
     Image,
+    KeyboardAvoidingView,
     Modal,
     Platform,
+    ScrollView,
     Text,
     TextInput,
     TouchableOpacity,
@@ -20,19 +29,34 @@ import { SafeAreaView } from "react-native-safe-area-context";
 export default function EditProfile() {
     const router = useRouter();
 
+    // === STATE DỮ LIỆU ===
     const [name, setName] = useState("");
     const [dob, setDob] = useState(new Date());
     const [gender, setGender] = useState("Nam");
     const [avatar, setAvatar] = useState<string | null>(null);
+    const [background, setBackground] = useState<string | null>(null); // Thêm state cho ảnh bìa
+
+    // === STATE LOADING & UI ===
     const [isLoading, setIsLoading] = useState(true);
     const [isSaving, setIsSaving] = useState(false);
     const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
+    const [isUploadingCover, setIsUploadingCover] = useState(false);
 
+    // Modal Bottom Sheet
     const [modalVisible, setModalVisible] = useState(false);
     const [showDatePicker, setShowDatePicker] = useState(false);
 
     const genderOptions = ["Nam", "Nữ", "Khác"];
 
+    // Lấy chữ cái đầu
+    const getInitials = (text: string) => {
+        if (!text || text === "undefined") return "U";
+        const words = text.trim().split(" ");
+        if (words.length === 1) return words[0][0].toUpperCase();
+        return (words[0][0] + words[words.length - 1][0]).toUpperCase();
+    };
+
+    // === FETCH DỮ LIỆU TỪ BACKEND ===
     useEffect(() => {
         const fetchProfile = async () => {
             try {
@@ -41,6 +65,11 @@ export default function EditProfile() {
                     setName(response.data.userName || "");
                     setAvatar(
                         response.data.avatarUrl || response.data.avatar || null,
+                    );
+                    setBackground(
+                        response.data.backgroundUrl ||
+                            response.data.background ||
+                            null,
                     );
 
                     if (response.data.gender) {
@@ -53,9 +82,8 @@ export default function EditProfile() {
                         );
                     }
 
-                    // --- ĐÃ SỬA: Ép Javascript đọc đúng Ngày/Tháng/Năm từ chuỗi YYYY-MM-DD để không bị lệch múi giờ ---
                     if (response.data.dob) {
-                        const dobString = response.data.dob; // Ví dụ: "2026-04-13"
+                        const dobString = response.data.dob;
                         const [year, month, day] = dobString.split("-");
                         if (year && month && day) {
                             setDob(
@@ -79,36 +107,49 @@ export default function EditProfile() {
         fetchProfile();
     }, []);
 
-    const pickImage = async () => {
+    // === XỬ LÝ CHỌN ẢNH (AVATAR & ẢNH BÌA) ===
+    const pickImage = async (isAvatar: boolean) => {
         const permission =
             await ImagePicker.requestMediaLibraryPermissionsAsync();
 
         if (!permission.granted) {
-            alert("Bạn cần cấp quyền truy cập thư viện!");
+            alert("Bạn cần cấp quyền truy cập thư viện để đổi ảnh!");
             return;
         }
 
         try {
             const result = await ImagePicker.launchImageLibraryAsync({
-                mediaTypes: ImagePicker.MediaTypeOptions.Images,
+                // SỬA LẠI DÒNG NÀY THÀNH MẢNG CHUỖI ['images']
+                mediaTypes: ["images"],
                 quality: 0.8,
                 allowsEditing: true,
-                aspect: [1, 1],
+                aspect: isAvatar ? [1, 1] : [16, 9],
             });
 
             if (!result.canceled) {
                 const uri = result.assets[0].uri;
-                setIsUploadingAvatar(true);
 
-                try {
-                    await userApi.updateAvatar(uri);
-                    setAvatar(uri);
-                    Alert.alert("Thành công", "Đã cập nhật ảnh đại diện.");
-                } catch (apiError: any) {
-                    console.log("Lỗi upload avatar:", apiError);
-                    Alert.alert("Lỗi", "Không thể lưu ảnh đại diện mới.");
-                } finally {
-                    setIsUploadingAvatar(false);
+                if (isAvatar) {
+                    setIsUploadingAvatar(true);
+                    try {
+                        await userApi.updateAvatar(uri);
+                        setAvatar(uri);
+                    } catch (error) {
+                        Alert.alert("Lỗi", "Không thể lưu ảnh đại diện.");
+                    } finally {
+                        setIsUploadingAvatar(false);
+                    }
+                } else {
+                    setIsUploadingCover(true);
+                    try {
+                        // LƯU Ý: Chắc chắn file userApi.ts của bạn có hàm updateBackground(uri)
+                        await userApi.updateBackground(uri);
+                        setBackground(uri);
+                    } catch (error) {
+                        Alert.alert("Lỗi", "Không thể lưu ảnh bìa.");
+                    } finally {
+                        setIsUploadingCover(false);
+                    }
                 }
             }
         } catch (error) {
@@ -116,10 +157,15 @@ export default function EditProfile() {
         }
     };
 
+    // === XỬ LÝ LƯU THÔNG TIN (BOTTOM SHEET) ===
     const handleSaveInfo = async () => {
+        if (!name.trim()) {
+            Alert.alert("Lỗi", "Tên hiển thị không được để trống.");
+            return;
+        }
+
         setIsSaving(true);
         try {
-            // Đảm bảo lúc lưu cũng gửi chuẩn YYYY-MM-DD không bị ảnh hưởng bởi múi giờ
             const year = dob.getFullYear();
             const month = String(dob.getMonth() + 1).padStart(2, "0");
             const day = String(dob.getDate()).padStart(2, "0");
@@ -133,13 +179,12 @@ export default function EditProfile() {
                       : "OTHER";
 
             await userApi.updateBasicInfo({
-                userName: name,
+                userName: name.trim(),
                 dob: dobString,
                 gender: genderEnum,
             });
 
             setModalVisible(false);
-            Alert.alert("Thành công", "Đã cập nhật thông tin cá nhân.");
         } catch (error: any) {
             console.log("Lỗi lưu info:", error);
             Alert.alert("Lỗi", "Cập nhật thông tin thất bại.");
@@ -149,11 +194,7 @@ export default function EditProfile() {
     };
 
     const formatDate = (date: Date) => {
-        return `${date.getDate().toString().padStart(2, "0")}/${(
-            date.getMonth() + 1
-        )
-            .toString()
-            .padStart(2, "0")}/${date.getFullYear()}`;
+        return `${date.getDate().toString().padStart(2, "0")}/${(date.getMonth() + 1).toString().padStart(2, "0")}/${date.getFullYear()}`;
     };
 
     if (isLoading) {
@@ -165,189 +206,268 @@ export default function EditProfile() {
     }
 
     return (
-        <SafeAreaView className="flex-1 bg-gray-100">
-            {/* Header */}
-            <View className="bg-blue-600 flex-row items-center px-4 py-5">
-                <TouchableOpacity onPress={() => router.back()}>
-                    <MoveLeft size={24} color="white" />
-                </TouchableOpacity>
-
-                <Text className="text-white text-lg font-semibold flex-1 text-center">
-                    Thông tin cá nhân
-                </Text>
-                <View style={{ width: 24 }} />
-            </View>
-
-            {/* Avatar */}
-            <View className="bg-white items-center py-6 relative">
+        <SafeAreaView className="flex-1 bg-white">
+            <ScrollView className="flex-1" showsVerticalScrollIndicator={false}>
+                {/* === ẢNH BÌA === */}
                 <TouchableOpacity
-                    onPress={pickImage}
-                    disabled={isUploadingAvatar}
+                    activeOpacity={0.9}
+                    className="h-60 w-full bg-gray-200 relative"
+                    onPress={() => pickImage(false)}
                 >
-                    {avatar ? (
+                    {background ? (
                         <Image
-                            source={{ uri: avatar }}
-                            className={`w-28 h-28 rounded-full ${isUploadingAvatar ? "opacity-50" : ""}`}
+                            source={{ uri: background }}
+                            className="w-full h-full"
+                            resizeMode="cover"
                         />
                     ) : (
-                        <View
-                            className={`w-28 h-28 rounded-full bg-green-600 items-center justify-center ${isUploadingAvatar ? "opacity-50" : ""}`}
-                        >
-                            <Text className="text-white text-3xl font-semibold">
-                                {name ? name[0].toUpperCase() : "U"}
-                            </Text>
-                        </View>
-                    )}
-
-                    {isUploadingAvatar && (
-                        <View className="absolute top-0 left-0 right-0 bottom-0 items-center justify-center">
-                            <ActivityIndicator size="large" color="#2563EB" />
-                        </View>
-                    )}
-                </TouchableOpacity>
-                <Text className="text-gray-500 mt-2">
-                    {isUploadingAvatar
-                        ? "Đang tải ảnh lên..."
-                        : "Nhấn để đổi ảnh"}
-                </Text>
-            </View>
-
-            {/* Info */}
-            <View className="mt-3 bg-white">
-                <View className="flex-row justify-between px-4 py-4 border-b border-gray-200">
-                    <Text className="text-gray-700">Tên</Text>
-                    <Text className="font-semibold">{name}</Text>
-                </View>
-
-                <View className="flex-row justify-between px-4 py-4 border-b border-gray-200">
-                    <Text className="text-gray-700">Ngày sinh</Text>
-                    <Text className="font-semibold">{formatDate(dob)}</Text>
-                </View>
-
-                <View className="flex-row justify-between px-4 py-4">
-                    <Text className="text-gray-700">Giới tính</Text>
-                    <Text className="font-semibold">{gender}</Text>
-                </View>
-            </View>
-
-            {/* Edit Button */}
-            <View className="mt-4 items-center">
-                <TouchableOpacity
-                    onPress={() => setModalVisible(true)}
-                    className="bg-blue-600 px-8 py-3 rounded-full"
-                >
-                    <Text className="text-white font-medium">Chỉnh sửa</Text>
-                </TouchableOpacity>
-            </View>
-
-            {/* MODAL */}
-            <Modal visible={modalVisible} animationType="slide" transparent>
-                <View className="flex-1 bg-black/40 justify-center px-6">
-                    <View className="bg-white rounded-2xl p-6">
-                        <Text className="text-lg font-semibold mb-4">
-                            Chỉnh sửa thông tin
-                        </Text>
-
-                        {/* Name */}
-                        <Text className="mb-1 text-gray-600">Tên</Text>
-                        <TextInput
-                            value={name}
-                            onChangeText={setName}
-                            className="border rounded-lg px-3 py-2 mb-3 border-gray-300"
+                        <Image
+                            source={{ uri: "https://picsum.photos/600/400" }}
+                            className="w-full h-full opacity-60"
                         />
+                    )}
 
-                        {/* DOB */}
-                        <Text className="mb-1 text-gray-600">Ngày sinh</Text>
-                        <TouchableOpacity
-                            onPress={() => setShowDatePicker(true)}
-                            className="border rounded-lg px-3 py-2 mb-3 border-gray-300"
-                        >
-                            <Text>{formatDate(dob)}</Text>
-                        </TouchableOpacity>
+                    {/* Icon Camera mờ mờ góc dưới ảnh bìa */}
+                    <View className="absolute bottom-4 right-4 bg-black/40 p-2 rounded-full">
+                        <Camera size={20} color="white" />
+                    </View>
 
-                        {showDatePicker && (
-                            <View className="mb-3 bg-gray-50 rounded-lg p-2">
-                                <DateTimePicker
-                                    value={dob}
-                                    mode="date"
-                                    display={
-                                        Platform.OS === "ios"
-                                            ? "spinner"
-                                            : "default"
-                                    }
-                                    maximumDate={new Date()} // Không cho chọn ngày tương lai
-                                    onChange={(event, selectedDate) => {
-                                        // Android tự tắt sau khi bấm OK/Cancel
-                                        if (Platform.OS === "android") {
-                                            setShowDatePicker(false);
-                                        }
-                                        if (selectedDate) {
-                                            setDob(selectedDate);
-                                        }
-                                    }}
-                                />
+                    {isUploadingCover && (
+                        <View className="absolute inset-0 items-center justify-center bg-black/30">
+                            <ActivityIndicator size="large" color="white" />
+                        </View>
+                    )}
+                </TouchableOpacity>
 
-                                {/* Nút "Xong" dành riêng cho iOS để người dùng tắt bảng chọn */}
-                                {Platform.OS === "ios" && (
-                                    <TouchableOpacity
-                                        onPress={() => setShowDatePicker(false)}
-                                        className="mt-2 bg-blue-500 py-2 rounded-lg items-center"
-                                    >
-                                        <Text className="text-white font-semibold">
-                                            Xong
-                                        </Text>
-                                    </TouchableOpacity>
-                                )}
+                {/* === CÁC NÚT ĐIỀU HƯỚNG OVERLAY === */}
+                <View className="absolute top-4 left-4">
+                    <TouchableOpacity
+                        className="w-10 h-10 rounded-full bg-black/30 items-center justify-center"
+                        onPress={() => router.back()}
+                    >
+                        <MoveLeft size={24} color="white" />
+                    </TouchableOpacity>
+                </View>
+                <View className="absolute top-4 right-4 flex-row space-x-4">
+                    <TouchableOpacity className="w-10 h-10 rounded-full bg-black/30 items-center justify-center">
+                        <MoreHorizontal size={24} color="white" />
+                    </TouchableOpacity>
+                </View>
+
+                {/* === AVATAR === */}
+                <View className="items-center -mt-16 z-10">
+                    <TouchableOpacity
+                        activeOpacity={0.9}
+                        onPress={() => pickImage(true)}
+                        className="relative"
+                    >
+                        {avatar ? (
+                            <Image
+                                source={{ uri: avatar }}
+                                className="w-32 h-32 rounded-full border-4 border-white bg-gray-100"
+                            />
+                        ) : (
+                            <View className="w-32 h-32 rounded-full border-4 border-white bg-blue-500 items-center justify-center">
+                                <Text className="text-white text-4xl font-bold">
+                                    {getInitials(name)}
+                                </Text>
                             </View>
                         )}
 
-                        {/* Gender */}
-                        <Text className="mb-1 text-gray-600">Giới tính</Text>
-                        <View className="border border-gray-300 rounded-lg mb-5 overflow-hidden">
-                            {genderOptions.map((option) => (
-                                <TouchableOpacity
-                                    key={option}
-                                    onPress={() => setGender(option)}
-                                    className={`px-3 py-2 ${
-                                        gender === option ? "bg-blue-100" : ""
-                                    }`}
-                                >
-                                    <Text
-                                        className={`text-base ${
-                                            gender === option
-                                                ? "text-blue-600 font-semibold"
-                                                : "text-gray-700"
-                                        }`}
-                                    >
-                                        {option}
-                                    </Text>
-                                </TouchableOpacity>
-                            ))}
+                        <View className="absolute bottom-1 right-1 bg-gray-200 p-2 rounded-full border-2 border-white">
+                            <Camera size={18} color="gray" />
                         </View>
 
-                        {/* Buttons */}
-                        <View className="flex-row justify-end gap-4">
+                        {isUploadingAvatar && (
+                            <View className="absolute inset-0 items-center justify-center bg-black/30 rounded-full border-4 border-white">
+                                <ActivityIndicator size="large" color="white" />
+                            </View>
+                        )}
+                    </TouchableOpacity>
+                </View>
+
+                {/* === THÔNG TIN TÊN & BIO === */}
+                <View className="items-center mt-3 px-6">
+                    <View className="flex-row items-center">
+                        <Text className="text-2xl font-bold text-black">
+                            {name}
+                        </Text>
+                        <TouchableOpacity
+                            className="ml-2 p-2"
+                            onPress={() => setModalVisible(true)}
+                        >
+                            <Pencil size={20} color="gray" />
+                        </TouchableOpacity>
+                    </View>
+
+                    {/* Bio giả lập giống Zalo */}
+                    <TouchableOpacity className="flex-row items-center mt-2 bg-gray-100 px-4 py-2 rounded-full border border-gray-200">
+                        <Pencil size={14} color="#0068FF" />
+                        <Text className="ml-2 text-blue-600 font-medium">
+                            Cập nhật giới thiệu bản thân
+                        </Text>
+                    </TouchableOpacity>
+                </View>
+
+                {/* === THÔNG TIN CHI TIẾT === */}
+                <View className="mt-8 px-4">
+                    <Text className="text-gray-500 font-medium uppercase mb-3 ml-2">
+                        Thông tin cá nhân
+                    </Text>
+                    <View className="bg-gray-50 rounded-2xl p-4 border border-gray-100">
+                        <View className="flex-row justify-between py-3 border-b border-gray-200">
+                            <Text className="text-gray-600 text-base">
+                                Ngày sinh
+                            </Text>
+                            <Text className="text-black font-medium text-base">
+                                {formatDate(dob)}
+                            </Text>
+                        </View>
+                        <View className="flex-row justify-between py-3">
+                            <Text className="text-gray-600 text-base">
+                                Giới tính
+                            </Text>
+                            <Text className="text-black font-medium text-base">
+                                {gender}
+                            </Text>
+                        </View>
+                    </View>
+                </View>
+                <View className="h-10" />
+            </ScrollView>
+
+            {/* ========================================= */}
+            {/* === MODAL BOTTOM SHEET SỬA THÔNG TIN ==== */}
+            {/* ========================================= */}
+            <Modal visible={modalVisible} animationType="slide" transparent>
+                <KeyboardAvoidingView
+                    behavior={Platform.OS === "ios" ? "padding" : undefined}
+                    style={{ flex: 1 }}
+                >
+                    <View className="flex-1 justify-end bg-black/40">
+                        <View className="bg-white rounded-t-3xl p-6 pb-10 shadow-xl">
+                            {/* HEADER MODAL */}
+                            <View className="flex-row items-center justify-between mb-6">
+                                <View className="w-6" />
+                                <Text className="text-lg font-bold text-black">
+                                    Chỉnh sửa thông tin
+                                </Text>
+                                <TouchableOpacity
+                                    onPress={() => setModalVisible(false)}
+                                    className="bg-gray-100 p-1.5 rounded-full"
+                                >
+                                    <X size={22} color="gray" />
+                                </TouchableOpacity>
+                            </View>
+
+                            {/* TÊN HIỂN THỊ */}
+                            <Text className="mb-2 text-gray-500 font-medium">
+                                Tên hiển thị
+                            </Text>
+                            <View className="border-b border-blue-500 pb-2 mb-6 flex-row items-center">
+                                <TextInput
+                                    value={name}
+                                    onChangeText={setName}
+                                    maxLength={40}
+                                    className="flex-1 text-lg text-black font-medium"
+                                    placeholder="Nhập tên của bạn"
+                                />
+                                {name.length > 0 && (
+                                    <TouchableOpacity
+                                        onPress={() => setName("")}
+                                    >
+                                        <CircleX size={20} color="#9CA3AF" />
+                                    </TouchableOpacity>
+                                )}
+                            </View>
+
+                            {/* NGÀY SINH */}
+                            <Text className="mb-2 text-gray-500 font-medium">
+                                Ngày sinh
+                            </Text>
                             <TouchableOpacity
-                                onPress={() => setModalVisible(false)}
-                                className="px-4 py-2 justify-center"
+                                onPress={() => setShowDatePicker(true)}
+                                className="border-b border-gray-300 pb-3 mb-6"
                             >
-                                <Text className="text-gray-500 font-medium">
-                                    Hủy
+                                <Text className="text-lg text-black font-medium">
+                                    {formatDate(dob)}
                                 </Text>
                             </TouchableOpacity>
 
+                            {showDatePicker && (
+                                <View className="mb-4">
+                                    <DateTimePicker
+                                        value={dob}
+                                        mode="date"
+                                        display={
+                                            Platform.OS === "ios"
+                                                ? "spinner"
+                                                : "default"
+                                        }
+                                        maximumDate={new Date()}
+                                        onChange={(event, selectedDate) => {
+                                            if (Platform.OS === "android")
+                                                setShowDatePicker(false);
+                                            if (selectedDate)
+                                                setDob(selectedDate);
+                                        }}
+                                    />
+                                    {Platform.OS === "ios" && (
+                                        <TouchableOpacity
+                                            onPress={() =>
+                                                setShowDatePicker(false)
+                                            }
+                                            className="mt-2 bg-gray-100 py-2.5 rounded-xl items-center"
+                                        >
+                                            <Text className="text-blue-600 font-semibold text-base">
+                                                Xong
+                                            </Text>
+                                        </TouchableOpacity>
+                                    )}
+                                </View>
+                            )}
+
+                            {/* GIỚI TÍNH */}
+                            <Text className="mb-3 text-gray-500 font-medium">
+                                Giới tính
+                            </Text>
+                            <View className="flex-row space-x-3 mb-8">
+                                {genderOptions.map((option) => (
+                                    <TouchableOpacity
+                                        key={option}
+                                        onPress={() => setGender(option)}
+                                        className={`flex-1 py-3 rounded-xl border items-center ${
+                                            gender === option
+                                                ? "border-blue-600 bg-blue-50"
+                                                : "border-gray-200 bg-white"
+                                        }`}
+                                    >
+                                        <Text
+                                            className={`font-semibold text-base ${gender === option ? "text-blue-600" : "text-gray-600"}`}
+                                        >
+                                            {option}
+                                        </Text>
+                                    </TouchableOpacity>
+                                ))}
+                            </View>
+
+                            {/* NÚT LƯU */}
                             <TouchableOpacity
-                                disabled={isSaving}
+                                disabled={isSaving || !name.trim()}
                                 onPress={handleSaveInfo}
-                                className={`px-4 py-2 rounded-lg ${isSaving ? "bg-blue-400" : "bg-blue-600"}`}
+                                className={`py-4 rounded-full items-center shadow-sm ${
+                                    isSaving || !name.trim()
+                                        ? "bg-gray-300"
+                                        : "bg-[#0068FF]"
+                                }`}
                             >
-                                <Text className="text-white font-medium">
-                                    {isSaving ? "Đang lưu..." : "Xác nhận"}
+                                <Text className="text-white text-lg font-bold">
+                                    {isSaving ? "Đang lưu..." : "Lưu thay đổi"}
                                 </Text>
                             </TouchableOpacity>
                         </View>
                     </View>
-                </View>
+                </KeyboardAvoidingView>
             </Modal>
         </SafeAreaView>
     );

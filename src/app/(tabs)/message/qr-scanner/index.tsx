@@ -19,7 +19,6 @@ function QRFrameOverlay() {
     const frameSize = Math.min(W, H) * 0.68;
     const insetX = (W - frameSize) / 2;
     const insetY = (H - frameSize) / 2 - 28;
-
     const bottomBarH = Math.max(0, H - insetY - frameSize);
 
     return (
@@ -68,7 +67,6 @@ function QRFrameOverlay() {
                 }}
             />
 
-            {/* Góc khung */}
             <View
                 style={{
                     position: "absolute",
@@ -180,10 +178,10 @@ export default function QRScanner() {
                             : ({ data }: { data: string }) => {
                                   setScanned(true);
                                   console.log("QR Data:", data);
-                                  // nếu QR chứa id user, đặt param
+                                  // --- ĐÃ SỬA: Truyền id thay vì qr, giống hệt bên AddFriendScreen ---
                                   router.push({
-                                      pathname: "/(tabs)/contact/friend/new",
-                                      params: { qr: data },
+                                      pathname: "/contact/friend/new" as any,
+                                      params: { qrToken: data },
                                   });
                               }
                     }
@@ -191,7 +189,6 @@ export default function QRScanner() {
 
                 <QRFrameOverlay />
 
-                {/* Close Button */}
                 <TouchableOpacity
                     onPress={() => router.back()}
                     className="absolute top-4 left-4 bg-black/60 px-4 py-2 rounded-lg z-10"
@@ -199,7 +196,6 @@ export default function QRScanner() {
                     <Text className="text-white font-semibold">✕ Đóng</Text>
                 </TouchableOpacity>
 
-                {/* Scan Again Button */}
                 {scanned && (
                     <TouchableOpacity
                         onPress={() => setScanned(false)}

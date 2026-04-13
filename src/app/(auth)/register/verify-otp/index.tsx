@@ -69,63 +69,73 @@ export default function VerifyOtpScreen() {
         try {
             const otpString = otp.join("");
 
+            // Log để kiểm tra dữ liệu trước khi bay lên server
+            console.log("Dữ liệu gửi lên Verify:", {
+                phone: String(phone),
+                otp: otpString,
+            });
+            s;
+
             const response = await authenticationApi.signupVerify({
-                phone: String(phone), // Gửi số gốc, không dùng +84
+                phone: String(phone),
                 password: password,
                 otp: otpString,
             });
 
-            console.log("Phản hồi Đăng ký từ BE:", response);
+            console.log("Phản hồi Verify OTP:", response);
 
-            if (
-                response.message === "Đăng ký thành công" ||
-                response.status === 200
-            ) {
+            // BE của bạn trả về 201 cho thành công, check cả 200 cho chắc
+            if (response.status === 201 || response.status === 200) {
                 // --- BƯỚC ĐĂNG NHẬP NGẦM ---
                 try {
-                    //lấy token
                     const loginResponse = await authenticationApi.signinVerify({
-                        phone: String(phone), // Gửi số gốc, không dùng +84
+                        phone: String(phone),
                         password: String(password),
                     });
 
-                    // Lấy accessToken và refreshToken
-                    if (loginResponse.data) {
+                    if (loginResponse.data?.accessToken) {
                         const { accessToken, refreshToken } =
                             loginResponse.data;
                         await saveAuthData(accessToken, refreshToken);
-                        console.log("Đăng nhập ngầm thành công, đã lưu Token!");
-                    } else {
-                        console.log("Cảnh báo: loginResponse không có data");
-                    }
+                        console.log("Đăng nhập ngầm OK!");
 
-                    Alert.alert("Thông báo", "Đăng ký thành công", [
-                        {
-                            text: "OK",
-                            onPress: () =>
-                                router.push("/register/enter-name" as any),
-                        },
-                    ]);
-                } catch (loginError) {
-                    console.log("Lỗi đăng nhập ngầm:", loginError);
-                    Alert.alert(
-                        "Lỗi",
-                        "Vui lòng ra ngoài và đăng nhập lại bằng tài khoản vừa tạo.",
+                        Alert.alert(
+                            "Thành công",
+                            "Xác thực tài khoản thành công",
+                            [
+                                {
+                                    text: "Tiếp tục",
+                                    onPress: () =>
+                                        router.push(
+                                            "/register/enter-name" as any,
+                                        ),
+                                },
+                            ],
+                        );
+                    }
+                } catch (loginError: any) {
+                    console.log(
+                        "Lỗi đăng nhập ngầm:",
+                        loginError.response?.data || loginError.message,
                     );
+                    // Nếu verify xong mà login ngầm lỗi, đẩy sang màn Login chính
                     router.replace("/(auth)/login" as any);
                 }
             } else {
                 Alert.alert(
                     "Thông báo",
-                    response.message || "Xác thực thất bại, vui lòng thử lại.",
+                    response.message || "Mã OTP không hợp lệ.",
                 );
             }
         } catch (error: any) {
-            console.log("Chi tiết lỗi:", error);
-            Alert.alert(
-                "Lỗi",
-                error.response?.data?.message || "Có lỗi xảy ra",
-            );
+            // Đây là nơi bắt lỗi 401 từ Interceptor trả về
+            console.log("Chi tiết lỗi API Verify:", error.response?.data);
+
+            const serverMessage = error.response?.data?.message;
+            const errorMessage =
+                serverMessage || "Mã OTP không chính xác hoặc đã hết hạn.";
+
+            Alert.alert("Lỗi xác thực", errorMessage);
         } finally {
             setIsSubmitting(false);
         }

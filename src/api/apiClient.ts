@@ -1,9 +1,15 @@
-// src/api/apiClient.ts
 import axios from "axios";
-// Import hàm lấy token từ file authStorage của bạn
 import { getAccessToken } from "./auth/authStorage";
 
 const BASE_URL = "http://14.225.254.174:9000";
+
+// Danh sách các API không cần gửi Token và không xử lý Logout khi gặp 401
+const PUBLIC_ENDPOINTS = [
+    "/auth/signup",
+    "/auth/verify-otp", // Đảm bảo tên route này khớp với URL thực tế của bạn
+    "/auth/signin",
+    "/auth/resend-otp",
+];
 
 const apiClient = axios.create({
     baseURL: BASE_URL,
@@ -13,40 +19,51 @@ const apiClient = axios.create({
     timeout: 10000,
 });
 
-// 1. REQUEST INTERCEPTOR: Tự động gắn Token vào mọi Request
 apiClient.interceptors.request.use(
     async (config) => {
-        try {
-            // Lấy Access Token từ SecureStore
-            const token = await getAccessToken();
+        // Kiểm tra nếu URL hiện tại nằm trong danh sách PUBLIC thì không gắn Token
+        const isPublic = PUBLIC_ENDPOINTS.some((endpoint) =>
+            config.url?.includes(endpoint),
+        );
 
-            // Nếu có token, gắn vào header Authorization
-            if (token) {
-                config.headers.Authorization = `Bearer ${token}`;
+        if (!isPublic) {
+            try {
+                const token = await getAccessToken();
+                if (token) {
+                    config.headers.Authorization = `Bearer ${token}`;
+                }
+            } catch (error) {
+                console.error("Lỗi khi lấy token:", error);
             }
-        } catch (error) {
-            console.error("Lỗi khi lấy token chặn request:", error);
         }
         return config;
     },
-    (error) => {
-        return Promise.reject(error);
-    },
+    (error) => Promise.reject(error),
 );
 
-// 2. RESPONSE INTERCEPTOR: Xử lý lỗi trả về từ Server (Đặc biệt là 401)
 apiClient.interceptors.response.use(
-    (response) => {
-        // Có thể format lại data trả về ở đây nếu cần, ví dụ: return response.data;
-        return response;
-    },
+    (response) => response,
     async (error) => {
-        // Bắt lỗi 401 Unauthorized (Token hết hạn hoặc không hợp lệ)
-        if (error.response && error.response.status === 401) {
-            console.log("Token hết hạn! Cần xử lý Refresh Token hoặc Logout.");
+        const originalRequest = error.config;
 
-            // TODO: Xử lý Refresh Token ở đây nếu BE của bạn có cơ chế này
-            // Hoặc dispatch sự kiện logout để đẩy user về màn hình Login
+        // Chỉ xử lý logic "Token hết hạn" nếu:
+        // 1. Lỗi là 401
+        // 2. Request đó KHÔNG PHẢI là request đến các API công khai (public)
+        if (error.response?.status === 401) {
+            const isPublic = PUBLIC_ENDPOINTS.some((endpoint) =>
+                originalRequest.url?.includes(endpoint),
+            );
+
+            if (!isPublic) {
+                console.log(
+                    "Token hết hạn thực sự! Xử lý Refresh Token hoặc Logout tại đây.",
+                );
+                // TODO: Xử lý logout hoặc refresh token ở đây
+            } else {
+                console.log(
+                    "Lỗi xác thực (OTP sai hoặc sai thông tin), không phải lỗi Token.",
+                );
+            }
         }
 
         return Promise.reject(error);

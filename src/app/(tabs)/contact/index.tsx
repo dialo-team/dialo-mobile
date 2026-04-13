@@ -1,8 +1,10 @@
+import { friendApi } from "@/src/api/friend/friendApi"; // Thêm API
 import { AntDesign, Feather } from "@expo/vector-icons";
-import { useRouter } from "expo-router";
+import { useFocusEffect, useRouter } from "expo-router"; // Thêm useFocusEffect
 import { Cake, Phone, Search, Users, Video } from "lucide-react-native";
-import React, { useState } from "react";
+import React, { useCallback, useState } from "react";
 import {
+    ActivityIndicator,
     Image,
     ScrollView,
     Text,
@@ -12,70 +14,87 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+// Định nghĩa kiểu dữ liệu Bạn bè
+type Contact = {
+    id: string;
+    name: string;
+    avatar: string;
+};
+
 export default function ContactsScreen() {
     const router = useRouter();
     const [searchText, setSearchText] = useState("");
-    // Dữ liệu phẳng
-    const contacts = [
-        {
-            id: "1",
-            name: "Angel Nguyễn",
-            avatar: "https://i.pravatar.cc/150?img=5",
-        },
 
-        {
-            id: "2",
-            name: "a zai guột thừa",
-            avatar: "https://i.pravatar.cc/150?img=11",
-        },
-        { id: "3", name: "A. Tí", avatar: "https://i.pravatar.cc/150?img=12" },
-        { id: "4", name: "An", avatar: "https://i.pravatar.cc/150?img=13" },
-        {
-            id: "5",
-            name: "Angel Nguyễn",
-            avatar: "https://i.pravatar.cc/150?img=5",
-        },
+    // === STATE DỮ LIỆU THẬT TỪ BE ===
+    const [contacts, setContacts] = useState<Contact[]>([]);
+    const [pendingCount, setPendingCount] = useState(0); // Số lời mời kết bạn
+    const [isLoading, setIsLoading] = useState(true);
 
-        {
-            id: "6",
-            name: "Bảo đại ca",
-            avatar: "https://i.pravatar.cc/150?img=21",
-        },
-        { id: "7", name: "Bình", avatar: "https://i.pravatar.cc/150?img=22" },
-        {
-            id: "8",
-            name: "Bích Ngọc",
-            avatar: "https://i.pravatar.cc/150?img=23",
-        },
+    // Lấy chữ cái đầu làm Avatar dự phòng
+    const getInitials = (text: string) => {
+        if (!text || text === "undefined") return "U";
+        const words = text.trim().split(" ");
+        if (words.length === 1) return words[0][0].toUpperCase();
+        return (words[0][0] + words[words.length - 1][0]).toUpperCase();
+    };
 
-        { id: "9", name: "Dũng", avatar: "https://i.pravatar.cc/150?img=24" },
-        { id: "10", name: "Diệu", avatar: "https://i.pravatar.cc/150?img=25" },
-        {
-            id: "11",
-            name: "Đạt da đen",
-            avatar: "https://i.pravatar.cc/150?img=26",
-        },
+    // Kiểm tra link ảnh hợp lệ
+    const isValidImage = (url: string | undefined) => {
+        return url && url !== "undefined" && url.trim() !== "";
+    };
 
-        { id: "12", name: "Tuấn", avatar: "https://i.pravatar.cc/150?img=27" },
-        { id: "13", name: "Trang", avatar: "https://i.pravatar.cc/150?img=28" },
-        {
-            id: "14",
-            name: "Thảo nấm lùn",
-            avatar: "https://i.pravatar.cc/150?img=29",
-        },
-    ];
+    // === TỰ ĐỘNG LOAD DỮ LIỆU KHI VÀO TRANG ===
+    useFocusEffect(
+        useCallback(() => {
+            const fetchContacts = async () => {
+                setIsLoading(true);
+                try {
+                    // Gọi API lấy list bạn bè và list lời mời chờ xác nhận
+                    const [friendsRes, pendingRes] = await Promise.all([
+                        friendApi.getFriends(),
+                        friendApi.getPendingRequests(),
+                    ]);
+
+                    const friendsList =
+                        (friendsRes.data || friendsRes)?.friends || [];
+                    const pendingList =
+                        (pendingRes.data || pendingRes)?.requests || [];
+
+                    // Cập nhật số lượng lời mời
+                    if (Array.isArray(pendingList)) {
+                        setPendingCount(pendingList.length);
+                    }
+
+                    // Map dữ liệu bạn bè
+                    if (Array.isArray(friendsList)) {
+                        const mappedFriends = friendsList.map((item: any) => ({
+                            id: item.friendId,
+                            name: item.friendUserName || "Người dùng",
+                            avatar: item.friendAvatar || "",
+                        }));
+                        setContacts(mappedFriends);
+                    }
+                } catch (error) {
+                    console.log("Lỗi tải danh bạ:", error);
+                } finally {
+                    setIsLoading(false);
+                }
+            };
+
+            fetchContacts();
+        }, []),
+    );
 
     // groupBy chữ cái đầu tiên của tên
-    const groupContacts = (contacts: any[]) => {
-        const grouped: Record<string, any[]> = {};
+    const groupContacts = (contactList: Contact[]) => {
+        const grouped: Record<string, Contact[]> = {};
 
-        contacts.forEach((contact) => {
+        contactList.forEach((contact) => {
             const firstLetter = contact.name[0].toUpperCase();
 
             if (!grouped[firstLetter]) {
                 grouped[firstLetter] = [];
             }
-
             grouped[firstLetter].push(contact);
         });
 
@@ -88,25 +107,13 @@ export default function ContactsScreen() {
             }));
     };
 
-    // section "Bạn thân"
-    const starredSection = {
-        section: "Bạn thân",
-        isStarred: true,
-        data: [
-            {
-                id: "1",
-                name: "Angel Nguyễn",
-                avatar: "https://i.pravatar.cc/150?img=5",
-            },
-        ],
-    };
-
     // filter contacts by search text
     const filteredContacts = contacts.filter((contact) =>
         contact.name.toLowerCase().includes(searchText.toLowerCase().trim()),
     );
 
-    const contactsData = [starredSection, ...groupContacts(filteredContacts)];
+    // Bỏ section bạn thân (hoặc bạn có thể tự code API bạn thân sau), chỉ hiện danh sách gom nhóm
+    const contactsData = groupContacts(filteredContacts);
 
     return (
         <SafeAreaView
@@ -146,124 +153,155 @@ export default function ContactsScreen() {
                 </View>
 
                 {/* Nội dung cuộn chính */}
-                <ScrollView
-                    className="flex-1"
-                    showsVerticalScrollIndicator={false}
-                    contentContainerStyle={{ paddingBottom: 12 }}
-                >
-                    {/* Lời mời kết bạn & Sinh nhật */}
-                    <View className="py-2">
-                        <TouchableOpacity
-                            className="flex-row items-center px-4 py-3"
-                            onPress={() =>
-                                router.push("/contact/friend/requests" as any)
-                            }
-                        >
-                            <View className="w-10 h-10 rounded-full bg-[#0091FF] items-center justify-center">
-                                <Users size={24} color={"white"} />
-                            </View>
-                            <Text className="text-base font-normal text-black ml-3">
-                                Lời mời kết bạn
-                            </Text>
-                            <Text className="text-gray-400 ml-1 text-base">
-                                (4)
-                            </Text>
-                        </TouchableOpacity>
-
-                        <TouchableOpacity className="flex-row items-center px-4 py-3">
-                            <View className="w-10 h-10 rounded-full bg-[#0091FF] items-center justify-center">
-                                <Cake size={24} color={"white"} />
-                            </View>
-                            <Text className="text-base font-normal text-black ml-3">
-                                Sinh nhật
-                            </Text>
-                        </TouchableOpacity>
+                {isLoading ? (
+                    <View className="flex-1 items-center justify-center">
+                        <ActivityIndicator size="large" color="#0068FF" />
                     </View>
-
-                    {/* Bộ lọc (Pills) */}
-                    <View className="flex-row items-center px-4 py-2 border-y border-gray-100 bg-gray-50/50">
-                        <TouchableOpacity className="bg-gray-200 px-4 py-1.5 rounded-full flex-row items-center mr-2">
-                            <Text className="text-black font-medium text-[13px]">
-                                Tất cả{" "}
-                            </Text>
-                            <Text className="text-black font-semibold text-[13px]">
-                                184
-                            </Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity className="bg-white border border-gray-300 px-4 py-1.5 rounded-full flex-row items-center">
-                            <Text className="text-gray-600 font-medium text-[13px]">
-                                Mới truy cập{" "}
-                            </Text>
-                            <Text className="text-gray-600 font-semibold text-[13px]">
-                                2
-                            </Text>
-                        </TouchableOpacity>
-                    </View>
-
-                    {/* Danh sách người dùng */}
-                    {contactsData.map((section, index) => (
-                        <View key={index}>
-                            {/* Section Header */}
-                            <View className="flex-row items-center justify-between px-4 py-3 bg-white">
-                                <View className="flex-row items-center">
-                                    {section.isStarred ? (
-                                        <AntDesign
-                                            name="star"
-                                            size={14}
-                                            color="#E58A00"
-                                            className="mr-2"
-                                        />
-                                    ) : null}
-                                    <Text className="font-bold text-black text-[14px]">
-                                        {section.section}
-                                    </Text>
+                ) : (
+                    <ScrollView
+                        className="flex-1"
+                        showsVerticalScrollIndicator={false}
+                        contentContainerStyle={{ paddingBottom: 12 }}
+                    >
+                        {/* Lời mời kết bạn & Sinh nhật */}
+                        <View className="py-2">
+                            <TouchableOpacity
+                                className="flex-row items-center px-4 py-3"
+                                onPress={() =>
+                                    router.push(
+                                        "/contact/friend/requests" as any,
+                                    )
+                                }
+                            >
+                                <View className="w-10 h-10 rounded-full bg-[#0091FF] items-center justify-center">
+                                    <Users size={24} color={"white"} />
                                 </View>
-                                {section.isStarred && (
-                                    <TouchableOpacity>
-                                        <Text className="text-[#0091FF] text-[13px] font-medium">
-                                            + Thêm
-                                        </Text>
-                                    </TouchableOpacity>
-                                )}
-                            </View>
-
-                            {/* Section Items */}
-                            {section.data.map((user) => (
-                                <TouchableOpacity
-                                    key={user.id}
-                                    className="flex-row items-center px-4 py-2 bg-white"
-                                    onPress={() =>
-                                        router.push({
-                                            pathname: "/message/chat/[id]",
-                                            params: {
-                                                id: user.id,
-                                                name: user.name,
-                                                avatar: user.avatar,
-                                                from: "contact",
-                                            },
-                                        } as any)
-                                    }
-                                >
-                                    <Image
-                                        source={{ uri: user.avatar }}
-                                        className="w-[46px] h-[46px] rounded-full"
-                                    />
-                                    <Text className="flex-1 text-[16px] font-normal text-black ml-3">
-                                        {user.name}
+                                <Text className="text-base font-normal text-black ml-3">
+                                    Lời mời kết bạn
+                                </Text>
+                                {/* ĐÃ UPDATE: Hiển thị đúng số lượng lời mời */}
+                                {pendingCount > 0 && (
+                                    <Text className="text-gray-400 ml-1 text-base">
+                                        ({pendingCount})
                                     </Text>
-                                    <View className="flex-row items-center space-x-4">
-                                        <TouchableOpacity className="p-2">
-                                            <Phone size={22} color="#666" />
-                                        </TouchableOpacity>
-                                        <TouchableOpacity className="p-2">
-                                            <Video size={24} color="#666" />
-                                        </TouchableOpacity>
-                                    </View>
-                                </TouchableOpacity>
-                            ))}
+                                )}
+                            </TouchableOpacity>
+
+                            <TouchableOpacity className="flex-row items-center px-4 py-3">
+                                <View className="w-10 h-10 rounded-full bg-[#0091FF] items-center justify-center">
+                                    <Cake size={24} color={"white"} />
+                                </View>
+                                <Text className="text-base font-normal text-black ml-3">
+                                    Sinh nhật
+                                </Text>
+                            </TouchableOpacity>
                         </View>
-                    ))}
-                </ScrollView>
+
+                        {/* Bộ lọc (Pills) */}
+                        <View className="flex-row items-center px-4 py-2 border-y border-gray-100 bg-gray-50/50">
+                            <TouchableOpacity className="bg-gray-200 px-4 py-1.5 rounded-full flex-row items-center mr-2">
+                                <Text className="text-black font-medium text-[13px]">
+                                    Tất cả{" "}
+                                </Text>
+                                <Text className="text-black font-semibold text-[13px]">
+                                    {contacts.length}
+                                </Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity className="bg-white border border-gray-300 px-4 py-1.5 rounded-full flex-row items-center">
+                                <Text className="text-gray-600 font-medium text-[13px]">
+                                    Mới truy cập{" "}
+                                </Text>
+                                <Text className="text-gray-600 font-semibold text-[13px]">
+                                    0
+                                </Text>
+                            </TouchableOpacity>
+                        </View>
+
+                        {/* Danh sách người dùng */}
+                        {contactsData.length === 0 ? (
+                            <View className="mt-10 items-center justify-center">
+                                <Text className="text-gray-500">
+                                    Bạn chưa có bạn bè nào trong danh bạ.
+                                </Text>
+                            </View>
+                        ) : (
+                            contactsData.map((section, index) => (
+                                <View key={index}>
+                                    {/* Section Header */}
+                                    <View className="flex-row items-center justify-between px-4 py-3 bg-white">
+                                        <View className="flex-row items-center">
+                                            {section.isStarred ? (
+                                                <AntDesign
+                                                    name="star"
+                                                    size={14}
+                                                    color="#E58A00"
+                                                    className="mr-2"
+                                                />
+                                            ) : null}
+                                            <Text className="font-bold text-black text-[14px]">
+                                                {section.section}
+                                            </Text>
+                                        </View>
+                                    </View>
+
+                                    {/* Section Items */}
+                                    {section.data.map((user) => (
+                                        <TouchableOpacity
+                                            key={user.id}
+                                            className="flex-row items-center px-4 py-2 bg-white border-b border-gray-50"
+                                            onPress={() =>
+                                                router.push({
+                                                    pathname:
+                                                        "/message/chat/[id]",
+                                                    params: {
+                                                        id: user.id,
+                                                        name: user.name,
+                                                        avatar: user.avatar,
+                                                        from: "contact",
+                                                    },
+                                                } as any)
+                                            }
+                                        >
+                                            {isValidImage(user.avatar) ? (
+                                                <Image
+                                                    source={{
+                                                        uri: user.avatar,
+                                                    }}
+                                                    className="w-[46px] h-[46px] rounded-full"
+                                                />
+                                            ) : (
+                                                <View className="w-[46px] h-[46px] rounded-full bg-blue-500 items-center justify-center">
+                                                    <Text className="text-white font-bold text-lg">
+                                                        {getInitials(user.name)}
+                                                    </Text>
+                                                </View>
+                                            )}
+
+                                            <Text className="flex-1 text-[16px] font-normal text-black ml-3">
+                                                {user.name}
+                                            </Text>
+
+                                            <View className="flex-row items-center space-x-4">
+                                                <TouchableOpacity className="p-2">
+                                                    <Phone
+                                                        size={22}
+                                                        color="#666"
+                                                    />
+                                                </TouchableOpacity>
+                                                <TouchableOpacity className="p-2">
+                                                    <Video
+                                                        size={24}
+                                                        color="#666"
+                                                    />
+                                                </TouchableOpacity>
+                                            </View>
+                                        </TouchableOpacity>
+                                    ))}
+                                </View>
+                            ))
+                        )}
+                    </ScrollView>
+                )}
             </View>
         </SafeAreaView>
     );

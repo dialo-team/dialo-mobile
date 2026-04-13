@@ -1,8 +1,12 @@
-import { DEMO_FRIEND_QR_VALUE } from "../../../../../../constants/demoFriendQr";
+import { friendApi } from "@/src/api/friend/friendApi"; // Thêm API
+import { userApi } from "@/src/api/user/userApi";
 import { useRouter } from "expo-router";
 import { ChevronLeft, CircleArrowRight, QrCode } from "lucide-react-native";
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
+    ActivityIndicator,
+    Alert,
+    Keyboard,
     ScrollView,
     Text,
     TextInput,
@@ -11,25 +15,70 @@ import {
 } from "react-native";
 import QRCode from "react-native-qrcode-svg";
 import { SafeAreaView } from "react-native-safe-area-context";
-
+import { DEMO_FRIEND_QR_VALUE } from "../../../../../../constants/demoFriendQr";
 export default function AddFriendScreen() {
     const router = useRouter();
-
     const [phoneNumber, setPhoneNumber] = useState("");
+    const [isLoading, setIsLoading] = useState(false);
+    const [qrToken, setQrToken] = useState<string | null>(null);
+    const [userName, setUserName] = useState<string | null>(null);
+
+    // Fetch QR token khi màn hình mount
+    // Fetch QR token khi màn hình mount
+    useEffect(() => {
+        const fetchData = async () => {
+            try {
+                // Vẫn gọi song song để không làm chậm màn hình
+                const [profileRes, qrRes] = await Promise.all([
+                    userApi.getProfile(),
+                    userApi.getMyQr(),
+                ]);
+
+                // 1. Lấy Tên (Name)
+                const profileData = profileRes?.data || profileRes;
+                if (profileData) {
+                    setUserName(
+                        profileData.userName ||
+                            profileData.name ||
+                            profileData.fullName,
+                    );
+                    console.log("Tên User lấy được:", profileData.userName); // Log kiểm tra
+                }
+
+                // 2. Lấy Token QR
+                const qrData = qrRes?.data || qrRes;
+
+                // Trường hợp 1: Dữ liệu giống y chang hình bạn gửi (qr nằm ngay trong object tổng)
+                let token = qrData?.qr?.token;
+
+                // Trường hợp 2: Dự phòng nếu BE trả về khác một chút
+                if (!token && profileData?.qr?.token) {
+                    token = profileData.qr.token;
+                }
+
+                if (token) {
+                    setQrToken(token);
+                    console.log("Token QR lấy được:", token); // Log kiểm tra
+                } else {
+                    console.log(
+                        "Không tìm thấy thuộc tính token trong QR Response:",
+                        qrData,
+                    );
+                }
+            } catch (error) {
+                console.log("Lỗi fetch data:", error);
+            }
+        };
+        fetchData();
+    }, []);
 
     const handlePhoneInput = (text: string) => {
         const numbersOnly = text.replace(/[^0-9]/g, "");
-
-        // Nếu bắt đầu từ 0: tối đa 10 ký tự
         if (numbersOnly.startsWith("0")) {
             setPhoneNumber(numbersOnly.slice(0, 10));
-        }
-        // Nếu bắt đầu từ số khác 0: tối đa 9 ký tự
-        else if (numbersOnly.length > 0) {
+        } else if (numbersOnly.length > 0) {
             setPhoneNumber(numbersOnly.slice(0, 9));
-        }
-        // Nếu rỗng
-        else {
+        } else {
             setPhoneNumber("");
         }
     };
@@ -37,6 +86,36 @@ export default function AddFriendScreen() {
     const isValidPhone =
         (phoneNumber.startsWith("0") && phoneNumber.length === 10) ||
         (!phoneNumber.startsWith("0") && phoneNumber.length === 9);
+
+    // --- HÀM TÌM KIẾM ---
+    const handleSearch = async () => {
+        Keyboard.dismiss();
+        setIsLoading(true);
+
+        try {
+            const response = await friendApi.searchByPhone(phoneNumber);
+
+            // Bóc tách data tùy theo cấu trúc BE trả về
+            const userData = (response as any).data || response;
+
+            // Chuyển hướng sang trang NewFriend kèm theo dữ liệu
+            router.push({
+                pathname: "/contact/friend/new" as any,
+                params: {
+                    id: userData.id,
+                },
+            });
+        } catch (error: any) {
+            console.log("Lỗi tìm kiếm:", error.response?.data || error.message);
+            Alert.alert(
+                "Không tìm thấy",
+                "Số điện thoại này chưa đăng ký tài khoản hoặc không cho phép tìm kiếm.",
+            );
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
     return (
         <SafeAreaView className="flex-1 bg-white">
             {/* Header */}
@@ -53,7 +132,7 @@ export default function AddFriendScreen() {
             </View>
 
             <ScrollView className="flex-1" showsVerticalScrollIndicator={false}>
-                {/* Vùng chứa Thẻ Mã QR */}
+                {/* Vùng chứa Thẻ Mã QR (Giữ nguyên của bạn) */}
                 <View className="items-center mt-6 mb-8">
                     <TouchableOpacity
                         activeOpacity={0.9}
@@ -63,15 +142,14 @@ export default function AddFriendScreen() {
                             )
                         }
                     >
-                        {/* Thẻ QR nền xanh xám */}
                         <View className="bg-[#415C84] w-[260px] rounded-2xl p-5 items-center shadow-sm">
                             <Text className="text-white text-[16px] font-medium mb-4">
-                                Phan Nhật Tiến
+                                {userName ?? "..."}
                             </Text>
 
                             <View className="bg-white p-2 rounded-xl mb-4">
                                 <QRCode
-                                    value={DEMO_FRIEND_QR_VALUE}
+                                    value={qrToken ?? DEMO_FRIEND_QR_VALUE}
                                     size={140}
                                     backgroundColor="#FFFFFF"
                                     color="#000000"
@@ -88,14 +166,12 @@ export default function AddFriendScreen() {
                 {/* Phần Nhập số điện thoại */}
                 <View className="px-4 mb-6">
                     <View className="flex-row items-center border border-gray-300 rounded-lg bg-white h-[48px]">
-                        {/* Chọn mã vùng */}
                         <TouchableOpacity className="flex-row items-center px-3 border-r border-gray-300 h-full">
                             <Text className="text-[16px] text-black mr-1">
                                 +84
                             </Text>
                         </TouchableOpacity>
 
-                        {/* Ô nhập số */}
                         <TextInput
                             className="flex-1 px-3 text-[16px] text-black"
                             placeholder="Nhập số điện thoại"
@@ -107,35 +183,38 @@ export default function AddFriendScreen() {
 
                         {/* Nút gửi */}
                         <TouchableOpacity
-                            className="px-2"
+                            className="px-2 w-12 items-center justify-center"
                             activeOpacity={0.8}
-                            disabled={!isValidPhone}
-                            onPress={() => {
-                                // Xử lý gửi lời mời kết bạn
-                                console.log("Gửi lời mời tới:", phoneNumber);
-                                router.push("/contact/friend/new" as any);
-                            }}
+                            disabled={!isValidPhone || isLoading}
+                            onPress={handleSearch} // Gọi hàm API
                         >
-                            <View
-                                className={`w-9 h-9 rounded-full items-center justify-center ${
-                                    isValidPhone ? "bg-blue-600" : "bg-gray-200"
-                                }`}
-                            >
-                                <CircleArrowRight
-                                    size={24}
-                                    color={isValidPhone ? "white" : "gray"}
+                            {isLoading ? (
+                                <ActivityIndicator
+                                    size="small"
+                                    color="#0068FF"
                                 />
-                            </View>
+                            ) : (
+                                <View
+                                    className={`w-9 h-9 rounded-full items-center justify-center ${
+                                        isValidPhone
+                                            ? "bg-blue-600"
+                                            : "bg-gray-200"
+                                    }`}
+                                >
+                                    <CircleArrowRight
+                                        size={24}
+                                        color={isValidPhone ? "white" : "gray"}
+                                    />
+                                </View>
+                            )}
                         </TouchableOpacity>
                     </View>
                 </View>
 
-                {/* Khoảng xám phân cách */}
                 <View className="h-[1px] bg-gray-100" />
 
-                {/* Các tùy chọn khác */}
+                {/* Các tùy chọn khác (Giữ nguyên) */}
                 <View className="bg-white">
-                    {/* Quét mã QR */}
                     <TouchableOpacity
                         className="flex-row items-center px-4 py-4 border-b border-gray-100"
                         onPress={() =>
@@ -150,7 +229,6 @@ export default function AddFriendScreen() {
                         </Text>
                     </TouchableOpacity>
 
-                    {/* Footer Text */}
                     <View className="mt-8 px-8 items-center">
                         <Text className="text-[13px] text-gray-500 text-center">
                             Xem lời mời kết bạn đã gửi tại trang Danh bạ Dialo
