@@ -1,4 +1,5 @@
-import { useRouter } from "expo-router";
+import { userApi } from "@/src/api/user/userApi"; // Thêm import API
+import { useFocusEffect, useRouter } from "expo-router";
 import {
     ChevronRight,
     Cloudy,
@@ -9,8 +10,9 @@ import {
     Shield,
     Smartphone,
 } from "lucide-react-native";
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import {
+    Image,
     ScrollView,
     Text,
     TextInput,
@@ -31,8 +33,48 @@ type MenuItem = {
 
 export default function ProfileScreen() {
     const [searchText, setSearchText] = useState("");
-
     const router = useRouter();
+
+    // State lưu thông tin user
+    const [userName, setUserName] = useState("Đang tải...");
+    const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
+
+    // Lấy chữ cái đầu làm Avatar mặc định (Ví dụ: "Phan Nhất Tiến" -> "PT")
+    const getInitials = (fullName: string) => {
+        if (!fullName || fullName === "Đang tải...") return "U";
+        const words = fullName.trim().split(" ");
+        if (words.length === 1) return words[0][0].toUpperCase();
+        return (words[0][0] + words[words.length - 1][0]).toUpperCase();
+    };
+
+    // Dùng useFocusEffect để tự động reload data mỗi khi quay lại tab này
+    useFocusEffect(
+        useCallback(() => {
+            const fetchProfile = async () => {
+                try {
+                    const response = await userApi.getProfile();
+
+                    // IN LOG RA ĐỂ KIỂM TRA BE TRẢ VỀ TÊN BIẾN LÀ GÌ
+                    console.log("Dữ liệu Profile từ BE:", response.data);
+
+                    if (response.data) {
+                        setUserName(response.data.userName || "Người dùng");
+
+                        // Phòng hờ BE trả về 'avatarUrl' hoặc 'avatar'
+                        setAvatarUrl(
+                            response.data.avatarUrl ||
+                                response.data.avatar ||
+                                null,
+                        );
+                    }
+                } catch (error) {
+                    console.log("Lỗi lấy profile:", error);
+                }
+            };
+            fetchProfile();
+        }, []),
+    );
+
     const menuItems: MenuItem[] = [
         {
             id: "1",
@@ -78,7 +120,6 @@ export default function ProfileScreen() {
         },
     ];
 
-    // Nhóm các item thành các mảng con, mỗi mảng chứa tối đa 2 phần tử
     const chunkedMenuItems = [];
     for (let i = 0; i < menuItems.length; i += 2) {
         chunkedMenuItems.push(menuItems.slice(i, i + 2));
@@ -116,12 +157,23 @@ export default function ProfileScreen() {
                     className="bg-white mx-4 mt-4 rounded-2xl p-4 flex-row items-center shadow-sm"
                     activeOpacity={0.8}
                 >
-                    <View className="w-12 h-12 rounded-full bg-green-500 items-center justify-center">
-                        <Text className="text-white font-bold text-lg">TI</Text>
-                    </View>
+                    {/* KHU VỰC HIỂN THỊ AVATAR HOẶC CHỮ CÁI ĐẦU */}
+                    {avatarUrl ? (
+                        <Image
+                            source={{ uri: avatarUrl }}
+                            className="w-12 h-12 rounded-full"
+                        />
+                    ) : (
+                        <View className="w-12 h-12 rounded-full bg-green-500 items-center justify-center">
+                            <Text className="text-white font-bold text-lg">
+                                {getInitials(userName)}
+                            </Text>
+                        </View>
+                    )}
+
                     <View className="flex-1 ml-3">
                         <Text className="text-gray-900 font-semibold text-base">
-                            Phan Nhất Tiến
+                            {userName}
                         </Text>
                         <Text className="text-gray-500 text-sm">
                             Xem trang cá nhân

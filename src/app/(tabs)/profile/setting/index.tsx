@@ -1,6 +1,6 @@
 import { authenticationApi } from "@/src/api/auth/authenticationApi";
 import {
-    clearAuthTokens,
+    clearAuthData, // ĐÃ SỬA: Đổi tên hàm import cho đúng với authStorage.ts
     getAccessToken,
     getRefreshToken,
 } from "@/src/api/auth/authStorage";
@@ -105,8 +105,13 @@ export default function SettingScreen() {
                             const refreshToken = await getRefreshToken();
 
                             if (accessToken && refreshToken) {
+                                // GỌI API ĐĂNG XUẤT
+                                // Lưu ý: Truyền thêm chuỗi rỗng vào sessId nếu bạn chưa lưu sessId
                                 await authenticationApi.signout(
-                                    { refreshToken: String(refreshToken) },
+                                    {
+                                        refreshToken: String(refreshToken),
+                                        sessId: "", // <--- Thêm dòng này để khớp cấu trúc Body
+                                    },
                                     String(accessToken),
                                 );
                             }
@@ -114,9 +119,9 @@ export default function SettingScreen() {
                             console.log("Lỗi từ server khi đăng xuất:", error);
                         } finally {
                             // Bắt buộc xóa token ở máy dù gọi API thành công hay thất bại
-                            await clearAuthTokens();
+                            await clearAuthData(); // ĐÃ SỬA: Gọi đúng tên hàm
                             setIsSigningOut(false);
-                            router.replace("/"); // Trở về trang Welcome ban đầu
+                            router.replace("/" as any); // Trở về trang Welcome ban đầu
                         }
                     },
                 },

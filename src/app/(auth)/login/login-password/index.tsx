@@ -14,7 +14,8 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { authenticationApi } from "@/src/api/auth/authenticationApi";
-import { maskPhone, normalizePhoneTo84 } from "@/src/utils/phone";
+import { saveAuthData } from "@/src/api/auth/authStorage"; // Bổ sung hàm lưu Token
+import { maskPhone } from "@/src/utils/phone";
 
 export default function LoginWithPasswordScreen() {
     const router = useRouter();
@@ -24,7 +25,12 @@ export default function LoginWithPasswordScreen() {
     const [showPassword, setShowPassword] = useState(false);
     const [isSubmitting, setIsSubmitting] = useState(false);
 
-    const isValid = password.length >= 6;
+    // --- LOGIC RÀNG BUỘC MẬT KHẨU MỚI ---
+    const isValidLength = password.length >= 6 && password.length <= 32;
+    const hasLetterAndNumberOrSpecial = /(?=.*[a-zA-Z])(?=.*[\d\W_])/.test(
+        password,
+    );
+    const isValid = isValidLength && hasLetterAndNumberOrSpecial;
 
     const maskedPhone = phone ? maskPhone(String(phone)) : "";
 
@@ -32,47 +38,45 @@ export default function LoginWithPasswordScreen() {
         if (!phone) return;
         setIsSubmitting(true);
         try {
-            const formattedPhone = normalizePhoneTo84(String(phone));
+            console.log("Số điện thoại gửi lên API Login:", String(phone));
 
-            console.log("Số điện thoại gửi lên API Login:", formattedPhone);
-
-            const response = await authenticationApi.signin({
-                phone: String(phone), // Gửi số đã format có +84
+            // SỬA LẠI Ở ĐÂY: Gọi signinVerify (để trỏ đúng vào /auth/signin)
+            // Ép kiểu 'any' phòng trường hợp file types.ts của bạn đang quy định nhầm param otp
+            const response = await authenticationApi.signinVerify({
+                phone: String(phone),
                 password: password,
-            });
+            } as any);
 
             console.log("Response từ server:", response);
-            Alert.alert(
-                "Xác thực",
-                "Đã gửi mã OTP đăng nhập, vui lòng kiểm tra tin nhắn.",
-            );
-            router.push({
-                pathname: "/login/verify" as any,
-                params: {
-                    phone: String(phone),
-                    password,
-                },
-            });
+
+            // KIỂM TRA VÀ LƯU TOKEN
+            if (response.data && response.data.accessToken) {
+                const { accessToken, refreshToken } = response.data;
+
+                // Lưu token vào máy
+                await saveAuthData(accessToken, refreshToken);
+
+                Alert.alert("Thành công", "Đăng nhập thành công!");
+
+                // VÀO THẲNG APP, BỎ QUA TRANG OTP
+                router.replace("/(tabs)/message" as any);
+            } else {
+                Alert.alert(
+                    "Lỗi",
+                    "Đăng nhập thành công nhưng không nhận được Token.",
+                );
+            }
         } catch (error: any) {
-            console.error("Chi tiết lỗi API:", {
-                message: error.message,
-                status: error.response?.status,
-                statusCode: error.code,
-                data: error.response?.data,
-                errorLog: error,
-            });
+            console.error(
+                "Chi tiết lỗi API:",
+                error.response?.data || error.message,
+            );
 
             let errorMessage =
                 error.response?.data?.message ||
                 error.response?.data?.error ||
                 error.message ||
                 "Lỗi kết nối";
-
-            // Xử lý 500 error - có thể account chưa verify OTP
-            if (error.response?.status === 500) {
-                errorMessage =
-                    "Tài khoản chưa được xác thực.\nVui lòng hoàn thành đăng ký trước khi đăng nhập.";
-            }
 
             Alert.alert(
                 "Lỗi đăng nhập",
@@ -124,13 +128,27 @@ export default function LoginWithPasswordScreen() {
                         </TouchableOpacity>
                     </View>
 
+                    {/* --- GIAO DIỆN GỢI Ý ĐIỀU KIỆN MẬT KHẨU --- */}
+                    <View className="mt-3 px-2 space-y-1">
+                        <Text
+                            className={`text-[13px] ${isValidLength ? "text-blue-600" : "text-gray-500"}`}
+                        >
+                            • Từ 6 đến 32 ký tự
+                        </Text>
+                        <Text
+                            className={`text-[13px] ${hasLetterAndNumberOrSpecial ? "text-blue-600" : "text-gray-500"}`}
+                        >
+                            • Gồm chữ và ít nhất 1 số hoặc 1 ký tự đặc biệt
+                        </Text>
+                    </View>
+
                     <PrimaryButton
                         label="Tiếp tục"
-                        loadingLabel="Đang gửi OTP..."
+                        loadingLabel="Đang đăng nhập..."
                         isLoading={isSubmitting}
                         disabled={!isValid}
                         onPress={handleLogin}
-                        className="mt-8"
+                        className="mt-6"
                     />
 
                     {/* Forgot password */}

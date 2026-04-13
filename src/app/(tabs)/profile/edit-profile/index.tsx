@@ -1,9 +1,12 @@
+import { userApi } from "@/src/api/user/userApi";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import * as ImagePicker from "expo-image-picker";
 import { useRouter } from "expo-router";
 import { MoveLeft } from "lucide-react-native";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
+    ActivityIndicator,
+    Alert,
     Image,
     Modal,
     Platform,
@@ -17,17 +20,65 @@ import { SafeAreaView } from "react-native-safe-area-context";
 export default function EditProfile() {
     const router = useRouter();
 
-    const [name, setName] = useState("Phan Nhật Tiến");
-    const [dob, setDob] = useState(new Date(2000, 2, 27));
+    const [name, setName] = useState("");
+    const [dob, setDob] = useState(new Date());
     const [gender, setGender] = useState("Nam");
-    const [avatar, setAvatar] = useState("https://i.pravatar.cc/300");
+    const [avatar, setAvatar] = useState<string | null>(null);
+    const [isLoading, setIsLoading] = useState(true);
+    const [isSaving, setIsSaving] = useState(false);
+    const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
 
     const [modalVisible, setModalVisible] = useState(false);
     const [showDatePicker, setShowDatePicker] = useState(false);
 
     const genderOptions = ["Nam", "Nữ", "Khác"];
 
-    // 📷 Chọn ảnh từ thư viện
+    useEffect(() => {
+        const fetchProfile = async () => {
+            try {
+                const response = await userApi.getProfile();
+                if (response.data) {
+                    setName(response.data.userName || "");
+                    setAvatar(
+                        response.data.avatarUrl || response.data.avatar || null,
+                    );
+
+                    if (response.data.gender) {
+                        setGender(
+                            response.data.gender === "MALE"
+                                ? "Nam"
+                                : response.data.gender === "FEMALE"
+                                  ? "Nữ"
+                                  : "Khác",
+                        );
+                    }
+
+                    // --- ĐÃ SỬA: Ép Javascript đọc đúng Ngày/Tháng/Năm từ chuỗi YYYY-MM-DD để không bị lệch múi giờ ---
+                    if (response.data.dob) {
+                        const dobString = response.data.dob; // Ví dụ: "2026-04-13"
+                        const [year, month, day] = dobString.split("-");
+                        if (year && month && day) {
+                            setDob(
+                                new Date(
+                                    Number(year),
+                                    Number(month) - 1,
+                                    Number(day),
+                                ),
+                            );
+                        }
+                    }
+                }
+            } catch (error) {
+                console.log("Lỗi tải thông tin:", error);
+                Alert.alert("Lỗi", "Không thể tải thông tin người dùng.");
+            } finally {
+                setIsLoading(false);
+            }
+        };
+
+        fetchProfile();
+    }, []);
+
     const pickImage = async () => {
         const permission =
             await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -37,13 +88,63 @@ export default function EditProfile() {
             return;
         }
 
-        const result = await ImagePicker.launchImageLibraryAsync({
-            mediaTypes: ImagePicker.MediaTypeOptions.Images,
-            quality: 1,
-        });
+        try {
+            const result = await ImagePicker.launchImageLibraryAsync({
+                mediaTypes: ImagePicker.MediaTypeOptions.Images,
+                quality: 0.8,
+                allowsEditing: true,
+                aspect: [1, 1],
+            });
 
-        if (!result.canceled) {
-            setAvatar(result.assets[0].uri);
+            if (!result.canceled) {
+                const uri = result.assets[0].uri;
+                setIsUploadingAvatar(true);
+
+                try {
+                    await userApi.updateAvatar(uri);
+                    setAvatar(uri);
+                    Alert.alert("Thành công", "Đã cập nhật ảnh đại diện.");
+                } catch (apiError: any) {
+                    console.log("Lỗi upload avatar:", apiError);
+                    Alert.alert("Lỗi", "Không thể lưu ảnh đại diện mới.");
+                } finally {
+                    setIsUploadingAvatar(false);
+                }
+            }
+        } catch (error) {
+            console.log("Lỗi thư viện ảnh:", error);
+        }
+    };
+
+    const handleSaveInfo = async () => {
+        setIsSaving(true);
+        try {
+            // Đảm bảo lúc lưu cũng gửi chuẩn YYYY-MM-DD không bị ảnh hưởng bởi múi giờ
+            const year = dob.getFullYear();
+            const month = String(dob.getMonth() + 1).padStart(2, "0");
+            const day = String(dob.getDate()).padStart(2, "0");
+            const dobString = `${year}-${month}-${day}`;
+
+            const genderEnum =
+                gender === "Nam"
+                    ? "MALE"
+                    : gender === "Nữ"
+                      ? "FEMALE"
+                      : "OTHER";
+
+            await userApi.updateBasicInfo({
+                userName: name,
+                dob: dobString,
+                gender: genderEnum,
+            });
+
+            setModalVisible(false);
+            Alert.alert("Thành công", "Đã cập nhật thông tin cá nhân.");
+        } catch (error: any) {
+            console.log("Lỗi lưu info:", error);
+            Alert.alert("Lỗi", "Cập nhật thông tin thất bại.");
+        } finally {
+            setIsSaving(false);
         }
     };
 
@@ -55,30 +156,60 @@ export default function EditProfile() {
             .padStart(2, "0")}/${date.getFullYear()}`;
     };
 
+    if (isLoading) {
+        return (
+            <SafeAreaView className="flex-1 bg-white items-center justify-center">
+                <ActivityIndicator size="large" color="#2563EB" />
+            </SafeAreaView>
+        );
+    }
+
     return (
         <SafeAreaView className="flex-1 bg-gray-100">
             {/* Header */}
             <View className="bg-blue-600 flex-row items-center px-4 py-5">
-                <TouchableOpacity
-                    onPress={() => router.push("/profile" as any)}
-                >
+                <TouchableOpacity onPress={() => router.back()}>
                     <MoveLeft size={24} color="white" />
                 </TouchableOpacity>
 
                 <Text className="text-white text-lg font-semibold flex-1 text-center">
                     Thông tin cá nhân
                 </Text>
+                <View style={{ width: 24 }} />
             </View>
 
             {/* Avatar */}
-            <View className="bg-white items-center py-6">
-                <TouchableOpacity onPress={pickImage}>
-                    <Image
-                        source={{ uri: avatar }}
-                        className="w-28 h-28 rounded-full"
-                    />
+            <View className="bg-white items-center py-6 relative">
+                <TouchableOpacity
+                    onPress={pickImage}
+                    disabled={isUploadingAvatar}
+                >
+                    {avatar ? (
+                        <Image
+                            source={{ uri: avatar }}
+                            className={`w-28 h-28 rounded-full ${isUploadingAvatar ? "opacity-50" : ""}`}
+                        />
+                    ) : (
+                        <View
+                            className={`w-28 h-28 rounded-full bg-green-600 items-center justify-center ${isUploadingAvatar ? "opacity-50" : ""}`}
+                        >
+                            <Text className="text-white text-3xl font-semibold">
+                                {name ? name[0].toUpperCase() : "U"}
+                            </Text>
+                        </View>
+                    )}
+
+                    {isUploadingAvatar && (
+                        <View className="absolute top-0 left-0 right-0 bottom-0 items-center justify-center">
+                            <ActivityIndicator size="large" color="#2563EB" />
+                        </View>
+                    )}
                 </TouchableOpacity>
-                <Text className="text-gray-500 mt-2">Nhấn để đổi ảnh</Text>
+                <Text className="text-gray-500 mt-2">
+                    {isUploadingAvatar
+                        ? "Đang tải ảnh lên..."
+                        : "Nhấn để đổi ảnh"}
+                </Text>
             </View>
 
             {/* Info */}
@@ -122,37 +253,57 @@ export default function EditProfile() {
                         <TextInput
                             value={name}
                             onChangeText={setName}
-                            className="border rounded-lg px-3 py-2 mb-3"
+                            className="border rounded-lg px-3 py-2 mb-3 border-gray-300"
                         />
 
                         {/* DOB */}
                         <Text className="mb-1 text-gray-600">Ngày sinh</Text>
                         <TouchableOpacity
                             onPress={() => setShowDatePicker(true)}
-                            className="border rounded-lg px-3 py-2 mb-3"
+                            className="border rounded-lg px-3 py-2 mb-3 border-gray-300"
                         >
                             <Text>{formatDate(dob)}</Text>
                         </TouchableOpacity>
 
                         {showDatePicker && (
-                            <DateTimePicker
-                                value={dob}
-                                mode="date"
-                                display="default"
-                                onChange={(event, selectedDate) => {
-                                    setShowDatePicker(
-                                        Platform.OS === "ios" ? true : false,
-                                    );
-                                    if (selectedDate) {
-                                        setDob(selectedDate);
+                            <View className="mb-3 bg-gray-50 rounded-lg p-2">
+                                <DateTimePicker
+                                    value={dob}
+                                    mode="date"
+                                    display={
+                                        Platform.OS === "ios"
+                                            ? "spinner"
+                                            : "default"
                                     }
-                                }}
-                            />
+                                    maximumDate={new Date()} // Không cho chọn ngày tương lai
+                                    onChange={(event, selectedDate) => {
+                                        // Android tự tắt sau khi bấm OK/Cancel
+                                        if (Platform.OS === "android") {
+                                            setShowDatePicker(false);
+                                        }
+                                        if (selectedDate) {
+                                            setDob(selectedDate);
+                                        }
+                                    }}
+                                />
+
+                                {/* Nút "Xong" dành riêng cho iOS để người dùng tắt bảng chọn */}
+                                {Platform.OS === "ios" && (
+                                    <TouchableOpacity
+                                        onPress={() => setShowDatePicker(false)}
+                                        className="mt-2 bg-blue-500 py-2 rounded-lg items-center"
+                                    >
+                                        <Text className="text-white font-semibold">
+                                            Xong
+                                        </Text>
+                                    </TouchableOpacity>
+                                )}
+                            </View>
                         )}
 
                         {/* Gender */}
                         <Text className="mb-1 text-gray-600">Giới tính</Text>
-                        <View className="border rounded-lg mb-5">
+                        <View className="border border-gray-300 rounded-lg mb-5 overflow-hidden">
                             {genderOptions.map((option) => (
                                 <TouchableOpacity
                                     key={option}
@@ -178,16 +329,20 @@ export default function EditProfile() {
                         <View className="flex-row justify-end gap-4">
                             <TouchableOpacity
                                 onPress={() => setModalVisible(false)}
+                                className="px-4 py-2 justify-center"
                             >
-                                <Text className="text-gray-500">Hủy</Text>
+                                <Text className="text-gray-500 font-medium">
+                                    Hủy
+                                </Text>
                             </TouchableOpacity>
 
                             <TouchableOpacity
-                                onPress={() => setModalVisible(false)}
-                                className="bg-blue-600 px-4 py-2 rounded-lg"
+                                disabled={isSaving}
+                                onPress={handleSaveInfo}
+                                className={`px-4 py-2 rounded-lg ${isSaving ? "bg-blue-400" : "bg-blue-600"}`}
                             >
                                 <Text className="text-white font-medium">
-                                    Xác nhận
+                                    {isSaving ? "Đang lưu..." : "Xác nhận"}
                                 </Text>
                             </TouchableOpacity>
                         </View>

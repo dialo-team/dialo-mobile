@@ -1,7 +1,8 @@
 import { authenticationApi } from "@/src/api/auth/authenticationApi";
+import { saveAuthData } from "@/src/api/auth/authStorage";
 import BackHeader from "@/src/components/ui/BackHeader";
 import PrimaryButton from "@/src/components/ui/PrimaryButton";
-import { maskPhone, normalizePhoneTo84 } from "@/src/utils/phone";
+import { maskPhone } from "@/src/utils/phone";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useRef, useState } from "react";
 import {
@@ -67,36 +68,64 @@ export default function VerifyOtpScreen() {
         setIsSubmitting(true);
         try {
             const otpString = otp.join("");
-            const formattedPhone = normalizePhoneTo84(String(phone ?? ""));
 
             const response = await authenticationApi.signupVerify({
-                phone: String(phone),
+                phone: String(phone), // Gửi số gốc, không dùng +84
                 password: password,
                 otp: otpString,
             });
 
-            console.log("Phản hồi từ BE:", response);
+            console.log("Phản hồi Đăng ký từ BE:", response);
 
-            // Kiểm tra logic thực tế từ nội dung Backend trả về
             if (
                 response.message === "Đăng ký thành công" ||
                 response.status === 200
             ) {
-                Alert.alert("Thông báo", "Đăng ký thành công", [
-                    {
-                        text: "OK",
-                        onPress: () =>
-                            router.push("/register/enter-name" as any),
-                    },
-                ]);
+                // --- BƯỚC ĐĂNG NHẬP NGẦM ---
+                try {
+                    //lấy token
+                    const loginResponse = await authenticationApi.signinVerify({
+                        phone: String(phone), // Gửi số gốc, không dùng +84
+                        password: String(password),
+                    });
+
+                    // Lấy accessToken và refreshToken
+                    if (loginResponse.data) {
+                        const { accessToken, refreshToken } =
+                            loginResponse.data;
+                        await saveAuthData(accessToken, refreshToken);
+                        console.log("Đăng nhập ngầm thành công, đã lưu Token!");
+                    } else {
+                        console.log("Cảnh báo: loginResponse không có data");
+                    }
+
+                    Alert.alert("Thông báo", "Đăng ký thành công", [
+                        {
+                            text: "OK",
+                            onPress: () =>
+                                router.push("/register/enter-name" as any),
+                        },
+                    ]);
+                } catch (loginError) {
+                    console.log("Lỗi đăng nhập ngầm:", loginError);
+                    Alert.alert(
+                        "Lỗi",
+                        "Vui lòng ra ngoài và đăng nhập lại bằng tài khoản vừa tạo.",
+                    );
+                    router.replace("/(auth)/login" as any);
+                }
             } else {
                 Alert.alert(
                     "Thông báo",
                     response.message || "Xác thực thất bại, vui lòng thử lại.",
                 );
             }
-        } catch (error) {
-            Alert.alert(error.response?.data?.message || "Có lỗi xảy ra");
+        } catch (error: any) {
+            console.log("Chi tiết lỗi:", error);
+            Alert.alert(
+                "Lỗi",
+                error.response?.data?.message || "Có lỗi xảy ra",
+            );
         } finally {
             setIsSubmitting(false);
         }
@@ -176,9 +205,7 @@ export default function VerifyOtpScreen() {
                                     if (countdown === 0) {
                                         try {
                                             await authenticationApi.signup({
-                                                phone: normalizePhoneTo84(
-                                                    String(phone ?? ""),
-                                                ),
+                                                phone: String(phone ?? ""), // Sửa lại thành số gốc
                                                 password: String(
                                                     password ?? "",
                                                 ),

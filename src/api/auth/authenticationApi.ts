@@ -13,29 +13,35 @@ import {
 
 export const authenticationApi = {
     signin: async (data: SigninPayload) => {
-        const response = await apiClient.post("/auth/signin/request", data);
+        const response = await apiClient.post(
+            "/api/v1/auth/signin/request",
+            data,
+        );
         return response.data;
     },
 
     signup: async (data: SignupPayload) => {
-        const response = await apiClient.post("/auth/signup/request", data);
+        const response = await apiClient.post(
+            "/api/v1/auth/signup/request",
+            data,
+        );
         return response.data;
     },
 
     signupVerify: async (data: SignupVerifyPayload) => {
-        const response = await apiClient.post("/auth/signup", data);
+        const response = await apiClient.post("/api/v1/auth/signup", data);
         return response.data;
     },
 
     signinVerify: async (data: SigninVerifyPayload) => {
-        const response = await apiClient.post("/auth/signin", data);
+        const response = await apiClient.post("/api/v1/auth/signin", data);
         return response.data;
     },
 
     // 1. Xin OTP reset
     passwordResetRequest: async (data: PasswordResetRequestPayload) => {
         const response = await apiClient.post(
-            "/auth/password/reset/request",
+            "/api/v1/auth/password/reset/request",
             data,
         );
         return response.data;
@@ -44,7 +50,7 @@ export const authenticationApi = {
     // 2. Xác nhận OTP reset (Trả về resetToken)
     passwordResetConfirm: async (data: PasswordResetConfirmPayload) => {
         const response = await apiClient.post(
-            "/auth/password/reset/confirm",
+            "/api/v1/auth/password/reset/confirm",
             data,
         );
         return response.data;
@@ -52,11 +58,15 @@ export const authenticationApi = {
 
     // 3. Đặt lại mật khẩu mới (Gắn resetToken vào header)
     resetPassword: async (data: PasswordResetPayload, resetToken: string) => {
-        const response = await apiClient.post("/auth/password/reset", data, {
-            headers: {
-                Authorization: resetToken,
+        const response = await apiClient.post(
+            "/api/v1/auth/password/reset",
+            data,
+            {
+                headers: {
+                    Authorization: resetToken,
+                },
             },
-        });
+        );
         return response.data;
     },
 
@@ -65,7 +75,7 @@ export const authenticationApi = {
         accessToken?: string,
     ) => {
         const response = await apiClient.put(
-            "/accounts/password",
+            "/api/v1/accounts/password",
             data,
             accessToken
                 ? {
@@ -77,7 +87,7 @@ export const authenticationApi = {
     },
 
     signout: async (data: SignoutPayload, accessToken: string) => {
-        const response = await apiClient.post("/auth/signout", data, {
+        const response = await apiClient.post("/api/v1/auth/signout", data, {
             headers: {
                 Authorization: `Bearer ${accessToken}`,
             },

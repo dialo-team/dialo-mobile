@@ -1,27 +1,23 @@
+// api/auth/authStorage.ts
 import * as SecureStore from "expo-secure-store";
 
-export const saveAuthTokens = async (
+export const saveAuthData = async (
     accessToken: string,
     refreshToken: string,
 ) => {
     try {
         await SecureStore.setItemAsync("accessToken", accessToken);
         await SecureStore.setItemAsync("refreshToken", refreshToken);
-        console.log("Đã lưu token an toàn!");
+        // Xoá dòng lưu userId đi
     } catch (error) {
-        console.error("Lỗi khi lưu token:", error);
+        console.error("Lỗi lưu SecureStore:", error);
     }
 };
 
-export const getAccessToken = async () => {
-    return await SecureStore.getItemAsync("accessToken");
-};
+export const getAccessToken = () => SecureStore.getItemAsync("accessToken");
+export const getRefreshToken = () => SecureStore.getItemAsync("refreshToken");
 
-export const getRefreshToken = async () => {
-    return await SecureStore.getItemAsync("refreshToken");
-};
-
-export const clearAuthTokens = async () => {
+export const clearAuthData = async () => {
     await SecureStore.deleteItemAsync("accessToken");
     await SecureStore.deleteItemAsync("refreshToken");
 };

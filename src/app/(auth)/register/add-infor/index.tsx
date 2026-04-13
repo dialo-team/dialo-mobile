@@ -1,11 +1,15 @@
+import { userApi } from "@/src/api/user/userApi";
 import { Ionicons } from "@expo/vector-icons";
 import DateTimePicker from "@react-native-community/datetimepicker";
-import { useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import { useState } from "react";
-import { Platform, Text, TouchableOpacity, View } from "react-native";
+import { Alert, Platform, Text, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+
 export default function AddInforPage() {
     const router = useRouter();
+    const { name } = useLocalSearchParams<{ name: string }>();
+    const [isSubmitting, setIsSubmitting] = useState(false);
 
     const [birthday, setBirthday] = useState<Date | null>(null);
     const [tempBirthday, setTempBirthday] = useState<Date>(new Date());
@@ -20,6 +24,52 @@ export default function AddInforPage() {
     const formatDate = (date: Date | null) => {
         if (!date) return "Sinh nhật";
         return date.toLocaleDateString("vi-VN");
+    };
+
+    const handleContinue = async () => {
+        if (!birthday || !gender || !name) return;
+        setIsSubmitting(true);
+        try {
+            // Format birthday sang YYYY-MM-DD
+            const dob = new Date(
+                birthday.getTime() - birthday.getTimezoneOffset() * 60000,
+            )
+                .toISOString()
+                .split("T")[0];
+            const genderEnum = gender === "Nam" ? "MALE" : "FEMALE";
+
+            await userApi.updateBasicInfo({
+                userName: name, // Lấy từ params
+                dob: dob,
+                gender: genderEnum,
+            });
+
+            router.push({
+                pathname: "/register/update-avatar",
+                params: { name },
+            } as any);
+        } catch (error: any) {
+            // IN CHI TIẾT LỖI RA CONSOLE
+            console.log("=== LỖI CẬP NHẬT THÔNG TIN ===");
+            console.log("Status:", error.response?.status);
+            console.log("Data từ BE:", error.response?.data);
+            console.log("Message:", error.message);
+            console.log("==============================");
+
+            // BÓC TÁCH LỖI ĐỂ HIỂN THỊ LÊN UI
+            const errorMessage =
+                error.response?.data?.message ||
+                error.response?.data?.error ||
+                error.message ||
+                "Lỗi không xác định";
+
+            Alert.alert(
+                "Lỗi cập nhật",
+                `Không thể lưu thông tin.\n\nChi tiết: ${errorMessage}\nMã lỗi: ${error.response?.status || "Network/Unknown"}`,
+            );
+        } finally {
+            setIsSubmitting(false);
+        }
     };
 
     return (
@@ -112,18 +162,14 @@ export default function AddInforPage() {
 
                 {/* Continue */}
                 <TouchableOpacity
-                    disabled={!isValid}
-                    onPress={() =>
-                        router.push({
-                            pathname: "/register/update-avatar",
-                        } as any)
-                    }
+                    disabled={!isValid || isSubmitting}
+                    onPress={handleContinue}
                     className={`h-14 rounded-full items-center justify-center mb-6
           ${isValid ? "bg-blue-600" : "bg-gray-300"}
         `}
                 >
                     <Text className="text-white font-semibold text-base">
-                        Tiếp tục
+                        {isSubmitting ? "Đang xử lý..." : "Tiếp tục"}
                     </Text>
                 </TouchableOpacity>
 

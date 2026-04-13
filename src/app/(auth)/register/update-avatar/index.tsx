@@ -1,3 +1,4 @@
+import { userApi } from "@/src/api/user/userApi";
 import * as ImagePicker from "expo-image-picker";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { MoveLeft } from "lucide-react-native";
@@ -10,6 +11,8 @@ export default function UpdateAvatarScreen() {
     const { name } = useLocalSearchParams<{ name?: string }>();
 
     const [image, setImage] = useState<string | null>(null);
+
+    const [isSubmitting, setIsSubmitting] = useState(false);
 
     // Lấy chữ cái đầu (VD: "Trâm Anh" → "TA")
     const getInitials = (fullName?: string) => {
@@ -40,10 +43,10 @@ export default function UpdateAvatarScreen() {
 
             // Mở thư viện
             const result = await ImagePicker.launchImageLibraryAsync({
-                mediaTypes: ImagePicker.MediaTypeOptions.Images,
-                allowsEditing: true,
-                aspect: [1, 1], // avatar vuông
+                mediaTypes: ["images"], // Mới: Truyền vào mảng chuỗi 'images'
                 quality: 1,
+                allowsEditing: true,
+                aspect: [1, 1],
             });
 
             if (!result.canceled) {
@@ -51,6 +54,23 @@ export default function UpdateAvatarScreen() {
             }
         } catch (error) {
             console.log("Image picker error:", error);
+        }
+    };
+
+    const handleComplete = async () => {
+        if (!image) {
+            router.replace("/(tabs)/message"); // Bỏ qua nếu không chọn ảnh
+            return;
+        }
+
+        setIsSubmitting(true);
+        try {
+            await userApi.updateAvatar(image);
+            router.replace("/(tabs)/message");
+        } catch (error) {
+            Alert.alert("Lỗi", "Không thể upload ảnh");
+        } finally {
+            setIsSubmitting(false);
         }
     };
 
@@ -98,15 +118,16 @@ export default function UpdateAvatarScreen() {
 
                 {/* Update button */}
                 <TouchableOpacity
-                    onPress={
-                        image
-                            ? () => router.replace("/(tabs)/message" as any)
-                            : pickImage
-                    }
+                    disabled={isSubmitting} // Khóa nút khi đang upload
+                    onPress={image ? handleComplete : pickImage}
                     className="h-14 bg-blue-600 rounded-full items-center justify-center"
                 >
                     <Text className="text-white font-semibold text-base">
-                        {image ? "Tiếp tục" : "Cập nhật"}
+                        {isSubmitting
+                            ? "Đang xử lý..."
+                            : image
+                              ? "Tiếp tục"
+                              : "Cập nhật"}
                     </Text>
                 </TouchableOpacity>
 

@@ -81,6 +81,10 @@ export default function ChangePasswordScreen() {
 
         try {
             setIsSubmitting(true);
+            console.log("=== THÔNG TIN GỬI LÊN BE ===");
+            console.log("Body Data:", { oldPass, newPass, refreshToken });
+            console.log("Header AccessToken:", accessToken);
+            console.log("============================");
             const response = await authenticationApi.changePassword(
                 {
                     oldPass,
