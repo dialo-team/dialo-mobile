@@ -21,7 +21,11 @@
     "@react-navigation/bottom-tabs": "^7.4.0",
     "@react-navigation/elements": "^2.6.3",
     "@react-navigation/native": "^7.1.8",
-    "axios": "^1.14.0",
+<<<<<<< Updated upstream
+    "axios": "^1.15.0",
+=======
+    "axios": "^1.15.0",
+>>>>>>> Stashed changes
     "expo": "~54.0.31",
     "expo-av": "~16.0.8",
     "expo-barcode-scanner": "^13.0.1",
