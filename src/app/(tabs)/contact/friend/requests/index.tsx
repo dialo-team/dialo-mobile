@@ -21,12 +21,11 @@ type FriendRequest = {
 
 export default function FriendRequestsScreen() {
     const router = useRouter();
-    const [activeTab, setActiveTab] = useState<"pending" | "confirmed">(
-        "pending",
-    );
+    // Đổi tab confirmed thành sent
+    const [activeTab, setActiveTab] = useState<"pending" | "sent">("pending");
 
     const [pending, setPending] = useState<FriendRequest[]>([]);
-    const [confirmed, setConfirmed] = useState<FriendRequest[]>([]);
+    const [sentList, setSentList] = useState<FriendRequest[]>([]); // Đổi state lưu danh sách đã gửi
     const [isLoading, setIsLoading] = useState(true);
 
     const getInitials = (text: string) => {
@@ -34,21 +33,6 @@ export default function FriendRequestsScreen() {
         const words = text.trim().split(" ");
         if (words.length === 1) return words[0][0].toUpperCase();
         return (words[0][0] + words[words.length - 1][0]).toUpperCase();
-    };
-
-    const mapUserData = (items: any[]): FriendRequest[] => {
-        if (!items || !Array.isArray(items)) return [];
-        return items.map((item, index) => {
-            // Lấy ID của người gửi (nếu có), hoặc fallback
-            const targetId = item.senderId || item.id || `fallback-${index}`;
-
-            return {
-                id: targetId,
-                name:
-                    item.userName || item.name || "Người dùng (Chờ BE cấp Tên)",
-                avatar: item.avatarUrl || item.avatar || "",
-            };
-        });
     };
 
     useFocusEffect(
@@ -60,17 +44,18 @@ export default function FriendRequestsScreen() {
     const fetchData = async () => {
         setIsLoading(true);
         try {
-            const [pendingRes, friendsRes] = await Promise.all([
+            // Thay vì getFriends, gọi API getSentRequests
+            const [pendingRes, sentRes] = await Promise.all([
                 friendApi.getPendingRequests(),
-                friendApi.getFriends(),
+                friendApi.getSentRequests(),
             ]);
 
-            const pendingList = pendingRes.data || pendingRes;
-            const friendsList = friendsRes.data || friendsRes;
+            const pendingData = pendingRes?.data || pendingRes || [];
+            const sentData = sentRes?.data || sentRes || [];
 
-            // Fetch thông tin chi tiết từng người gửi lời mời
+            // 1. Map thông tin người gửi lời mời cho mình (Pending)
             const pendingWithInfo = await Promise.all(
-                (Array.isArray(pendingList) ? pendingList : []).map(
+                (Array.isArray(pendingData) ? pendingData : []).map(
                     async (item: any) => {
                         try {
                             const userRes = await friendApi.getUserById(
@@ -79,7 +64,10 @@ export default function FriendRequestsScreen() {
                             const user = userRes?.data || userRes;
                             return {
                                 id: item.senderId,
-                                name: user?.userName || "Người dùng",
+                                name:
+                                    user?.userName ||
+                                    user?.name ||
+                                    "Người dùng",
                                 avatar: user?.avatarUrl || user?.avatar || "",
                             };
                         } catch {
@@ -93,10 +81,38 @@ export default function FriendRequestsScreen() {
                 ),
             );
 
-            setPending(pendingWithInfo);
-            setConfirmed(
-                mapUserData(Array.isArray(friendsList) ? friendsList : []),
+            // 2. Map thông tin người MÌNH gửi lời mời (Sent)
+            const sentWithInfo = await Promise.all(
+                (Array.isArray(sentData) ? sentData : []).map(
+                    async (item: any) => {
+                        try {
+                            // Người mình gửi lời mời sẽ nằm ở trường receiverId (hoặc targetId tuỳ BE)
+                            const targetId =
+                                item.receiverId || item.targetId || item.id;
+                            const userRes =
+                                await friendApi.getUserById(targetId);
+                            const user = userRes?.data || userRes;
+                            return {
+                                id: targetId,
+                                name:
+                                    user?.userName ||
+                                    user?.name ||
+                                    "Người dùng",
+                                avatar: user?.avatarUrl || user?.avatar || "",
+                            };
+                        } catch {
+                            return {
+                                id: item.receiverId || item.id,
+                                name: "Người dùng",
+                                avatar: "",
+                            };
+                        }
+                    },
+                ),
             );
+
+            setPending(pendingWithInfo);
+            setSentList(sentWithInfo);
         } catch (error: any) {
             console.log(
                 "Lỗi tải danh sách:",
@@ -110,16 +126,9 @@ export default function FriendRequestsScreen() {
     const acceptFriend = async (id: string) => {
         try {
             await friendApi.acceptRequest(id);
-            setPending((prev) => {
-                const request = prev.find((item) => item.id === id);
-                if (request) {
-                    setConfirmed((prevConfirmed) => [
-                        request,
-                        ...prevConfirmed,
-                    ]);
-                }
-                return prev.filter((item) => item.id !== id);
-            });
+            // Cập nhật lại UI sau khi đồng ý
+            setPending((prev) => prev.filter((item) => item.id !== id));
+            Alert.alert("Thành công", "Đã chấp nhận lời mời kết bạn.");
         } catch (error: any) {
             Alert.alert(
                 "Lỗi",
@@ -142,9 +151,24 @@ export default function FriendRequestsScreen() {
         }
     };
 
+    // THÊM MỚI: Hàm thu hồi lời mời kết bạn đã gửi
+    const cancelSentRequest = async (id: string) => {
+        try {
+            await friendApi.cancelFriendRequest(id);
+            // Xoá khỏi danh sách "Đã gửi" trên UI
+            setSentList((prev) => prev.filter((item) => item.id !== id));
+        } catch (error: any) {
+            Alert.alert(
+                "Lỗi",
+                error.response?.data?.message ||
+                    "Không thể thu hồi lời mời lúc này.",
+            );
+        }
+    };
+
     const currentList = useMemo(() => {
-        return activeTab === "pending" ? pending : confirmed;
-    }, [activeTab, pending, confirmed]);
+        return activeTab === "pending" ? pending : sentList;
+    }, [activeTab, pending, sentList]);
 
     return (
         <SafeAreaView className="flex-1 bg-white">
@@ -156,7 +180,7 @@ export default function FriendRequestsScreen() {
                     <MoveLeft size={24} color="white" />
                 </TouchableOpacity>
                 <Text className="text-white text-lg font-semibold ml-4">
-                    Quản lý bạn bè
+                    Quản lý lời mời
                 </Text>
             </View>
 
@@ -178,16 +202,16 @@ export default function FriendRequestsScreen() {
 
                 <TouchableOpacity
                     className={`flex-1 py-3 items-center border-b-2 ${
-                        activeTab === "confirmed"
+                        activeTab === "sent"
                             ? "border-blue-600"
                             : "border-transparent"
                     }`}
-                    onPress={() => setActiveTab("confirmed")}
+                    onPress={() => setActiveTab("sent")}
                 >
                     <Text
-                        className={`font-medium ${activeTab === "confirmed" ? "text-blue-600" : "text-gray-500"}`}
+                        className={`font-medium ${activeTab === "sent" ? "text-blue-600" : "text-gray-500"}`}
                     >
-                        Bạn bè ({confirmed.length})
+                        Đã gửi ({sentList.length})
                     </Text>
                 </TouchableOpacity>
             </View>
@@ -206,12 +230,11 @@ export default function FriendRequestsScreen() {
                             <Text className="text-gray-500 text-center">
                                 {activeTab === "pending"
                                     ? "Bạn chưa có lời mời kết bạn nào."
-                                    : "Bạn chưa có bạn bè nào trong danh bạ."}
+                                    : "Bạn chưa gửi lời mời kết bạn nào."}
                             </Text>
                         </View>
                     )}
 
-                    {/* ĐÃ THÊM INDEX VÀO MAP ĐỂ ĐẢM BẢO KEY LUÔN UNIQUE */}
                     {currentList.map((item, index) => (
                         <TouchableOpacity
                             key={item.id || `fallback-${index}`}
@@ -251,8 +274,8 @@ export default function FriendRequestsScreen() {
                                 </Text>
                                 <Text className="text-sm text-gray-500 mt-0.5">
                                     {activeTab === "pending"
-                                        ? "Đã gửi lời mời kết bạn"
-                                        : "Bạn bè"}
+                                        ? "Gửi lời mời cho bạn"
+                                        : "Chờ xác nhận..."}
                                 </Text>
                             </View>
 
@@ -276,9 +299,12 @@ export default function FriendRequestsScreen() {
                                     </TouchableOpacity>
                                 </View>
                             ) : (
-                                <TouchableOpacity className="px-3 py-2 rounded-full bg-gray-100">
-                                    <Text className="text-blue-600 text-sm font-medium">
-                                        Nhắn tin
+                                <TouchableOpacity
+                                    className="px-3 py-2 rounded-full bg-red-100"
+                                    onPress={() => cancelSentRequest(item.id)}
+                                >
+                                    <Text className="text-red-600 text-sm font-medium">
+                                        Thu hồi
                                     </Text>
                                 </TouchableOpacity>
                             )}

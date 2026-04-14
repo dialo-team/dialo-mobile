@@ -2,14 +2,7 @@ import { userApi } from "@/src/api/user/userApi";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import * as ImagePicker from "expo-image-picker";
 import { useRouter } from "expo-router";
-import {
-    Camera,
-    CircleX,
-    MoreHorizontal,
-    MoveLeft,
-    Pencil,
-    X,
-} from "lucide-react-native";
+import { Camera, CircleX, MoveLeft, Pencil, X } from "lucide-react-native";
 import { useEffect, useState } from "react";
 import {
     ActivityIndicator,
@@ -34,21 +27,23 @@ export default function EditProfile() {
     const [dob, setDob] = useState(new Date());
     const [gender, setGender] = useState("Nam");
     const [avatar, setAvatar] = useState<string | null>(null);
-    const [background, setBackground] = useState<string | null>(null); // Thêm state cho ảnh bìa
+    const [background, setBackground] = useState<string | null>(null);
+    const [bio, setBio] = useState(""); // Thêm state lưu Bio
 
     // === STATE LOADING & UI ===
     const [isLoading, setIsLoading] = useState(true);
     const [isSaving, setIsSaving] = useState(false);
+    const [isSavingBio, setIsSavingBio] = useState(false); // Loading riêng cho Bio
     const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
     const [isUploadingCover, setIsUploadingCover] = useState(false);
 
     // Modal Bottom Sheet
     const [modalVisible, setModalVisible] = useState(false);
+    const [bioModalVisible, setBioModalVisible] = useState(false); // Modal Bio
     const [showDatePicker, setShowDatePicker] = useState(false);
 
     const genderOptions = ["Nam", "Nữ", "Khác"];
 
-    // Lấy chữ cái đầu
     const getInitials = (text: string) => {
         if (!text || text === "undefined") return "U";
         const words = text.trim().split(" ");
@@ -63,6 +58,7 @@ export default function EditProfile() {
                 const response = await userApi.getProfile();
                 if (response.data) {
                     setName(response.data.userName || "");
+                    setBio(response.data.bio || ""); // Load Bio từ BE
                     setAvatar(
                         response.data.avatarUrl || response.data.avatar || null,
                     );
@@ -103,15 +99,12 @@ export default function EditProfile() {
                 setIsLoading(false);
             }
         };
-
         fetchProfile();
     }, []);
 
-    // === XỬ LÝ CHỌN ẢNH (AVATAR & ẢNH BÌA) ===
     const pickImage = async (isAvatar: boolean) => {
         const permission =
             await ImagePicker.requestMediaLibraryPermissionsAsync();
-
         if (!permission.granted) {
             alert("Bạn cần cấp quyền truy cập thư viện để đổi ảnh!");
             return;
@@ -119,7 +112,6 @@ export default function EditProfile() {
 
         try {
             const result = await ImagePicker.launchImageLibraryAsync({
-                // SỬA LẠI DÒNG NÀY THÀNH MẢNG CHUỖI ['images']
                 mediaTypes: ["images"],
                 quality: 0.8,
                 allowsEditing: true,
@@ -128,7 +120,6 @@ export default function EditProfile() {
 
             if (!result.canceled) {
                 const uri = result.assets[0].uri;
-
                 if (isAvatar) {
                     setIsUploadingAvatar(true);
                     try {
@@ -142,8 +133,7 @@ export default function EditProfile() {
                 } else {
                     setIsUploadingCover(true);
                     try {
-                        // LƯU Ý: Chắc chắn file userApi.ts của bạn có hàm updateBackground(uri)
-                        await userApi.updateBackground(uri);
+                        await userApi.updateBackground(uri); //
                         setBackground(uri);
                     } catch (error) {
                         Alert.alert("Lỗi", "Không thể lưu ảnh bìa.");
@@ -157,20 +147,14 @@ export default function EditProfile() {
         }
     };
 
-    // === XỬ LÝ LƯU THÔNG TIN (BOTTOM SHEET) ===
     const handleSaveInfo = async () => {
         if (!name.trim()) {
             Alert.alert("Lỗi", "Tên hiển thị không được để trống.");
             return;
         }
-
         setIsSaving(true);
         try {
-            const year = dob.getFullYear();
-            const month = String(dob.getMonth() + 1).padStart(2, "0");
-            const day = String(dob.getDate()).padStart(2, "0");
-            const dobString = `${year}-${month}-${day}`;
-
+            const dobString = `${dob.getFullYear()}-${String(dob.getMonth() + 1).padStart(2, "0")}-${String(dob.getDate()).padStart(2, "0")}`;
             const genderEnum =
                 gender === "Nam"
                     ? "MALE"
@@ -179,17 +163,30 @@ export default function EditProfile() {
                       : "OTHER";
 
             await userApi.updateBasicInfo({
+                //
                 userName: name.trim(),
                 dob: dobString,
                 gender: genderEnum,
             });
-
             setModalVisible(false);
         } catch (error: any) {
-            console.log("Lỗi lưu info:", error);
             Alert.alert("Lỗi", "Cập nhật thông tin thất bại.");
         } finally {
             setIsSaving(false);
+        }
+    };
+
+    // === XỬ LÝ LƯU BIO ===
+    const handleSaveBio = async () => {
+        setIsSavingBio(true);
+        try {
+            await userApi.updateBio(bio.trim()); //
+            setBioModalVisible(false);
+            Alert.alert("Thành công", "Đã cập nhật giới thiệu bản thân.");
+        } catch (error) {
+            Alert.alert("Lỗi", "Cập nhật giới thiệu thất bại.");
+        } finally {
+            setIsSavingBio(false);
         }
     };
 
@@ -214,24 +211,16 @@ export default function EditProfile() {
                     className="h-60 w-full bg-gray-200 relative"
                     onPress={() => pickImage(false)}
                 >
-                    {background ? (
-                        <Image
-                            source={{ uri: background }}
-                            className="w-full h-full"
-                            resizeMode="cover"
-                        />
-                    ) : (
-                        <Image
-                            source={{ uri: "https://picsum.photos/600/400" }}
-                            className="w-full h-full opacity-60"
-                        />
-                    )}
-
-                    {/* Icon Camera mờ mờ góc dưới ảnh bìa */}
+                    <Image
+                        source={{
+                            uri: background || "https://picsum.photos/600/400",
+                        }}
+                        className={`w-full h-full ${!background ? "opacity-60" : ""}`}
+                        resizeMode="cover"
+                    />
                     <View className="absolute bottom-4 right-4 bg-black/40 p-2 rounded-full">
                         <Camera size={20} color="white" />
                     </View>
-
                     {isUploadingCover && (
                         <View className="absolute inset-0 items-center justify-center bg-black/30">
                             <ActivityIndicator size="large" color="white" />
@@ -239,18 +228,13 @@ export default function EditProfile() {
                     )}
                 </TouchableOpacity>
 
-                {/* === CÁC NÚT ĐIỀU HƯỚNG OVERLAY === */}
+                {/* === OVERLAY BUTTONS === */}
                 <View className="absolute top-4 left-4">
                     <TouchableOpacity
                         className="w-10 h-10 rounded-full bg-black/30 items-center justify-center"
                         onPress={() => router.back()}
                     >
                         <MoveLeft size={24} color="white" />
-                    </TouchableOpacity>
-                </View>
-                <View className="absolute top-4 right-4 flex-row space-x-4">
-                    <TouchableOpacity className="w-10 h-10 rounded-full bg-black/30 items-center justify-center">
-                        <MoreHorizontal size={24} color="white" />
                     </TouchableOpacity>
                 </View>
 
@@ -273,11 +257,9 @@ export default function EditProfile() {
                                 </Text>
                             </View>
                         )}
-
                         <View className="absolute bottom-1 right-1 bg-gray-200 p-2 rounded-full border-2 border-white">
                             <Camera size={18} color="gray" />
                         </View>
-
                         {isUploadingAvatar && (
                             <View className="absolute inset-0 items-center justify-center bg-black/30 rounded-full border-4 border-white">
                                 <ActivityIndicator size="large" color="white" />
@@ -300,11 +282,17 @@ export default function EditProfile() {
                         </TouchableOpacity>
                     </View>
 
-                    {/* Bio giả lập giống Zalo */}
-                    <TouchableOpacity className="flex-row items-center mt-2 bg-gray-100 px-4 py-2 rounded-full border border-gray-200">
+                    {/* BIO HIỂN THỊ */}
+                    <TouchableOpacity
+                        onPress={() => setBioModalVisible(true)}
+                        className="flex-row items-center mt-2 bg-gray-100 px-4 py-2 rounded-full border border-gray-200"
+                    >
                         <Pencil size={14} color="#0068FF" />
-                        <Text className="ml-2 text-blue-600 font-medium">
-                            Cập nhật giới thiệu bản thân
+                        <Text
+                            className="ml-2 text-blue-600 font-medium"
+                            numberOfLines={1}
+                        >
+                            {bio ? bio : "Cập nhật giới thiệu bản thân"}
                         </Text>
                     </TouchableOpacity>
                 </View>
@@ -333,20 +321,58 @@ export default function EditProfile() {
                         </View>
                     </View>
                 </View>
-                <View className="h-10" />
             </ScrollView>
 
-            {/* ========================================= */}
-            {/* === MODAL BOTTOM SHEET SỬA THÔNG TIN ==== */}
-            {/* ========================================= */}
+            {/* === MODAL SỬA BIO === */}
+            <Modal visible={bioModalVisible} animationType="fade" transparent>
+                <View className="flex-1 justify-center bg-black/50 px-6">
+                    <View className="bg-white rounded-3xl p-6 shadow-xl">
+                        <View className="flex-row items-center justify-between mb-4">
+                            <Text className="text-lg font-bold text-black">
+                                Giới thiệu bản thân
+                            </Text>
+                            <TouchableOpacity
+                                onPress={() => setBioModalVisible(false)}
+                            >
+                                <X size={24} color="gray" />
+                            </TouchableOpacity>
+                        </View>
+
+                        <TextInput
+                            multiline
+                            numberOfLines={4}
+                            value={bio}
+                            onChangeText={setBio}
+                            placeholder="Nhập vài dòng giới thiệu về bạn..."
+                            className="bg-gray-50 rounded-xl p-4 text-base text-black border border-gray-200"
+                            textAlignVertical="top"
+                            maxLength={150}
+                        />
+                        <Text className="text-right text-gray-400 mt-2 text-xs">
+                            {bio.length}/150
+                        </Text>
+
+                        <TouchableOpacity
+                            disabled={isSavingBio}
+                            onPress={handleSaveBio}
+                            className={`mt-6 py-4 rounded-full items-center ${isSavingBio ? "bg-gray-300" : "bg-[#0068FF]"}`}
+                        >
+                            <Text className="text-white text-lg font-bold">
+                                {isSavingBio ? "Đang lưu..." : "Lưu giới thiệu"}
+                            </Text>
+                        </TouchableOpacity>
+                    </View>
+                </View>
+            </Modal>
+
+            {/* === MODAL SỬA THÔNG TIN CƠ BẢN (GIỮ NGUYÊN) === */}
             <Modal visible={modalVisible} animationType="slide" transparent>
                 <KeyboardAvoidingView
                     behavior={Platform.OS === "ios" ? "padding" : undefined}
                     style={{ flex: 1 }}
                 >
                     <View className="flex-1 justify-end bg-black/40">
-                        <View className="bg-white rounded-t-3xl p-6 pb-10 shadow-xl">
-                            {/* HEADER MODAL */}
+                        <View className="bg-white rounded-t-3xl p-6 pb-10">
                             <View className="flex-row items-center justify-between mb-6">
                                 <View className="w-6" />
                                 <Text className="text-lg font-bold text-black">
@@ -360,7 +386,6 @@ export default function EditProfile() {
                                 </TouchableOpacity>
                             </View>
 
-                            {/* TÊN HIỂN THỊ */}
                             <Text className="mb-2 text-gray-500 font-medium">
                                 Tên hiển thị
                             </Text>
@@ -381,7 +406,6 @@ export default function EditProfile() {
                                 )}
                             </View>
 
-                            {/* NGÀY SINH */}
                             <Text className="mb-2 text-gray-500 font-medium">
                                 Ngày sinh
                             </Text>
@@ -427,7 +451,6 @@ export default function EditProfile() {
                                 </View>
                             )}
 
-                            {/* GIỚI TÍNH */}
                             <Text className="mb-3 text-gray-500 font-medium">
                                 Giới tính
                             </Text>
@@ -436,11 +459,7 @@ export default function EditProfile() {
                                     <TouchableOpacity
                                         key={option}
                                         onPress={() => setGender(option)}
-                                        className={`flex-1 py-3 rounded-xl border items-center ${
-                                            gender === option
-                                                ? "border-blue-600 bg-blue-50"
-                                                : "border-gray-200 bg-white"
-                                        }`}
+                                        className={`flex-1 py-3 rounded-xl border items-center ${gender === option ? "border-blue-600 bg-blue-50" : "border-gray-200 bg-white"}`}
                                     >
                                         <Text
                                             className={`font-semibold text-base ${gender === option ? "text-blue-600" : "text-gray-600"}`}
@@ -451,15 +470,10 @@ export default function EditProfile() {
                                 ))}
                             </View>
 
-                            {/* NÚT LƯU */}
                             <TouchableOpacity
                                 disabled={isSaving || !name.trim()}
                                 onPress={handleSaveInfo}
-                                className={`py-4 rounded-full items-center shadow-sm ${
-                                    isSaving || !name.trim()
-                                        ? "bg-gray-300"
-                                        : "bg-[#0068FF]"
-                                }`}
+                                className={`py-4 rounded-full items-center ${isSaving || !name.trim() ? "bg-gray-300" : "bg-[#0068FF]"}`}
                             >
                                 <Text className="text-white text-lg font-bold">
                                     {isSaving ? "Đang lưu..." : "Lưu thay đổi"}

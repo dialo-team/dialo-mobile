@@ -2,7 +2,7 @@ import { friendApi } from "@/src/api/friend/friendApi"; // Thêm API
 import { AntDesign, Feather } from "@expo/vector-icons";
 import { useFocusEffect, useRouter } from "expo-router"; // Thêm useFocusEffect
 import { Cake, Phone, Search, Users, Video } from "lucide-react-native";
-import React, { useCallback, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import {
     ActivityIndicator,
     Image,
@@ -30,6 +30,10 @@ export default function ContactsScreen() {
     const [pendingCount, setPendingCount] = useState(0); // Số lời mời kết bạn
     const [isLoading, setIsLoading] = useState(true);
 
+    useEffect(() => {
+        console.log("Danh bạ hiện tại trong App:", contacts);
+    }, [contacts]);
+
     // Lấy chữ cái đầu làm Avatar dự phòng
     const getInitials = (text: string) => {
         if (!text || text === "undefined") return "U";
@@ -47,31 +51,40 @@ export default function ContactsScreen() {
     useFocusEffect(
         useCallback(() => {
             const fetchContacts = async () => {
+                setContacts([]);
                 setIsLoading(true);
+
                 try {
-                    // Gọi API lấy list bạn bè và list lời mời chờ xác nhận
                     const [friendsRes, pendingRes] = await Promise.all([
                         friendApi.getFriends(),
                         friendApi.getPendingRequests(),
                     ]);
 
-                    const friendsList =
-                        (friendsRes.data || friendsRes)?.friends || [];
-                    const pendingList =
-                        (pendingRes.data || pendingRes)?.requests || [];
+                    const friendsList = friendsRes?.data || friendsRes || {};
+                    const pendingList = pendingRes?.data || pendingRes || [];
 
-                    // Cập nhật số lượng lời mời
+                    console.log(
+                        "=== DANH SÁCH BẠN BÈ TỪ SERVER ===",
+                        JSON.stringify(friendsList, null, 2),
+                    );
+
                     if (Array.isArray(pendingList)) {
                         setPendingCount(pendingList.length);
                     }
 
-                    // Map dữ liệu bạn bè
-                    if (Array.isArray(friendsList)) {
-                        const mappedFriends = friendsList.map((item: any) => ({
+                    // SỬA Ở ĐÂY: Trích xuất mảng từ thuộc tính .friends
+                    const friendsArray =
+                        friendsList.friends ||
+                        (Array.isArray(friendsList) ? friendsList : []);
+
+                    if (Array.isArray(friendsArray)) {
+                        const mappedFriends = friendsArray.map((item: any) => ({
                             id: item.friendId,
                             name: item.friendUserName || "Người dùng",
                             avatar: item.friendAvatar || "",
                         }));
+
+                        // Sau khi có dữ liệu mới nhất từ Server (đã có người mới accept)
                         setContacts(mappedFriends);
                     }
                 } catch (error) {
@@ -82,7 +95,7 @@ export default function ContactsScreen() {
             };
 
             fetchContacts();
-        }, []),
+        }, []), // Giữ nguyên mảng rỗng để useCallback không bị tạo lại liên tục
     );
 
     // groupBy chữ cái đầu tiên của tên
@@ -176,15 +189,17 @@ export default function ContactsScreen() {
                                 <View className="w-10 h-10 rounded-full bg-[#0091FF] items-center justify-center">
                                     <Users size={24} color={"white"} />
                                 </View>
-                                <Text className="text-base font-normal text-black ml-3">
-                                    Lời mời kết bạn
-                                </Text>
-                                {/* ĐÃ UPDATE: Hiển thị đúng số lượng lời mời */}
-                                {pendingCount > 0 && (
-                                    <Text className="text-gray-400 ml-1 text-base">
-                                        ({pendingCount})
+                                <View className="flex-row items-center flex-1 ml-3">
+                                    <Text className="text-base font-normal text-black">
+                                        Lời mời kết bạn
                                     </Text>
-                                )}
+                                    {/* HIỂN THỊ SỐ LƯỢNG CHỜ XÁC NHẬN */}
+                                    {pendingCount > 0 && (
+                                        <Text className="text-gray-400 ml-1 text-base">
+                                            ({pendingCount})
+                                        </Text>
+                                    )}
+                                </View>
                             </TouchableOpacity>
 
                             <TouchableOpacity className="flex-row items-center px-4 py-3">

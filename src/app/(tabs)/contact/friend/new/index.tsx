@@ -1,4 +1,5 @@
 import { friendApi } from "@/src/api/friend/friendApi";
+import { userApi } from "@/src/api/user/userApi";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import { ChevronLeft } from "lucide-react-native";
 import { useCallback, useEffect, useState } from "react";
@@ -7,7 +8,6 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 export default function NewFriendScreen() {
     const router = useRouter();
-    // Cập nhật params để nhận thêm qrToken
     const params = useLocalSearchParams<{
         id?: string;
         qrToken?: string;
@@ -16,108 +16,146 @@ export default function NewFriendScreen() {
         cover?: string;
     }>();
 
-    // State lưu giữ liệu hiển thị
+    // State dữ liệu hiển thị người dùng (TK2)
     const [userData, setUserData] = useState({
         name: params.name,
         avatar: params.avatar,
         cover: params.cover,
     });
 
-    // State quan trọng: Lưu lại userId thật sự (vì ban đầu nếu quét QR, ta chỉ có qrToken)
+    // ID thật sự của người đang được xem
     const [actualUserId, setActualUserId] = useState<string | undefined>(
         params.id,
     );
 
+    const [myId, setMyId] = useState<string | null>(null);
+
     const [isRequested, setIsRequested] = useState(false);
+    const [isFriend, setIsFriend] = useState(false);
     const [isLoading, setIsLoading] = useState(false);
 
-    // --- LẤY THÔNG TIN CHI TIẾT TỪ ID HOẶC QR TOKEN ---
+    // 1. Lấy ID của chính mình để so sánh tránh trường hợp tự kết bạn sau khi Edit Profile
+    useEffect(() => {
+        const getMyProfile = async () => {
+            try {
+                const res = await userApi.getProfile();
+                const data = res?.data || res;
+                if (data?.id) setMyId(data.id);
+            } catch (e) {
+                console.log("Lỗi lấy profile cá nhân:", e);
+            }
+        };
+        getMyProfile();
+    }, []);
+
+    // 2. Lấy thông tin chi tiết người được xem từ ID hoặc QR Token
     useEffect(() => {
         const fetchUserInfo = async () => {
             try {
-                let res;
                 let data;
-
                 if (params.qrToken) {
-                    // Nếu có qrToken (từ quét QR), dùng API dành riêng cho QR
-                    res = await friendApi.getUserByQrToken(params.qrToken);
+                    //
+                    const res = await friendApi.getUserByQrToken(
+                        params.qrToken,
+                    );
+                    // Kiểm tra cấu trúc thực tế của response
                     data = res?.data || res;
 
-                    // RẤT QUAN TRỌNG: Lưu lại ID thật sự của User để dùng cho việc kết bạn/check status
-                    if (data?.id) setActualUserId(data.id);
-                } else if (
-                    params.id &&
-                    (!userData.name || userData.name === "undefined")
-                ) {
-                    // Nếu chỉ có id mà chưa có name, gọi API lấy info (dự phòng)
-                    res = await friendApi.getUserById(params.id);
+                    console.log("=== THÔNG TIN USER TỪ QR ===");
+                    console.log(JSON.stringify(data, null, 2));
+
+                    // Cập nhật ID dựa trên log thực tế.
+                    // Nếu log in ra { "userId": "..." } thì phải dùng data.userId
+                    if (data?.id) {
+                        setActualUserId(data.id);
+                    } else if (data?.userId) {
+                        setActualUserId(data.userId);
+                    }
+                } else if (params.id) {
+                    //
+                    const res = await friendApi.getUserById(params.id);
                     data = res?.data || res;
+                    if (data?.id) setActualUserId(data.id);
                 }
 
                 if (data) {
                     setUserData({
-                        name: data.userName || data.name || data.fullName,
-                        avatar: data.avatarUrl || data.avatar,
+                        name:
+                            data.userName ||
+                            data.name ||
+                            data.fullName ||
+                            "Người dùng",
+                        avatar: data.avatarUrl || data.avatar || "",
                         cover:
-                            data.backgroundUrl || data.background || data.cover,
+                            data.backgroundUrl ||
+                            data.background ||
+                            data.cover ||
+                            "",
                     });
                 }
             } catch (error) {
-                console.log("Lỗi lấy thông tin user:", error);
-                Alert.alert("Lỗi", "Không thể lấy thông tin người dùng.");
+                console.log("Lỗi lấy thông tin chi tiết:", error);
+                Alert.alert(
+                    "Lỗi",
+                    "Không thể lấy thông tin chi tiết của người dùng này.",
+                );
             }
         };
-
         fetchUserInfo();
     }, [params.id, params.qrToken]);
 
-    // --- KIỂM TRA TRẠNG THÁI KẾT BẠN DỰA TRÊN ACTUAL_USER_ID ---
+    // 3. Cập nhật trạng thái nút mỗi khi màn hình được Focus
     useFocusEffect(
         useCallback(() => {
             const checkFriendStatus = async () => {
-                // Chờ cho đến khi lấy được actualUserId thì mới check
-                if (!actualUserId) return;
+                if (!actualUserId || !myId) return;
+
+                // Nếu đang ở trang của chính mình, không cần check friend status
+                if (actualUserId === myId) return;
+
                 try {
                     const res = await friendApi.checkStatus(actualUserId);
                     const status = res?.status || res;
-                    if (
+
+                    setIsRequested(
                         status === "PENDING" ||
-                        status === "REQUESTED" ||
-                        status === "WAITING"
-                    ) {
-                        setIsRequested(true);
-                    } else {
-                        setIsRequested(false);
-                    }
+                            status === "REQUESTED" ||
+                            status === "WAITING",
+                    );
+                    setIsFriend(status === "FRIEND");
                 } catch (error) {
                     console.log("Lỗi check status:", error);
                 }
             };
             checkFriendStatus();
-        }, [actualUserId]),
+        }, [actualUserId, myId]),
     );
 
+    // Trong NewFriendScreen.tsx
+    // Trong NewFriendScreen.tsx
     const handleToggleRequest = async () => {
         if (!actualUserId) return;
-        setIsLoading(true);
 
+        setIsLoading(true);
         try {
             if (isRequested) {
                 await friendApi.cancelFriendRequest(actualUserId);
                 setIsRequested(false);
             } else {
-                await friendApi.sendFriendRequest(actualUserId);
+                // TRUYỀN THÊM LỜI NHẮN ĐỂ KHỚP SWAGGER
+                await friendApi.sendFriendRequest(
+                    actualUserId,
+                    "Chào bạn, mình muốn kết bạn!",
+                );
                 setIsRequested(true);
             }
         } catch (error: any) {
-            if (
-                error.response?.status === 500 ||
-                error.response?.status === 400
-            ) {
-                setIsRequested(true);
-            } else {
-                Alert.alert("Lỗi", "Không thể thực hiện thao tác lúc này.");
-            }
+            // Nếu lỗi 500, in toàn bộ error.response.data để xem Backend báo lỗi gì ở DB
+            console.log("Lỗi Server:", error.response?.data);
+            Alert.alert(
+                "Lỗi",
+                "Thao tác thất bại. Vui lòng kiểm tra lại ID người dùng.",
+            );
         } finally {
             setIsLoading(false);
         }
@@ -126,42 +164,35 @@ export default function NewFriendScreen() {
     const getInitials = (text: string) => {
         if (!text || text === "undefined") return "U";
         const words = text.trim().split(" ");
-        if (words.length === 1) return words[0][0].toUpperCase();
-        return (words[0][0] + words[words.length - 1][0]).toUpperCase();
+        return words.length === 1
+            ? words[0][0].toUpperCase()
+            : (words[0][0] + words[words.length - 1][0]).toUpperCase();
     };
 
-    const isValidImage = (url: string | undefined) => {
-        return url && url !== "undefined" && url.trim() !== "";
-    };
+    const isValidImage = (url: string | undefined) =>
+        url && url !== "undefined" && url.trim() !== "";
 
-    // ======================================================
-    // UI GIỮ NGUYÊN 100%
-    // ======================================================
     return (
         <SafeAreaView className="flex-1 bg-white">
             <View className="absolute top-12 left-4 z-10">
                 <TouchableOpacity
                     className="w-10 h-10 rounded-full bg-black/30 items-center justify-center"
                     onPress={() => router.back()}
-                    hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
                 >
                     <ChevronLeft size={24} color="white" />
                 </TouchableOpacity>
             </View>
 
             <View className="h-52 bg-gray-300">
-                {isValidImage(userData.cover) ? (
-                    <Image
-                        source={{ uri: userData.cover }}
-                        className="w-full h-full"
-                        resizeMode="cover"
-                    />
-                ) : (
-                    <Image
-                        source={{ uri: "https://picsum.photos/600/400" }}
-                        className="w-full h-full"
-                    />
-                )}
+                <Image
+                    source={{
+                        uri: isValidImage(userData.cover)
+                            ? userData.cover
+                            : "https://picsum.photos/600/400",
+                    }}
+                    className="w-full h-full"
+                    resizeMode="cover"
+                />
             </View>
 
             <View className="items-center -mt-16">
@@ -185,9 +216,13 @@ export default function NewFriendScreen() {
                 </Text>
 
                 <Text className="text-gray-500 text-center px-6 mt-2">
-                    {isRequested
-                        ? `Lời mời kết bạn đã được gửi đi. Hãy để lại tin nhắn cho ${userData.name && userData.name !== "undefined" ? userData.name : "người này"} trong lúc đợi chờ nhé!`
-                        : `Bạn và ${userData.name && userData.name !== "undefined" ? userData.name : "người này"} chưa là bạn bè.`}
+                    {actualUserId === myId
+                        ? "Đây là trang cá nhân của bạn."
+                        : isFriend
+                          ? "Hai bạn đã là bạn bè."
+                          : isRequested
+                            ? "Đã gửi lời mời kết bạn. Đang chờ phản hồi..."
+                            : `Bạn và ${userData.name || "người này"} chưa là bạn bè.`}
                 </Text>
 
                 <View className="flex-row mt-6 px-4 w-full">
@@ -197,21 +232,36 @@ export default function NewFriendScreen() {
                         </Text>
                     </TouchableOpacity>
 
-                    <TouchableOpacity
-                        disabled={isLoading}
-                        onPress={handleToggleRequest}
-                        className={`flex-1 py-3.5 rounded-full items-center ml-2 ${isRequested ? "bg-gray-200" : "bg-blue-600"}`}
-                    >
-                        <Text
-                            className={`font-semibold text-base ${isRequested ? "text-gray-800" : "text-white"}`}
+                    {actualUserId === myId ? (
+                        <TouchableOpacity
+                            onPress={() =>
+                                router.push("/me/edit-profile" as any)
+                            }
+                            className="flex-1 py-3.5 rounded-full items-center ml-2 bg-gray-200"
                         >
-                            {isLoading
-                                ? "Đang tải..."
-                                : isRequested
-                                  ? "Huỷ lời mời"
-                                  : "Thêm bạn"}
-                        </Text>
-                    </TouchableOpacity>
+                            <Text className="font-semibold text-base text-gray-800">
+                                Sửa Profile
+                            </Text>
+                        </TouchableOpacity>
+                    ) : (
+                        <TouchableOpacity
+                            disabled={isLoading || isFriend}
+                            onPress={handleToggleRequest}
+                            className={`flex-1 py-3.5 rounded-full items-center ml-2 ${isRequested ? "bg-gray-200" : isFriend ? "bg-green-100" : "bg-blue-600"}`}
+                        >
+                            <Text
+                                className={`font-semibold text-base ${isRequested || isFriend ? "text-gray-800" : "text-white"}`}
+                            >
+                                {isLoading
+                                    ? "..."
+                                    : isFriend
+                                      ? "Bạn bè"
+                                      : isRequested
+                                        ? "Huỷ lời mời"
+                                        : "Thêm bạn"}
+                            </Text>
+                        </TouchableOpacity>
+                    )}
                 </View>
             </View>
         </SafeAreaView>

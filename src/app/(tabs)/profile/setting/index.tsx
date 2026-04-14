@@ -1,6 +1,6 @@
 import { authenticationApi } from "@/src/api/auth/authenticationApi";
 import {
-    clearAuthData, // ĐÃ SỬA: Đổi tên hàm import cho đúng với authStorage.ts
+    clearAuthData,
     getAccessToken,
     getRefreshToken,
 } from "@/src/api/auth/authStorage";
@@ -89,43 +89,60 @@ export default function SettingScreen() {
         },
     ];
 
+    // --- HÀM XỬ LÝ GỌI API ĐĂNG XUẤT ---
+    const executeSignOut = async (type: "single" | "all") => {
+        setIsSigningOut(true);
+        try {
+            const accessToken = await getAccessToken();
+            const refreshToken = await getRefreshToken();
+
+            if (accessToken && refreshToken) {
+                if (type === "single") {
+                    // Đăng xuất máy hiện tại (Truyền sessId rỗng nếu chưa lưu)
+                    await authenticationApi.signout(
+                        { refreshToken: String(refreshToken), sessId: "" },
+                        String(accessToken),
+                    );
+                } else if (type === "all") {
+                    // Đăng xuất TẤT CẢ thiết bị
+                    await authenticationApi.signoutAll(
+                        { refreshToken: String(refreshToken) },
+                        String(accessToken),
+                    );
+                }
+            }
+        } catch (error) {
+            console.log("Lỗi từ server khi đăng xuất:", error);
+        } finally {
+            // Luôn xóa data ở local và đá ra ngoài dù API có lỗi hay không
+            await clearAuthData();
+            setIsSigningOut(false);
+            router.replace("/" as any); // Trở về trang Welcome ban đầu
+        }
+    };
+
+    // --- HÀM HIỂN THỊ MENU CHỌN ĐĂNG XUẤT ---
     const handleSignOut = () => {
         Alert.alert(
             "Đăng xuất",
-            "Bạn có chắc chắn muốn đăng xuất khỏi tài khoản này?",
+            "Bạn muốn đăng xuất khỏi thiết bị này hay tất cả thiết bị?",
             [
-                { text: "Hủy", style: "cancel" },
                 {
-                    text: "Đăng xuất",
+                    text: "Hủy",
+                    style: "cancel",
+                },
+                {
+                    text: "Đăng xuất máy này",
+                    style: "default",
+                    onPress: () => executeSignOut("single"),
+                },
+                {
+                    text: "Đăng xuất TẤT CẢ",
                     style: "destructive",
-                    onPress: async () => {
-                        setIsSigningOut(true);
-                        try {
-                            const accessToken = await getAccessToken();
-                            const refreshToken = await getRefreshToken();
-
-                            if (accessToken && refreshToken) {
-                                // GỌI API ĐĂNG XUẤT
-                                // Lưu ý: Truyền thêm chuỗi rỗng vào sessId nếu bạn chưa lưu sessId
-                                await authenticationApi.signout(
-                                    {
-                                        refreshToken: String(refreshToken),
-                                        sessId: "", // <--- Thêm dòng này để khớp cấu trúc Body
-                                    },
-                                    String(accessToken),
-                                );
-                            }
-                        } catch (error) {
-                            console.log("Lỗi từ server khi đăng xuất:", error);
-                        } finally {
-                            // Bắt buộc xóa token ở máy dù gọi API thành công hay thất bại
-                            await clearAuthData(); // ĐÃ SỬA: Gọi đúng tên hàm
-                            setIsSigningOut(false);
-                            router.replace("/" as any); // Trở về trang Welcome ban đầu
-                        }
-                    },
+                    onPress: () => executeSignOut("all"),
                 },
             ],
+            { cancelable: true },
         );
     };
 
@@ -188,7 +205,6 @@ export default function SettingScreen() {
                     className="flex-row items-center px-4 py-4 bg-white mx-3 rounded-2xl"
                     activeOpacity={0.8}
                 >
-                    {/* View trống để căn lề text bằng với các mục bên trên */}
                     <View className="w-9" />
                     <Text className="flex-1 text-[16px] font-normal text-black">
                         Chuyển tài khoản

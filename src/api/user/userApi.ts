@@ -35,6 +35,31 @@ export const userApi = {
         });
     },
 
+    updateBackground: async (imageUri: string) => {
+        const formData = new FormData();
+        const filename = imageUri.split("/").pop() || "background.jpg";
+        const match = /\.(\w+)$/.exec(filename);
+        const type = match ? `image/${match[1]}` : `image/jpeg`;
+
+        // Key "file" được định nghĩa bắt buộc trong tài liệu API
+        formData.append("file", {
+            uri: imageUri,
+            name: filename,
+            type,
+        } as any);
+
+        return apiClient.patch("/api/v1/me/background", formData, {
+            headers: {
+                "Content-Type": "multipart/form-data",
+            },
+        });
+    },
+
+    // Cập nhật tiểu sử (Bio) - Bổ sung nếu bạn cần dùng nút "Cập nhật giới thiệu"
+    updateBio: async (bio: string) => {
+        return apiClient.patch("/api/v1/me/bio", { bio });
+    },
+
     getProfile: async () => {
         const response = await apiClient.get("/api/v1/me");
         return response.data;

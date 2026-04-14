@@ -1,4 +1,3 @@
-// src/api/friend/friendApi.ts
 import apiClient from "../apiClient";
 import { UserProfileResponse } from "./types";
 
@@ -14,9 +13,14 @@ export const friendApi = {
     },
 
     // 2. Gửi lời mời kết bạn
-    sendFriendRequest: async (targetId: string) => {
+    sendFriendRequest: async (
+        targetId: string,
+        reason: string = "Kết bạn nhé!",
+    ) => {
+        // Truyền object body chứa trường reason theo đúng Swagger
         const response = await apiClient.post(
             `/api/v1/users/${targetId}/request`,
+            { reason },
         );
         return response.data;
     },
@@ -28,16 +32,21 @@ export const friendApi = {
         );
         return response.data;
     },
-
-    // Lấy danh sách lời mời kết bạn (Người khác gửi cho mình)
-    getPendingRequests: async () => {
-        const response = await apiClient.get(`/api/v1/me/friend-requests`);
+    // Lấy danh sách bạn bè đã kết bạn (Thêm timestamp để chống cache)
+    getFriends: async () => {
+        const timestamp = new Date().getTime(); // Lấy thời gian hiện tại
+        const response = await apiClient.get(
+            `/api/v1/me/friends?t=${timestamp}`,
+        );
         return response.data;
     },
 
-    // Lấy danh sách bạn bè đã kết bạn
-    getFriends: async () => {
-        const response = await apiClient.get(`/api/v1/me/friends`);
+    // Nên áp dụng luôn cho danh sách chờ để chống cache
+    getPendingRequests: async () => {
+        const timestamp = new Date().getTime();
+        const response = await apiClient.get(
+            `/api/v1/me/friend-requests?t=${timestamp}`,
+        );
         return response.data;
     },
 
@@ -57,7 +66,10 @@ export const friendApi = {
         return response.data;
     },
     checkStatus: async (targetId: string) => {
-        const response = await apiClient.get(`/api/v1/users/${targetId}/check`);
+        const timestamp = new Date().getTime();
+        const response = await apiClient.get(
+            `/api/v1/users/${targetId}/check?t=${timestamp}`,
+        );
         return response.data;
     },
 
@@ -77,6 +89,34 @@ export const friendApi = {
     unfriend: async (targetId: string) => {
         const response = await apiClient.delete(
             `/api/v1/users/${targetId}/unfriend`,
+        );
+        return response.data;
+    },
+
+    // 1. Lấy danh sách lời mời kết bạn ĐÃ GỬI (Mục mới từ Swagger)
+    getSentRequests: async () => {
+        const response = await apiClient.get(`/api/v1/me/friend-requests/sent`);
+        return response.data;
+    },
+
+    // 2. Lấy danh sách người dùng đã chặn
+    getBlockedUsers: async () => {
+        const response = await apiClient.get(`/api/v1/me/blocks`);
+        return response.data;
+    },
+
+    // 3. Chặn người dùng
+    blockUser: async (targetId: string) => {
+        const response = await apiClient.post(
+            `/api/v1/users/${targetId}/block`,
+        );
+        return response.data;
+    },
+
+    // 4. Bỏ chặn người dùng
+    unblockUser: async (targetId: string) => {
+        const response = await apiClient.delete(
+            `/api/v1/users/${targetId}/unblock`,
         );
         return response.data;
     },

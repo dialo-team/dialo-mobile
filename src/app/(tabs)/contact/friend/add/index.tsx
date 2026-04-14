@@ -16,6 +16,7 @@ import {
 import QRCode from "react-native-qrcode-svg";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { DEMO_FRIEND_QR_VALUE } from "../../../../../../constants/demoFriendQr";
+
 export default function AddFriendScreen() {
     const router = useRouter();
     const [phoneNumber, setPhoneNumber] = useState("");
@@ -23,7 +24,6 @@ export default function AddFriendScreen() {
     const [qrToken, setQrToken] = useState<string | null>(null);
     const [userName, setUserName] = useState<string | null>(null);
 
-    // Fetch QR token khi màn hình mount
     // Fetch QR token khi màn hình mount
     useEffect(() => {
         const fetchData = async () => {
@@ -87,24 +87,64 @@ export default function AddFriendScreen() {
         (phoneNumber.startsWith("0") && phoneNumber.length === 10) ||
         (!phoneNumber.startsWith("0") && phoneNumber.length === 9);
 
-    // --- HÀM TÌM KIẾM ---
+    // --- HÀM TÌM KIẾM ĐÃ CẬP NHẬT ĐỂ VƯỢT LỖI BACKEND ---
     const handleSearch = async () => {
         Keyboard.dismiss();
         setIsLoading(true);
 
         try {
+            // 1. Lấy thông tin người dùng từ số điện thoại
             const response = await friendApi.searchByPhone(phoneNumber);
-
-            // Bóc tách data tùy theo cấu trúc BE trả về
             const userData = (response as any).data || response;
 
-            // Chuyển hướng sang trang NewFriend kèm theo dữ liệu
-            router.push({
-                pathname: "/contact/friend/new" as any,
-                params: {
-                    id: userData.id,
-                },
-            });
+            if (userData && userData.id) {
+                // 2. KHÔNG DÙNG checkStatus NỮA VÌ BACKEND ĐANG LỖI TRẢ VỀ RỖNG
+                // Gọi danh sách bạn bè mới nhất về để tự kiểm tra
+                const friendsRes = await friendApi.getFriends();
+                const friendsList = friendsRes?.data || friendsRes || {};
+
+                // Bóc tách mảng friends y như cách chúng ta làm ở màn hình ContactsScreen
+                const friendsArray =
+                    friendsList.friends ||
+                    (Array.isArray(friendsList) ? friendsList : []);
+
+                // 3. Kiểm tra xem ID người vừa tìm có nằm trong danh sách bạn bè không
+                const isAlreadyFriend = friendsArray.some(
+                    (friend: any) => friend.friendId === userData.id,
+                );
+
+                // 4. Rẽ nhánh an toàn
+                if (isAlreadyFriend) {
+                    console.log(
+                        "===> Đã vào nhánh: LÀ BẠN BÈ (Check qua mảng getFriends)",
+                    );
+                    router.push({
+                        pathname: "/contact/friend/[id]" as any,
+                        params: {
+                            id: userData.id,
+                            name:
+                                userData.userName ||
+                                userData.name ||
+                                userData.fullName,
+                            avatar: userData.avatarUrl || userData.avatar,
+                        },
+                    });
+                } else {
+                    console.log("===> Đã vào nhánh: NGƯỜI LẠ / CHỜ XÁC NHẬN");
+                    router.push({
+                        pathname: "/contact/friend/new" as any,
+                        params: {
+                            id: userData.id,
+                            name:
+                                userData.userName ||
+                                userData.name ||
+                                userData.fullName,
+                            avatar: userData.avatarUrl || userData.avatar,
+                            cover: userData.backgroundUrl || userData.cover,
+                        },
+                    });
+                }
+            }
         } catch (error: any) {
             console.log("Lỗi tìm kiếm:", error.response?.data || error.message);
             Alert.alert(
