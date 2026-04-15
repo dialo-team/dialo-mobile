@@ -1,3 +1,5 @@
+import { chatApi, chatAuthUtils } from "@/src/api/chat/chatApi";
+import { useChatRealtime } from "@/src/hooks/useChatRealtime";
 import { useRouter } from "expo-router";
 import {
     Calendar,
@@ -8,11 +10,18 @@ import {
     UsersRound,
     Video,
 } from "lucide-react-native";
-import React, { useState } from "react";
+import React, {
+    useCallback,
+    useEffect,
+    useMemo,
+    useRef,
+    useState,
+} from "react";
 import {
     Image,
     Modal,
     Pressable,
+    RefreshControl,
     ScrollView,
     Text,
     TextInput,
@@ -22,85 +31,123 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 
 type Conversation = {
-    id: string;
-    name: string;
-    avatar: string;
-    avatarUrl?: string;
-    lastMessage: string;
-    time: string;
-    unread?: boolean;
-    isGroup?: boolean;
+    conversationId: string;
+    counterpartId?: string;
+    counterpartName?: string;
+    counterpartAvatarUrl?: string;
+    lastMessage?: string;
+    lastMessageAt?: string;
+    lastMessageType?: string;
+    unreadCount?: number;
 };
 
 export default function MessagesScreen() {
     const router = useRouter();
     const [searchText, setSearchText] = useState("");
     const [showMenu, setShowMenu] = useState(false);
+    const [conversations, setConversations] = useState<Conversation[]>([]);
+    const [loading, setLoading] = useState(false);
+    const [error, setError] = useState("");
+    const [currentUserId, setCurrentUserId] = useState("");
+    const refreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-    const conversations: Conversation[] = [
-        {
-            id: "1",
-            name: "Media Box",
-            avatar: "MB",
-            lastMessage: "Báo Mới: [APP] Ổ tô mất lái tông...",
-            time: "",
-            unread: true,
-            isGroup: true,
-        },
-        {
-            id: "2",
-            name: "Tim Việc",
-            avatar: "TV",
-            lastMessage: "Bạn có một tin nhắn mới...",
-            time: "5 giờ",
-            unread: true,
-            isGroup: true,
-        },
-        {
-            id: "3",
-            name: "NOW_KLTN_HK2_20...",
-            avatar: "N",
-            lastMessage: "Bạn trở thành thành viên của nhóm",
-            time: "6 giờ",
-            isGroup: true,
-        },
-        {
-            id: "4",
-            name: "Từ Đại My...",
-            avatar: "CA",
-            lastMessage: "Minh Khôi: [Hình ảnh]",
-            time: "9 giờ",
-            isGroup: true,
-        },
-        {
-            id: "5",
-            name: "Angel Nguyễn",
-            avatar: "AN",
-            avatarUrl: "https://i.pravatar.cc/150?img=5",
-            lastMessage: "Anh ơi ăn chưa?",
-            time: "1 giờ",
-            unread: true,
-            isGroup: false,
-        },
-        {
-            id: "6",
-            name: "A. Tí",
-            avatar: "AT",
-            avatarUrl: "https://i.pravatar.cc/150?img=12",
-            lastMessage: "Sáng mai mình gặp nhé",
-            time: "2 giờ",
-            isGroup: false,
-        },
-    ];
+    const loadConversations = useCallback(async () => {
+        if (!currentUserId) {
+            setConversations([]);
+            setError("Bạn chưa đăng nhập hoặc phiên đã hết hạn.");
+            return;
+        }
 
-    const getAvatarColor = (avatar: string) => {
-        const colors = {
-            MB: "bg-blue-500",
-            TV: "bg-blue-600",
-            N: "bg-gray-400",
-            CA: "bg-orange-500",
+        setLoading(true);
+        setError("");
+        try {
+            console.log("[MessagesScreen] Loading conversations...");
+            const data = await chatApi.getConversations();
+            console.log("[MessagesScreen] Loaded conversations:", data?.length);
+            setConversations(Array.isArray(data) ? data : []);
+        } catch (e: any) {
+            let errorMsg =
+                e?.message || "Không thể tải danh sách cuộc trò chuyện";
+            if (
+                typeof errorMsg === "string" &&
+                errorMsg.toLowerCase().includes("cors")
+            ) {
+                errorMsg =
+                    "Web đang bị chặn CORS từ backend. Hãy bật CORS trên server hoặc test bằng Expo Go trên thiết bị thật.";
+            }
+            console.error(
+                "[MessagesScreen] loadConversations error:",
+                errorMsg,
+            );
+            setError(errorMsg);
+        } finally {
+            setLoading(false);
+        }
+    }, [currentUserId]);
+
+    const debounceRefreshConversations = useCallback(() => {
+        if (refreshTimerRef.current) {
+            clearTimeout(refreshTimerRef.current);
+        }
+        console.log("[MessagesScreen] Debounced refresh scheduled");
+        refreshTimerRef.current = setTimeout(() => {
+            console.log("[MessagesScreen] Executing debounced refresh");
+            loadConversations();
+        }, 800);
+    }, [loadConversations]);
+
+    useEffect(() => {
+        (async () => {
+            try {
+                const userId = await chatAuthUtils.getCurrentUserId();
+                if (userId) {
+                    setCurrentUserId(userId);
+                } else {
+                    setCurrentUserId("");
+                    setError("Bạn chưa đăng nhập hoặc phiên đã hết hạn.");
+                }
+            } catch (error) {
+                console.error("Error getting current user ID:", error);
+                setCurrentUserId("");
+                setError("Không thể xác thực người dùng hiện tại.");
+            }
+        })();
+    }, []);
+
+    useEffect(() => {
+        if (!currentUserId) return;
+        loadConversations();
+    }, [currentUserId, loadConversations]);
+
+    useEffect(() => {
+        return () => {
+            if (refreshTimerRef.current) {
+                clearTimeout(refreshTimerRef.current);
+                refreshTimerRef.current = null;
+            }
         };
-        return colors[avatar as keyof typeof colors] || "bg-gray-500";
+    }, []);
+
+    const { connected } = useChatRealtime({
+        currentUserId,
+        onInboxPayload: debounceRefreshConversations,
+    });
+
+    const getAvatarColor = (value: string) => {
+        const colors = [
+            "bg-blue-500",
+            "bg-sky-500",
+            "bg-cyan-500",
+            "bg-indigo-500",
+            "bg-emerald-500",
+            "bg-rose-500",
+            "bg-amber-500",
+            "bg-violet-500",
+        ];
+        const hash = value
+            .split("")
+            .reduce((acc, char) => acc + char.charCodeAt(0), 0);
+        return colors[hash % colors.length];
     };
 
     const plusMenu = [
@@ -113,7 +160,8 @@ export default function MessagesScreen() {
         {
             id: "2",
             icon: <UsersRound size={20} color="gray" />,
-            title: "Tạo nhóm",
+            title: "Tạo/Open conversation",
+            route: "/message/new-conversation",
         },
         {
             id: "3",
@@ -132,11 +180,36 @@ export default function MessagesScreen() {
         },
     ];
 
-    const filteredConversations = conversations.filter((conversation) =>
-        conversation.name
-            .toLowerCase()
-            .includes(searchText.toLowerCase().trim()),
+    const filteredConversations = useMemo(
+        () =>
+            conversations.filter((conversation) =>
+                (
+                    conversation.counterpartName ||
+                    conversation.counterpartId ||
+                    ""
+                )
+                    .toLowerCase()
+                    .includes(searchText.toLowerCase().trim()),
+            ),
+        [conversations, searchText],
     );
+
+    const formatLastTime = (value?: string) => {
+        if (!value) return "";
+        const date = new Date(value);
+        if (Number.isNaN(date.getTime())) return "";
+        return date.toLocaleTimeString("vi-VN", {
+            hour: "2-digit",
+            minute: "2-digit",
+        });
+    };
+
+    const formatPreview = (item: Conversation) => {
+        if (item.lastMessageType === "IMAGE") return "[Ảnh]";
+        if (item.lastMessageType === "VIDEO") return "[Video]";
+        if (item.lastMessageType === "FILE") return "[File]";
+        return item.lastMessage || "";
+    };
 
     return (
         <SafeAreaView className="flex-1 bg-white">
@@ -163,46 +236,97 @@ export default function MessagesScreen() {
                 >
                     <Plus size={26} color="white" />
                 </TouchableOpacity>
+
+                <TouchableOpacity className="ml-3" onPress={loadConversations}>
+                    <Text className="text-white text-sm">Tải lại</Text>
+                </TouchableOpacity>
             </View>
 
+            <View className="px-4 py-2 bg-blue-50 border-b border-blue-100 flex-row items-center justify-between">
+                <Text className="text-xs text-blue-900">
+                    Realtime: {connected ? "Đang kết nối" : "Mất kết nối"}
+                </Text>
+                <TouchableOpacity
+                    onPress={() =>
+                        router.push("/message/new-conversation" as any)
+                    }
+                >
+                    <Text className="text-xs text-blue-700 font-semibold">
+                        Tạo/Open conversation
+                    </Text>
+                </TouchableOpacity>
+            </View>
+
+            {!!error && (
+                <View className="px-4 py-2 bg-red-50 border-b border-red-200">
+                    <Text className="text-red-500 text-sm">{error}</Text>
+                </View>
+            )}
+
             {/* Conversations List */}
-            <ScrollView className="flex-1">
+            <ScrollView
+                className="flex-1"
+                refreshControl={
+                    <RefreshControl
+                        refreshing={loading}
+                        onRefresh={loadConversations}
+                    />
+                }
+            >
+                {loading && (
+                    <Text className="text-center text-gray-500 mt-6">
+                        Đang tải cuộc trò chuyện...
+                    </Text>
+                )}
                 {filteredConversations.map((conversation) => (
                     <TouchableOpacity
-                        key={conversation.id}
+                        key={conversation.conversationId}
                         onPress={() => {
-                            const route = conversation.isGroup
-                                ? "/message/group-chat/[id]"
-                                : "/message/chat/[id]";
                             router.push({
-                                pathname: route,
+                                pathname: "/message/chat/[id]",
                                 params: {
-                                    id: conversation.id,
-                                    name: conversation.name,
-                                    avatar: conversation.avatarUrl
-                                        ? conversation.avatarUrl
-                                        : conversation.avatar,
+                                    id: conversation.conversationId,
+                                    name:
+                                        conversation.counterpartName ||
+                                        conversation.counterpartId ||
+                                        "Người dùng",
+                                    avatar:
+                                        conversation.counterpartAvatarUrl || "",
                                     from: "message",
                                 },
                             });
                         }}
-                        className="flex-row items-center px-4 py-3 border-b border-gray-100"
+                        className="mx-3 mt-2 flex-row items-center px-3 py-3 rounded-2xl border border-gray-100 bg-white"
                     >
                         {/* Avatar */}
                         <View className="relative">
-                            {conversation.avatarUrl ? (
+                            {conversation.counterpartAvatarUrl ? (
                                 <Image
-                                    source={{ uri: conversation.avatarUrl }}
+                                    source={{
+                                        uri: conversation.counterpartAvatarUrl,
+                                    }}
                                     className="w-12 h-12 rounded-full"
                                 />
                             ) : (
                                 <View
                                     className={`w-12 h-12 rounded-full items-center justify-center ${getAvatarColor(
-                                        conversation.avatar,
+                                        (
+                                            conversation.counterpartName ||
+                                            conversation.counterpartId ||
+                                            "U"
+                                        )
+                                            .slice(0, 2)
+                                            .toUpperCase(),
                                     )}`}
                                 >
                                     <Text className="text-white font-semibold text-base">
-                                        {conversation.avatar}
+                                        {(
+                                            conversation.counterpartName ||
+                                            conversation.counterpartId ||
+                                            "U"
+                                        )
+                                            .slice(0, 2)
+                                            .toUpperCase()}
                                     </Text>
                                 </View>
                             )}
@@ -212,26 +336,41 @@ export default function MessagesScreen() {
                         <View className="flex-1 ml-3">
                             <View className="flex-row items-center justify-between">
                                 <Text className="font-semibold text-gray-900 text-base">
-                                    {conversation.name}
+                                    {conversation.counterpartName ||
+                                        conversation.counterpartId ||
+                                        "Người dùng"}
                                 </Text>
-                                <Text className="text-gray-500 text-xs">
-                                    {conversation.time}
+                                <Text className="text-gray-400 text-xs">
+                                    {formatLastTime(conversation.lastMessageAt)}
                                 </Text>
                             </View>
                             <Text
-                                className="text-gray-600 text-sm mt-1"
+                                className="text-gray-600 text-sm mt-1 pr-2"
                                 numberOfLines={1}
                             >
-                                {conversation.lastMessage}
+                                {formatPreview(conversation)}
                             </Text>
                         </View>
 
                         {/* Unread indicator */}
-                        {conversation.unread && (
-                            <View className="w-2 h-2 bg-red-500 rounded-full ml-2" />
-                        )}
+                        {(conversation.unreadCount || 0) > 0 ? (
+                            <View className="min-w-[20px] h-5 px-1 rounded-full bg-red-500 items-center justify-center ml-2">
+                                <Text className="text-white text-[11px] font-semibold">
+                                    {conversation.unreadCount &&
+                                    conversation.unreadCount > 99
+                                        ? "99+"
+                                        : conversation.unreadCount}
+                                </Text>
+                            </View>
+                        ) : null}
                     </TouchableOpacity>
                 ))}
+
+                {!loading && filteredConversations.length === 0 && (
+                    <Text className="text-center text-gray-500 mt-6">
+                        Chưa có cuộc trò chuyện
+                    </Text>
+                )}
             </ScrollView>
 
             <Modal visible={showMenu} transparent animationType="fade">

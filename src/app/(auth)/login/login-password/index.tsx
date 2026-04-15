@@ -15,7 +15,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import { authenticationApi } from "@/src/api/auth/authenticationApi";
 import { saveAuthData } from "@/src/api/auth/authStorage"; // Bổ sung hàm lưu Token
-import { maskPhone } from "@/src/utils/phone";
+import { maskPhone, normalizePhoneTo84 } from "@/src/utils/phone";
 
 export default function LoginWithPasswordScreen() {
     const router = useRouter();
@@ -34,38 +34,77 @@ export default function LoginWithPasswordScreen() {
 
     const maskedPhone = phone ? maskPhone(String(phone)) : "";
 
+    const extractTokens = (response: any) => {
+        const root = response?.data ?? response;
+        const payload = root?.data ?? root?.result ?? root;
+        const accessToken = payload?.accessToken ?? payload?.access_token;
+        const refreshToken = payload?.refreshToken ?? payload?.refresh_token;
+        return {
+            accessToken: typeof accessToken === "string" ? accessToken : "",
+            refreshToken: typeof refreshToken === "string" ? refreshToken : "",
+        };
+    };
+
     const handleLogin = async () => {
         if (!phone) return;
         setIsSubmitting(true);
         try {
-            console.log("Số điện thoại gửi lên API Login:", String(phone));
+            const rawPhone = String(phone);
+            const normalizedPhone = normalizePhoneTo84(rawPhone);
+            let response: any;
 
-            // SỬA LẠI Ở ĐÂY: Gọi signinVerify (để trỏ đúng vào /auth/signin)
-            // Ép kiểu 'any' phòng trường hợp file types.ts của bạn đang quy định nhầm param otp
-            const response = await authenticationApi.signinVerify({
-                phone: String(phone),
-                password: password,
-            } as any);
+            console.log("Số điện thoại gửi lên API Login:", normalizedPhone);
+
+            try {
+                response = await authenticationApi.signin({
+                    phone: normalizedPhone,
+                    password,
+                });
+            } catch (firstError: any) {
+                if (rawPhone !== normalizedPhone) {
+                    console.warn(
+                        "Login với định dạng +84 thất bại, thử lại với định dạng gốc.",
+                    );
+                    response = await authenticationApi.signin({
+                        phone: rawPhone,
+                        password,
+                    });
+                } else {
+                    throw firstError;
+                }
+            }
 
             console.log("Response từ server:", response);
 
-            // KIỂM TRA VÀ LƯU TOKEN
-            if (response.data && response.data.accessToken) {
-                const { accessToken, refreshToken } = response.data;
-
-                // Lưu token vào máy
-                await saveAuthData(accessToken, refreshToken);
-
-                Alert.alert("Thành công", "Đăng nhập thành công!");
-
-                // VÀO THẲNG APP, BỎ QUA TRANG OTP
-                router.replace("/(tabs)/message" as any);
-            } else {
-                Alert.alert(
-                    "Lỗi",
-                    "Đăng nhập thành công nhưng không nhận được Token.",
+            const responseRoot = response?.data ?? response;
+            if (
+                typeof responseRoot?.status === "number" &&
+                responseRoot.status >= 400
+            ) {
+                throw new Error(
+                    responseRoot?.message ||
+                        "Đăng nhập thất bại do lỗi máy chủ.",
                 );
             }
+
+            const { accessToken, refreshToken } = extractTokens(response);
+
+            // Trường hợp backend trả token trực tiếp sau khi nhập password
+            if (accessToken && refreshToken) {
+                await saveAuthData(accessToken, refreshToken);
+                Alert.alert("Thành công", "Đăng nhập thành công!");
+                router.replace("/(tabs)/message" as any);
+                return;
+            }
+
+            // Trường hợp backend yêu cầu xác thực OTP tiếp theo
+            router.push({
+                pathname: "/login/verify" as any,
+                params: {
+                    phone: normalizedPhone,
+                    password,
+                },
+            });
         } catch (error: any) {
             console.error(
                 "Chi tiết lỗi API:",

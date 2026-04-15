@@ -1,23 +1,58 @@
 // api/auth/authStorage.ts
-import * as SecureStore from "expo-secure-store";
+import storage from "./storage";
 
 export const saveAuthData = async (
     accessToken: string,
     refreshToken: string,
 ) => {
     try {
-        await SecureStore.setItemAsync("accessToken", accessToken);
-        await SecureStore.setItemAsync("refreshToken", refreshToken);
-        // Xoá dòng lưu userId đi
+        console.log("[AuthStorage] Saving auth data");
+        await storage.setItem("accessToken", accessToken);
+        await storage.setItem("refreshToken", refreshToken);
+        console.log("[AuthStorage] Auth data saved successfully");
     } catch (error) {
-        console.error("Lỗi lưu SecureStore:", error);
+        console.error("[AuthStorage] Error saving auth data:", error);
+        throw error;
     }
 };
 
-export const getAccessToken = () => SecureStore.getItemAsync("accessToken");
-export const getRefreshToken = () => SecureStore.getItemAsync("refreshToken");
+export const getAccessToken = async (): Promise<string | null> => {
+    try {
+        console.log("[AuthStorage] Getting access token");
+        const token = await storage.getItem("accessToken");
+        console.log(
+            "[AuthStorage] Access token retrieved:",
+            token ? "exists" : "null",
+        );
+        return token;
+    } catch (error) {
+        console.error("[AuthStorage] Error getting access token:", error);
+        return null;
+    }
+};
+
+export const getRefreshToken = async (): Promise<string | null> => {
+    try {
+        console.log("[AuthStorage] Getting refresh token");
+        const token = await storage.getItem("refreshToken");
+        console.log(
+            "[AuthStorage] Refresh token retrieved:",
+            token ? "exists" : "null",
+        );
+        return token;
+    } catch (error) {
+        console.error("[AuthStorage] Error getting refresh token:", error);
+        return null;
+    }
+};
 
 export const clearAuthData = async () => {
-    await SecureStore.deleteItemAsync("accessToken");
-    await SecureStore.deleteItemAsync("refreshToken");
+    try {
+        console.log("[AuthStorage] Clearing auth data");
+        await storage.removeItem("accessToken");
+        await storage.removeItem("refreshToken");
+        console.log("[AuthStorage] Auth data cleared");
+    } catch (error) {
+        console.error("[AuthStorage] Error clearing auth data:", error);
+    }
 };

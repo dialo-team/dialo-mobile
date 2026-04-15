@@ -28,7 +28,12 @@ apiClient.interceptors.request.use(
 
         if (!isPublic) {
             try {
-                const token = await getAccessToken();
+                const token = await Promise.race([
+                    getAccessToken(),
+                    new Promise<string | null>((resolve) =>
+                        setTimeout(() => resolve(null), 5000),
+                    ),
+                ]);
                 if (token) {
                     config.headers.Authorization = `Bearer ${token}`;
                 }

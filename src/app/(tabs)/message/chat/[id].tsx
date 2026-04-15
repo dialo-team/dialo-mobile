@@ -1,25 +1,23 @@
-import { Video as AVVideo, ResizeMode } from "expo-av"; // <-- THÊM THƯ VIỆN VIDEO CỦA EXPO
+import { chatApi, chatAuthUtils } from "@/src/api/chat/chatApi";
+import { useChatRealtime } from "@/src/hooks/useChatRealtime";
+import { Video as AVVideo, ResizeMode } from "expo-av";
 import * as ImagePicker from "expo-image-picker";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import {
     CornerUpLeft,
-    Ellipsis,
-    FolderDown, // <-- THÊM ICON LIKE
-    Heart,
-    Image, // <-- THÊM ICON LOVE
-    Laugh, // <-- THÊM ICON EMOTION
+    Image,
     MoreHorizontal,
     MoveLeft,
+    Paperclip,
     Phone,
-    RotateCcw,
+    Search,
     Send,
-    Smile, // Icon Video từ lucide
-    ThumbsUp,
     Trash2,
     Video,
 } from "lucide-react-native";
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
+    ActivityIndicator,
     Alert,
     KeyboardAvoidingView,
     Modal,
@@ -34,10 +32,18 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+const CHAT_BASE_URL = "http://14.225.254.174:8085";
+
 function paramStr(v: string | string[] | undefined): string | undefined {
     if (typeof v === "string") return v;
     if (Array.isArray(v) && v[0] != null) return v[0];
     return undefined;
+}
+
+function resolveFileUrl(fileUrl?: string) {
+    if (!fileUrl) return "";
+    if (/^https?:\/\//i.test(fileUrl)) return fileUrl;
+    return `${CHAT_BASE_URL}${fileUrl.startsWith("/") ? "" : "/"}${fileUrl}`;
 }
 
 export default function ChatScreen() {
@@ -48,159 +54,403 @@ export default function ChatScreen() {
         avatar?: string | string[];
         from?: string | string[];
     }>();
+
     const id = paramStr(params.id);
     const name = paramStr(params.name);
     const avatar = paramStr(params.avatar);
     const from = paramStr(params.from);
+
+    const [loading, setLoading] = useState(false);
+    const [currentUserId, setCurrentUserId] = useState("");
+    const [messages, setMessages] = useState<any[]>([]);
+    const [message, setMessage] = useState("");
+    const [remarkInput, setRemarkInput] = useState("");
+    const [searchKeyword, setSearchKeyword] = useState("");
+    const [searchResults, setSearchResults] = useState<any[]>([]);
+    const [mediaItems, setMediaItems] = useState<any[]>([]);
+    const [forwardTargetConversationId, setForwardTargetConversationId] =
+        useState("");
+    const [showManageSheet, setShowManageSheet] = useState(false);
+    const [showSearchSheet, setShowSearchSheet] = useState(false);
+    const [showMediaSheet, setShowMediaSheet] = useState(false);
+    const [searchLoading, setSearchLoading] = useState(false);
+    const [mediaLoading, setMediaLoading] = useState(false);
+
+    const [selectedMessage, setSelectedMessage] = useState<any>(null);
+    const [viewingMediaMessage, setViewingMediaMessage] = useState<any>(null);
+
     const avatarUrl =
         typeof avatar === "string" &&
         (avatar.startsWith("http://") || avatar.startsWith("https://"))
             ? avatar
             : null;
-    const [isFocused, setIsFocused] = useState(false);
-    const [message, setMessage] = useState("");
 
-    // State quản lý Emoji Menu
-    const [showEmojiMenu, setShowEmojiMenu] = useState(false);
+    const normalizedConversationId = id || "";
 
-    // State quản lý tin nhắn đang được nhấn giữ để hiện Modal Action Menu
-    const [selectedMessage, setSelectedMessage] = useState(null);
+    const mapApiMessageToUi = useCallback(
+        (item: any) => {
+            const mineBySender =
+                !!item?.senderId &&
+                !!currentUserId &&
+                item.senderId === currentUserId;
+            const mineByPosition = item?.displayPosition === "RIGHT";
+            const isMe = mineBySender || mineByPosition;
 
-    // State quản lý tin nhắn hình ảnh/video đang được xem phóng to
-    const [viewingMediaMessage, setViewingMediaMessage] = useState(null);
+            const fileUrl = item?.attachment?.fileUrl;
+            const type = item?.type || "TEXT";
 
-    const [showHeader, setShowHeader] = useState(true);
-    const [messages, setMessages] = useState([
-        {
-            id: 1,
-            text: "Hello bạn",
-            type: "left",
-            time: "11:30",
-            isUnsent: false,
+            return {
+                id: item?.id,
+                text: item?.content || "",
+                type: isMe ? "right" : "left",
+                time: item?.createdAt
+                    ? new Date(item.createdAt).toLocaleTimeString("vi-VN", {
+                          hour: "2-digit",
+                          minute: "2-digit",
+                      })
+                    : "",
+                senderName: item?.senderName || "",
+                imageUri:
+                    type === "IMAGE" && fileUrl
+                        ? resolveFileUrl(fileUrl)
+                        : null,
+                videoUri:
+                    type === "VIDEO" && fileUrl
+                        ? resolveFileUrl(fileUrl)
+                        : null,
+                system: !!item?.system,
+                pending: false,
+                raw: item,
+            };
         },
-        {
-            id: 2,
-            text: "Lâu rùi hỏng gặp",
-            type: "right",
-            time: "11:32",
-            isUnsent: false,
+        [currentUserId],
+    );
+
+    const mergeIncomingMessage = useCallback(
+        (incomingMessage: any) => {
+            try {
+                if (!incomingMessage?.id) {
+                    console.warn("[ChatScreen] Incoming message has no ID");
+                    return;
+                }
+
+                const mapped = mapApiMessageToUi(incomingMessage);
+                const mappedId = mapped?.id || mapped?.raw?.id;
+
+                console.log("[ChatScreen] Merging incoming message:", mappedId);
+                if (!mappedId) return;
+
+                setMessages((prev) => {
+                    const index = prev.findIndex(
+                        (item) => (item?.id || item?.raw?.id) === mappedId,
+                    );
+                    if (index === -1) {
+                        console.log(
+                            "[ChatScreen] Message not found, appending",
+                        );
+                        return [...prev, mapped];
+                    }
+
+                    console.log("[ChatScreen] Message found at index", index);
+                    const next = [...prev];
+                    next[index] = {
+                        ...next[index],
+                        ...mapped,
+                        pending: false,
+                    };
+                    return next;
+                });
+            } catch (error) {
+                console.error(
+                    "[ChatScreen] mergeIncomingMessage error:",
+                    error,
+                );
+            }
         },
-        {
-            id: 3,
-            text: "dạo này khoẻ hong",
-            type: "left",
-            time: "11:33",
-            isUnsent: false,
-        },
-    ]);
+        [mapApiMessageToUi],
+    );
 
-    const handleSend = () => {
-        if (message.trim() === "") return;
-
-        const newMessage = {
-            id: Date.now(),
-            text: message,
-            type: "right",
-            time: new Date().toLocaleTimeString([], {
-                hour: "2-digit",
-                minute: "2-digit",
-            }),
-        };
-
-        setMessages([...messages, newMessage]);
-        setMessage("");
-    };
-
-    // Hàm xử lý chọn emoji
-    const handleEmojiSelect = (emojiText: string) => {
-        setMessage((prev) => prev + emojiText);
-        setShowEmojiMenu(false);
-    };
-
-    // Hàm xử lý chọn ảnh/video từ máy
-    const handlePickMedia = async () => {
-        const permissionResult =
-            await ImagePicker.requestMediaLibraryPermissionsAsync();
-
-        if (permissionResult.granted === false) {
-            Alert.alert(
-                "Cần cấp quyền",
-                "Bạn cần cho phép ứng dụng truy cập thư viện ảnh để có thể gửi hình/video.",
-                [{ text: "Đã hiểu" }],
-            );
+    const loadConversationDetail = useCallback(async () => {
+        if (!normalizedConversationId) {
+            console.warn("[ChatScreen] No conversationId provided");
             return;
         }
 
-        let result = await ImagePicker.launchImageLibraryAsync({
+        setLoading(true);
+        try {
+            console.log(
+                "[ChatScreen] Loading conversation detail:",
+                normalizedConversationId,
+            );
+            const detail = await chatApi.getConversationDetail(
+                normalizedConversationId,
+            );
+            const mapped = Array.isArray(detail?.messages)
+                ? detail.messages.map(mapApiMessageToUi)
+                : [];
+            console.log("[ChatScreen] Loaded messages:", mapped.length);
+            setMessages(mapped);
+            setRemarkInput(detail?.remarkName || "");
+
+            await chatApi.markRead(normalizedConversationId);
+            console.log("[ChatScreen] Marked as read");
+        } catch (error: any) {
+            console.error(
+                "[ChatScreen] loadConversationDetail error:",
+                error?.message,
+            );
+            const errorMsg = error?.message || "Không thể tải cuộc trò chuyện.";
+            Alert.alert("Lỗi", errorMsg);
+        } finally {
+            setLoading(false);
+        }
+    }, [mapApiMessageToUi, normalizedConversationId]);
+
+    useEffect(() => {
+        (async () => {
+            try {
+                const sub = await chatAuthUtils.getCurrentUserId();
+                if (sub) {
+                    setCurrentUserId(sub);
+                }
+            } catch (error) {
+                console.error("Error getting current user ID:", error);
+                setCurrentUserId("");
+            }
+        })();
+    }, []);
+
+    useEffect(() => {
+        loadConversationDetail();
+    }, [loadConversationDetail]);
+
+    const { connected } = useChatRealtime({
+        currentUserId,
+        conversationId: normalizedConversationId,
+        onConversationMessage: (payload) => {
+            const incoming = payload?.data || payload?.message || payload;
+            if (!incoming?.id) {
+                loadConversationDetail();
+                return;
+            }
+            mergeIncomingMessage(incoming);
+        },
+    });
+
+    const handleSend = async () => {
+        const content = message.trim();
+        if (!normalizedConversationId || !content) {
+            console.warn(
+                "[ChatScreen] Cannot send: conversationId or content missing",
+            );
+            return;
+        }
+        console.log("[ChatScreen] Sending message:", content.substring(0, 50));
+
+        const optimisticId = `tmp-${Date.now()}`;
+        const now = new Date();
+
+        const optimisticMessage = {
+            id: optimisticId,
+            text: content,
+            type: "right",
+            time: now.toLocaleTimeString("vi-VN", {
+                hour: "2-digit",
+                minute: "2-digit",
+            }),
+            senderName: "",
+            imageUri: null,
+            videoUri: null,
+            system: false,
+            pending: true,
+            raw: {
+                id: optimisticId,
+                content,
+                type: "TEXT",
+                senderId: currentUserId,
+                displayPosition: "RIGHT",
+                createdAt: now.toISOString(),
+            },
+        };
+
+        setMessages((prev) => [...prev, optimisticMessage]);
+        setMessage("");
+
+        try {
+            const sent = await chatApi.sendMessage({
+                conversationId: normalizedConversationId,
+                type: "TEXT",
+                content,
+            });
+
+            if (sent && typeof sent === "object" && "id" in sent) {
+                const serverMessage = mapApiMessageToUi(sent);
+                setMessages((prev) =>
+                    prev.map((item) =>
+                        item.id === optimisticId
+                            ? {
+                                  ...serverMessage,
+                                  pending: false,
+                              }
+                            : item,
+                    ),
+                );
+                return;
+            }
+
+            setMessages((prev) =>
+                prev.map((item) =>
+                    item.id === optimisticId
+                        ? {
+                              ...item,
+                              pending: false,
+                          }
+                        : item,
+                ),
+            );
+        } catch (error: any) {
+            console.error("[ChatScreen] sendMessage error:", error);
+            setMessages((prev) =>
+                prev.filter((item) => item.id !== optimisticId),
+            );
+            setMessage(content);
+            const errorMsg = error?.message || "Không thể gửi tin nhắn";
+            Alert.alert("Lỗi", errorMsg);
+        }
+    };
+
+    const handlePickMedia = async () => {
+        if (!normalizedConversationId) return;
+
+        const permissionResult =
+            await ImagePicker.requestMediaLibraryPermissionsAsync();
+        if (!permissionResult.granted) {
+            Alert.alert("Cần quyền", "Vui lòng cấp quyền thư viện ảnh.");
+            return;
+        }
+
+        const result = await ImagePicker.launchImageLibraryAsync({
             mediaTypes: ["images", "videos"],
             allowsEditing: true,
             quality: 1,
         });
 
-        if (!result.canceled) {
-            const asset = result.assets[0];
-            const isVideo = asset.type === "video"; // Kiểm tra xem file là video hay ảnh
+        if (result.canceled) return;
 
-            const newMediaMessage = {
-                id: Date.now(),
-                text: "",
-                imageUri: !isVideo ? asset.uri : null, // Lưu ảnh
-                videoUri: isVideo ? asset.uri : null, // Lưu video
-                type: "right",
-                time: new Date().toLocaleTimeString([], {
-                    hour: "2-digit",
-                    minute: "2-digit",
-                }),
-            };
-            setMessages([...messages, newMediaMessage]);
+        const asset = result.assets[0];
+        const isVideo = asset.type === "video";
+
+        try {
+            await chatApi.sendFileMessage(normalizedConversationId, {
+                uri: asset.uri,
+                name: asset.fileName || `upload-${Date.now()}`,
+                type: asset.mimeType || (isVideo ? "video/mp4" : "image/jpeg"),
+            });
+            await loadConversationDetail();
+        } catch (error: any) {
+            Alert.alert("Lỗi", error?.message || "Không thể gửi file/media");
         }
     };
 
-    // Danh sách menu action
-    const actionMenuItems = [
-        { id: 1, icon: CornerUpLeft, label: "Trả lời", color: "#8b5cf6" },
-        {
-            id: 2,
-            icon: FolderDown,
-            label: "Lưu My\nDocuments",
-            color: "#0ea5e9",
-        },
-        { id: 3, icon: RotateCcw, label: "Thu hồi", color: "#f97316" },
-        { id: 4, icon: Trash2, label: "Xóa", color: "#ef4444" },
-    ];
-
-    const handleUnsendMessage = () => {
-        if (selectedMessage) {
-            const updatedMessages = messages.map((msg) =>
-                msg.id === (selectedMessage as any).id
-                    ? {
-                          ...msg,
-                          text: "Tin nhắn đã được thu hồi",
-                          imageUri: null,
-                          videoUri: null, // Thu hồi thì xóa luôn data video
-                          isUnsent: true,
-                      }
-                    : msg,
-            );
-            setMessages(updatedMessages);
+    const handleUnsendMessage = async () => {
+        if (!selectedMessage?.id) return;
+        try {
+            await chatApi.revokeMessage(selectedMessage.id);
             setSelectedMessage(null);
+            await loadConversationDetail();
+        } catch (error: any) {
+            Alert.alert("Lỗi", error?.message || "Không thể thu hồi tin nhắn");
+        }
+    };
+
+    const handleDeleteMessage = async () => {
+        if (!selectedMessage?.id) return;
+        try {
+            await chatApi.deleteMessage(selectedMessage.id);
+            setSelectedMessage(null);
+            await loadConversationDetail();
+        } catch (error: any) {
+            Alert.alert("Lỗi", error?.message || "Không thể xóa tin nhắn");
+        }
+    };
+
+    const handleForwardMessage = async () => {
+        if (!selectedMessage?.id) return;
+        if (!forwardTargetConversationId.trim()) {
+            Alert.alert("Thiếu thông tin", "Nhập conversationId đích trước");
+            return;
+        }
+
+        try {
+            await chatApi.forwardMessage({
+                sourceMessageId: selectedMessage.id,
+                targetConversationId: forwardTargetConversationId.trim(),
+            });
+            Alert.alert("Thành công", "Đã chuyển tiếp tin nhắn");
+            setSelectedMessage(null);
+        } catch (error: any) {
+            Alert.alert(
+                "Lỗi",
+                error?.message || "Không thể chuyển tiếp tin nhắn",
+            );
+        }
+    };
+
+    const handleUpdateRemark = async () => {
+        if (!normalizedConversationId) return;
+        try {
+            await chatApi.updateRemark(normalizedConversationId, remarkInput);
+            Alert.alert("Thành công", "Đã cập nhật remark");
+        } catch (error: any) {
+            Alert.alert("Lỗi", error?.message || "Không thể cập nhật remark");
+        }
+    };
+
+    const handleClearHistory = async () => {
+        if (!normalizedConversationId) return;
+        try {
+            await chatApi.clearHistory(normalizedConversationId);
+            await loadConversationDetail();
+            Alert.alert("Thành công", "Đã clear history");
+        } catch (error: any) {
+            Alert.alert("Lỗi", error?.message || "Không thể clear history");
+        }
+    };
+
+    const handleSearchMessages = async () => {
+        if (!normalizedConversationId || !searchKeyword.trim()) return;
+        setSearchLoading(true);
+        try {
+            const result = await chatApi.searchInConversation(
+                normalizedConversationId,
+                searchKeyword,
+            );
+            setSearchResults(Array.isArray(result) ? result : []);
+        } catch (error: any) {
+            Alert.alert("Lỗi", error?.message || "Không thể tìm kiếm tin nhắn");
+        } finally {
+            setSearchLoading(false);
+        }
+    };
+
+    const handleLoadMedia = async () => {
+        if (!normalizedConversationId) return;
+        setMediaLoading(true);
+        try {
+            const result = await chatApi.getConversationMedia(
+                normalizedConversationId,
+            );
+            setMediaItems(Array.isArray(result) ? result : []);
+        } catch (error: any) {
+            Alert.alert("Lỗi", error?.message || "Không thể tải media");
+        } finally {
+            setMediaLoading(false);
         }
     };
 
     const handleHeaderBack = () => {
         if (from === "contact") {
             router.replace("/(tabs)/contact" as any);
-            return;
-        }
-        if (from === "friend" && id) {
-            router.replace({
-                pathname: "/(tabs)/contact/friend/[id]" as any,
-                params: {
-                    id,
-                    ...(name != null ? { name } : {}),
-                    ...(avatar != null ? { avatar } : {}),
-                },
-            });
             return;
         }
         if (router.canGoBack()) {
@@ -217,7 +467,6 @@ export default function ChatScreen() {
                 behavior={Platform.OS === "ios" ? "padding" : "height"}
                 keyboardVerticalOffset={Platform.OS === "android" ? 20 : 0}
             >
-                {/* HEADER */}
                 <View className="bg-blue-600 flex-row items-center px-4 py-4 justify-between">
                     <View className="flex-row items-center">
                         <TouchableOpacity onPress={handleHeaderBack}>
@@ -226,11 +475,18 @@ export default function ChatScreen() {
 
                         <View className="ml-3">
                             <Text className="text-white font-semibold text-[16px]">
-                                {name}
+                                {name || "Trò chuyện"}
                             </Text>
-                            <Text className="text-white text-[12px] opacity-80">
-                                Truy cập 4 giờ trước
-                            </Text>
+                            <View className="flex-row items-center">
+                                <Text className="text-white text-[12px] opacity-80">
+                                    {normalizedConversationId}
+                                </Text>
+                                <Text className="text-white text-[12px] opacity-80 ml-2">
+                                    {connected
+                                        ? "• realtime on"
+                                        : "• realtime off"}
+                                </Text>
+                            </View>
                         </View>
                     </View>
 
@@ -243,59 +499,145 @@ export default function ChatScreen() {
                         </TouchableOpacity>
                         <TouchableOpacity
                             style={{ marginLeft: 10 }}
-                            onPress={() =>
-                                router.push({
-                                    pathname:
-                                        "/(tabs)/message/option/account-option",
-                                    params: { id, name, avatar },
-                                })
-                            }
+                            onPress={() => setShowManageSheet(true)}
                         >
                             <MoreHorizontal size={24} color="white" />
                         </TouchableOpacity>
                     </View>
                 </View>
 
-                {/* CHAT BODY */}
                 <ScrollView
                     className="flex-1 px-3 pt-4"
                     showsVerticalScrollIndicator={false}
                 >
-                    {messages.map((msg) => {
-                        if (msg.type === "left") {
-                            return (
-                                <View key={msg.id} className="flex-row mb-3">
-                                    {avatarUrl ? (
-                                        <RNImage
-                                            source={{ uri: avatarUrl }}
-                                            className="w-8 h-8 rounded-full mr-2"
-                                        />
-                                    ) : (
-                                        <View className="w-8 h-8 rounded-full bg-blue-500 mr-2 items-center justify-center">
-                                            <Text className="text-white text-xs font-semibold">
-                                                {typeof avatar === "string"
-                                                    ? avatar
-                                                          .slice(0, 2)
-                                                          .toUpperCase()
-                                                    : "?"}
-                                            </Text>
-                                        </View>
-                                    )}
+                    {loading && (
+                        <View className="py-8 items-center justify-center">
+                            <ActivityIndicator size="small" color="#2563eb" />
+                        </View>
+                    )}
 
+                    {!loading &&
+                        messages.map((msg) => {
+                            if (msg.type === "left") {
+                                return (
+                                    <View
+                                        key={msg.id}
+                                        className="flex-row mb-3"
+                                    >
+                                        {avatarUrl ? (
+                                            <RNImage
+                                                source={{ uri: avatarUrl }}
+                                                className="w-8 h-8 rounded-full mr-2"
+                                            />
+                                        ) : (
+                                            <View className="w-8 h-8 rounded-full bg-blue-500 mr-2 items-center justify-center">
+                                                <Text className="text-white text-xs font-semibold">
+                                                    {typeof avatar === "string"
+                                                        ? avatar
+                                                              .slice(0, 2)
+                                                              .toUpperCase()
+                                                        : "?"}
+                                                </Text>
+                                            </View>
+                                        )}
+
+                                        <TouchableOpacity
+                                            activeOpacity={0.8}
+                                            onPress={() => {
+                                                if (
+                                                    msg.imageUri ||
+                                                    msg.videoUri
+                                                ) {
+                                                    setViewingMediaMessage(msg);
+                                                }
+                                            }}
+                                            onLongPress={() => {
+                                                if (!msg.system) {
+                                                    setSelectedMessage(
+                                                        msg.raw || msg,
+                                                    );
+                                                }
+                                            }}
+                                            className="bg-white px-4 py-2 rounded-2xl max-w-[70%]"
+                                        >
+                                            {msg.videoUri ? (
+                                                <View
+                                                    style={{
+                                                        width: 150,
+                                                        height: 150,
+                                                        borderRadius: 10,
+                                                        marginBottom: 4,
+                                                        overflow: "hidden",
+                                                        backgroundColor:
+                                                            "black",
+                                                    }}
+                                                >
+                                                    <AVVideo
+                                                        source={{
+                                                            uri: msg.videoUri,
+                                                        }}
+                                                        style={{
+                                                            width: "100%",
+                                                            height: "100%",
+                                                        }}
+                                                        resizeMode={
+                                                            ResizeMode.COVER
+                                                        }
+                                                        shouldPlay={false}
+                                                    />
+                                                </View>
+                                            ) : msg.imageUri ? (
+                                                <RNImage
+                                                    source={{
+                                                        uri: msg.imageUri,
+                                                    }}
+                                                    style={{
+                                                        width: 150,
+                                                        height: 150,
+                                                        borderRadius: 10,
+                                                        marginBottom: 4,
+                                                    }}
+                                                    resizeMode="cover"
+                                                />
+                                            ) : null}
+
+                                            {msg.text !== "" && (
+                                                <Text className="text-[15px] text-black">
+                                                    {msg.text}
+                                                </Text>
+                                            )}
+
+                                            <Text className="text-gray-500 text-[11px] mt-1">
+                                                {msg.time}
+                                            </Text>
+                                        </TouchableOpacity>
+                                    </View>
+                                );
+                            }
+
+                            return (
+                                <View
+                                    key={msg.id}
+                                    className="flex-row justify-end mb-3"
+                                >
                                     <TouchableOpacity
                                         activeOpacity={0.8}
                                         onPress={() => {
-                                            if (msg.imageUri || msg.videoUri)
-                                                setViewingMediaMessage(
-                                                    msg as any,
-                                                );
+                                            if (msg.imageUri || msg.videoUri) {
+                                                setViewingMediaMessage(msg);
+                                            }
                                         }}
-                                        onLongPress={() =>
-                                            setSelectedMessage(msg as any)
-                                        }
-                                        className="bg-white px-4 py-2 rounded-2xl max-w-[70%]"
+                                        onLongPress={() => {
+                                            if (!msg.system) {
+                                                setSelectedMessage(
+                                                    msg.raw || msg,
+                                                );
+                                            }
+                                        }}
+                                        className={`bg-blue-600 px-4 py-2 rounded-2xl max-w-[70%] ${
+                                            msg.pending ? "opacity-70" : ""
+                                        }`}
                                     >
-                                        {/* HIỂN THỊ ẢNH HOẶC VIDEO */}
                                         {msg.videoUri ? (
                                             <View
                                                 style={{
@@ -318,32 +660,8 @@ export default function ChatScreen() {
                                                     resizeMode={
                                                         ResizeMode.COVER
                                                     }
-                                                    shouldPlay={false} // Không tự phát trong bong bóng chat
+                                                    shouldPlay={false}
                                                 />
-                                                {/* Nút Play đè lên video */}
-                                                <View
-                                                    style={{
-                                                        position: "absolute",
-                                                        top: 0,
-                                                        left: 0,
-                                                        right: 0,
-                                                        bottom: 0,
-                                                        justifyContent:
-                                                            "center",
-                                                        alignItems: "center",
-                                                        backgroundColor:
-                                                            "rgba(0,0,0,0.3)",
-                                                    }}
-                                                >
-                                                    <Text
-                                                        style={{
-                                                            color: "white",
-                                                            fontSize: 30,
-                                                        }}
-                                                    >
-                                                        ▶
-                                                    </Text>
-                                                </View>
                                             </View>
                                         ) : msg.imageUri ? (
                                             <RNImage
@@ -359,404 +677,365 @@ export default function ChatScreen() {
                                         ) : null}
 
                                         {msg.text !== "" && (
-                                            <Text
-                                                className={`text-[15px] ${msg.isUnsent ? "text-gray-400 italic" : "text-black"}`}
-                                            >
+                                            <Text className="text-[15px] text-white">
                                                 {msg.text}
                                             </Text>
                                         )}
-                                        {!msg.isUnsent && (
-                                            <Text className="text-gray-500 text-[11px] mt-1">
-                                                {msg.time}
-                                            </Text>
-                                        )}
+
+                                        <Text className="text-blue-100 text-[11px] mt-1 text-right">
+                                            {msg.pending
+                                                ? `${msg.time} • đang gửi...`
+                                                : msg.time}
+                                        </Text>
                                     </TouchableOpacity>
                                 </View>
                             );
-                        }
-
-                        return (
-                            <View
-                                key={msg.id}
-                                className="flex-row justify-end mb-3"
-                            >
-                                <TouchableOpacity
-                                    activeOpacity={0.8}
-                                    onPress={() => {
-                                        if (msg.imageUri || msg.videoUri)
-                                            setViewingMediaMessage(msg as any);
-                                    }}
-                                    onLongPress={() =>
-                                        setSelectedMessage(msg as any)
-                                    }
-                                    className="bg-[#cde7f4] px-4 py-2 rounded-2xl max-w-[70%]"
-                                >
-                                    {/* HIỂN THỊ ẢNH HOẶC VIDEO */}
-                                    {msg.videoUri ? (
-                                        <View
-                                            style={{
-                                                width: 150,
-                                                height: 150,
-                                                borderRadius: 10,
-                                                marginBottom: 4,
-                                                overflow: "hidden",
-                                                backgroundColor: "black",
-                                            }}
-                                        >
-                                            <AVVideo
-                                                source={{ uri: msg.videoUri }}
-                                                style={{
-                                                    width: "100%",
-                                                    height: "100%",
-                                                }}
-                                                resizeMode={ResizeMode.COVER}
-                                                shouldPlay={false} // Không tự phát trong bong bóng chat
-                                            />
-                                            {/* Nút Play đè lên video */}
-                                            <View
-                                                style={{
-                                                    position: "absolute",
-                                                    top: 0,
-                                                    left: 0,
-                                                    right: 0,
-                                                    bottom: 0,
-                                                    justifyContent: "center",
-                                                    alignItems: "center",
-                                                    backgroundColor:
-                                                        "rgba(0,0,0,0.3)",
-                                                }}
-                                            >
-                                                <Text
-                                                    style={{
-                                                        color: "white",
-                                                        fontSize: 30,
-                                                    }}
-                                                >
-                                                    ▶
-                                                </Text>
-                                            </View>
-                                        </View>
-                                    ) : msg.imageUri ? (
-                                        <RNImage
-                                            source={{ uri: msg.imageUri }}
-                                            style={{
-                                                width: 150,
-                                                height: 150,
-                                                borderRadius: 10,
-                                                marginBottom: 4,
-                                            }}
-                                            resizeMode="cover"
-                                        />
-                                    ) : null}
-
-                                    {msg.text !== "" && (
-                                        <Text
-                                            className={`text-[15px] ${msg.isUnsent ? "text-gray-400 italic" : "text-black"}`}
-                                        >
-                                            {msg.text}
-                                        </Text>
-                                    )}
-                                    {!msg.isUnsent && (
-                                        <Text className="text-gray-500 text-[11px] mt-1 text-right">
-                                            {msg.time}
-                                        </Text>
-                                    )}
-                                </TouchableOpacity>
-                            </View>
-                        );
-                    })}
-                    <View className="h-6" />
+                        })}
                 </ScrollView>
 
-                {/* INPUT BAR */}
-                <View className="bg-white border-t border-gray-200 px-3 py-2 flex-row items-center">
-                    {/* BỌC NÚT SMILE TRONG VIEW RELATIVE ĐỂ HIỂN THỊ EMOJI MENU */}
-                    <View className="relative z-50">
-                        {showEmojiMenu && (
-                            <View
-                                className="absolute bottom-12 -left-2 bg-white rounded-full shadow-lg border border-gray-200 flex-row px-3 py-2 items-center"
-                                style={{ elevation: 5 }}
-                            >
-                                <TouchableOpacity
-                                    onPress={() => handleEmojiSelect("👍")}
-                                    className="mx-2"
-                                >
-                                    <ThumbsUp size={24} color="#0084ff" />
-                                </TouchableOpacity>
-                                <TouchableOpacity
-                                    onPress={() => handleEmojiSelect("❤️")}
-                                    className="mx-2"
-                                >
-                                    <Heart size={24} color="#ff2d55" />
-                                </TouchableOpacity>
-                                <TouchableOpacity
-                                    onPress={() => handleEmojiSelect("😂")}
-                                    className="mx-2"
-                                >
-                                    <Laugh size={24} color="#f5b027" />
-                                </TouchableOpacity>
-                            </View>
-                        )}
+                <View className="bg-white px-3 py-2 border-t border-gray-200">
+                    <View className="flex-row items-center">
                         <TouchableOpacity
+                            onPress={handlePickMedia}
                             className="mr-2"
-                            onPress={() => setShowEmojiMenu(!showEmojiMenu)}
                         >
-                            <Smile size={26} color="#666" />
+                            <Paperclip size={22} color="#6b7280" />
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                            onPress={() => setShowSearchSheet(true)}
+                            className="mr-2"
+                        >
+                            <Search size={22} color="#6b7280" />
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                            onPress={() => {
+                                setShowMediaSheet(true);
+                                handleLoadMedia();
+                            }}
+                            className="mr-2"
+                        >
+                            <Image size={22} color="#6b7280" />
+                        </TouchableOpacity>
+                        <TextInput
+                            className="flex-1 bg-gray-100 rounded-full px-4 py-2 text-[15px]"
+                            placeholder="Nhập tin nhắn"
+                            value={message}
+                            onChangeText={setMessage}
+                        />
+                        <TouchableOpacity
+                            onPress={handleSend}
+                            className="ml-2 bg-blue-600 rounded-full p-2"
+                        >
+                            <Send size={18} color="white" />
                         </TouchableOpacity>
                     </View>
-
-                    <TextInput
-                        placeholder="Tin nhắn"
-                        value={message}
-                        onChangeText={setMessage}
-                        onFocus={() => {
-                            setIsFocused(true);
-                            setShowEmojiMenu(false);
-                        }}
-                        onBlur={() => setIsFocused(false)}
-                        className="flex-1 bg-gray-100 px-4 py-2 rounded-full text-[15px]"
-                    />
-                    {!isFocused && (
-                        <>
-                            <TouchableOpacity className="ml-2">
-                                <Ellipsis size={26} color="#666" />
-                            </TouchableOpacity>
-
-                            <TouchableOpacity
-                                className="ml-2"
-                                onPress={handlePickMedia}
-                            >
-                                <Image size={26} color="#666" />
-                            </TouchableOpacity>
-                        </>
-                    )}
-
-                    {isFocused && (
-                        <TouchableOpacity className="ml-2" onPress={handleSend}>
-                            <Send size={26} color="#666" />
-                        </TouchableOpacity>
-                    )}
                 </View>
             </KeyboardAvoidingView>
 
-            {/* MODAL MENU KHI NHẤN GIỮ TIN NHẮN */}
             <Modal
                 visible={!!selectedMessage}
-                transparent={true}
+                transparent
                 animationType="fade"
                 onRequestClose={() => setSelectedMessage(null)}
             >
                 <TouchableWithoutFeedback
                     onPress={() => setSelectedMessage(null)}
                 >
-                    <View className="flex-1 bg-black/80 justify-center px-4">
+                    <View className="flex-1 bg-black/40 justify-end px-4 pb-10">
+                        <View className="bg-white rounded-2xl p-4">
+                            <TextInput
+                                className="border border-gray-200 rounded-xl px-3 py-2 text-sm mb-2"
+                                placeholder="Forward target conversationId"
+                                value={forwardTargetConversationId}
+                                onChangeText={setForwardTargetConversationId}
+                            />
+
+                            <TouchableOpacity
+                                className="py-3 flex-row items-center"
+                                onPress={handleUnsendMessage}
+                            >
+                                <Image size={18} color="#f97316" />
+                                <Text className="ml-2 text-sm text-gray-700">
+                                    Thu hồi
+                                </Text>
+                            </TouchableOpacity>
+
+                            <TouchableOpacity
+                                className="py-3 flex-row items-center"
+                                onPress={handleDeleteMessage}
+                            >
+                                <Trash2 size={18} color="#ef4444" />
+                                <Text className="ml-2 text-sm text-red-500">
+                                    Xóa phía mình
+                                </Text>
+                            </TouchableOpacity>
+
+                            <TouchableOpacity
+                                className="py-3 flex-row items-center"
+                                onPress={handleForwardMessage}
+                            >
+                                <CornerUpLeft size={18} color="#374151" />
+                                <Text className="ml-2 text-sm text-gray-700">
+                                    Forward
+                                </Text>
+                            </TouchableOpacity>
+                        </View>
+                    </View>
+                </TouchableWithoutFeedback>
+            </Modal>
+
+            <Modal
+                visible={showManageSheet}
+                transparent
+                animationType="slide"
+                onRequestClose={() => setShowManageSheet(false)}
+            >
+                <TouchableWithoutFeedback
+                    onPress={() => setShowManageSheet(false)}
+                >
+                    <View className="flex-1 bg-black/30 justify-end">
                         <TouchableWithoutFeedback>
-                            <View className="w-full">
-                                {selectedMessage && (
-                                    <View
-                                        className={`w-full mb-4 ${
-                                            (selectedMessage as any).type ===
-                                            "right"
-                                                ? "items-end"
-                                                : "items-start"
-                                        }`}
+                            <View className="bg-white rounded-t-3xl px-4 pt-4 pb-7">
+                                <Text className="text-base font-semibold text-gray-900 mb-3">
+                                    Quản lý hội thoại
+                                </Text>
+
+                                <TextInput
+                                    className="border border-gray-200 rounded-xl px-3 py-2 text-sm"
+                                    placeholder="Remark name"
+                                    value={remarkInput}
+                                    onChangeText={setRemarkInput}
+                                />
+
+                                <View className="flex-row mt-3">
+                                    <TouchableOpacity
+                                        className="px-3 py-2 rounded-xl bg-blue-500 mr-2"
+                                        onPress={handleUpdateRemark}
                                     >
-                                        <View
-                                            className={`${
-                                                (selectedMessage as any)
-                                                    .type === "right"
-                                                    ? "bg-[#cde7f4]"
-                                                    : "bg-white"
-                                            } px-4 py-2 rounded-2xl max-w-[80%]`}
-                                        >
-                                            {/* Hiện ảnh nếu có */}
-                                            {(selectedMessage as any)
-                                                .imageUri ? (
-                                                <RNImage
-                                                    source={{
-                                                        uri: (
-                                                            selectedMessage as any
-                                                        ).imageUri,
-                                                    }}
-                                                    style={{
-                                                        width: 150,
-                                                        height: 150,
-                                                        borderRadius: 10,
-                                                        marginBottom: (
-                                                            selectedMessage as any
-                                                        ).text
-                                                            ? 4
-                                                            : 0,
-                                                    }}
-                                                    resizeMode="cover"
-                                                />
-                                            ) : null}
-
-                                            {/* Hiện Text nếu có */}
-                                            {(selectedMessage as any).text !==
-                                                "" && (
-                                                <Text
-                                                    className={`text-[15px] ${(selectedMessage as any).isUnsent ? "text-gray-400 italic" : "text-black"}`}
-                                                >
-                                                    {
-                                                        (selectedMessage as any)
-                                                            .text
-                                                    }
-                                                </Text>
-                                            )}
-
-                                            {/* Hiện giờ */}
-                                            {!(selectedMessage as any)
-                                                .isUnsent && (
-                                                <Text
-                                                    className={`text-gray-500 text-[11px] mt-1 ${(selectedMessage as any).type === "right" ? "text-right" : "text-left"}`}
-                                                >
-                                                    {
-                                                        (selectedMessage as any)
-                                                            .time
-                                                    }
-                                                </Text>
-                                            )}
-                                        </View>
-                                    </View>
-                                )}
-
-                                <View className="w-full items-center">
-                                    <View className="w-full max-w-[360px]">
-                                        {/* Dãy Reaction Cảm xúc */}
-                                        <View className="bg-white rounded-full flex-row px-4 py-3 mb-3 justify-between shadow-sm">
-                                            {[
-                                                "❤️",
-                                                "👍",
-                                                "😆",
-                                                "😮",
-                                                "😢",
-                                                "😡",
-                                            ].map((emoji) => (
-                                                <TouchableOpacity
-                                                    key={emoji}
-                                                    onPress={() =>
-                                                        setSelectedMessage(null)
-                                                    }
-                                                >
-                                                    <Text className="text-3xl">
-                                                        {emoji}
-                                                    </Text>
-                                                </TouchableOpacity>
-                                            ))}
-                                        </View>
-
-                                        {/* Bảng Action Menu */}
-                                        <View className="bg-white rounded-3xl p-4 shadow-sm flex-row flex-wrap">
-                                            {actionMenuItems.map((item) => (
-                                                <TouchableOpacity
-                                                    key={item.id}
-                                                    className="w-[25%] items-center mb-5"
-                                                    onPress={() => {
-                                                        if (
-                                                            item.label ===
-                                                            "Thu hồi"
-                                                        ) {
-                                                            handleUnsendMessage();
-                                                        } else {
-                                                            setSelectedMessage(
-                                                                null,
-                                                            );
-                                                        }
-                                                    }}
-                                                >
-                                                    <View className="relative mb-2">
-                                                        <item.icon
-                                                            size={28}
-                                                            color={item.color}
-                                                            strokeWidth={1.5}
-                                                        />
-                                                    </View>
-                                                    <Text className="text-xs text-center text-gray-700">
-                                                        {item.label}
-                                                    </Text>
-                                                </TouchableOpacity>
-                                            ))}
-                                        </View>
-                                    </View>
+                                        <Text className="text-white text-xs">
+                                            Remark
+                                        </Text>
+                                    </TouchableOpacity>
+                                    <TouchableOpacity
+                                        className="px-3 py-2 rounded-xl bg-gray-700 mr-2"
+                                        onPress={() => {
+                                            setShowManageSheet(false);
+                                            setShowSearchSheet(true);
+                                        }}
+                                    >
+                                        <Text className="text-white text-xs">
+                                            Search
+                                        </Text>
+                                    </TouchableOpacity>
+                                    <TouchableOpacity
+                                        className="px-3 py-2 rounded-xl bg-gray-700"
+                                        onPress={() => {
+                                            setShowManageSheet(false);
+                                            setShowMediaSheet(true);
+                                            handleLoadMedia();
+                                        }}
+                                    >
+                                        <Text className="text-white text-xs">
+                                            Media
+                                        </Text>
+                                    </TouchableOpacity>
                                 </View>
+
+                                <TouchableOpacity
+                                    className="px-3 py-2 rounded-xl bg-red-500 self-start mt-3"
+                                    onPress={handleClearHistory}
+                                >
+                                    <Text className="text-white text-xs">
+                                        Clear history
+                                    </Text>
+                                </TouchableOpacity>
                             </View>
                         </TouchableWithoutFeedback>
                     </View>
                 </TouchableWithoutFeedback>
             </Modal>
 
-            {/* MODAL XEM ẢNH/VIDEO PHÓNG TO */}
+            <Modal
+                visible={showSearchSheet}
+                transparent
+                animationType="slide"
+                onRequestClose={() => setShowSearchSheet(false)}
+            >
+                <TouchableWithoutFeedback
+                    onPress={() => setShowSearchSheet(false)}
+                >
+                    <View className="flex-1 bg-black/30 justify-end">
+                        <TouchableWithoutFeedback>
+                            <View className="bg-white rounded-t-3xl px-4 pt-4 pb-7 max-h-[70%]">
+                                <Text className="text-base font-semibold text-gray-900 mb-3">
+                                    Tìm trong cuộc trò chuyện
+                                </Text>
+                                <View className="flex-row items-center mb-3">
+                                    <TextInput
+                                        className="flex-1 border border-gray-200 rounded-xl px-3 py-2 text-sm"
+                                        placeholder="Search keyword"
+                                        value={searchKeyword}
+                                        onChangeText={setSearchKeyword}
+                                    />
+                                    <TouchableOpacity
+                                        className="ml-2 px-3 py-2 rounded-xl bg-gray-700"
+                                        onPress={handleSearchMessages}
+                                    >
+                                        <Text className="text-white text-xs">
+                                            Search
+                                        </Text>
+                                    </TouchableOpacity>
+                                </View>
+
+                                {searchLoading && (
+                                    <ActivityIndicator
+                                        size="small"
+                                        color="#2563eb"
+                                    />
+                                )}
+
+                                <ScrollView>
+                                    {searchResults.length === 0 &&
+                                        !searchLoading && (
+                                            <Text className="text-xs text-gray-500">
+                                                Chưa có kết quả tìm kiếm
+                                            </Text>
+                                        )}
+                                    {searchResults.map((item: any) => (
+                                        <View
+                                            key={item.id}
+                                            className="py-2 border-b border-gray-100"
+                                        >
+                                            <Text className="text-sm text-gray-800">
+                                                {item.content || "(trống)"}
+                                            </Text>
+                                            <Text className="text-xs text-gray-500 mt-1">
+                                                {item.createdAt
+                                                    ? new Date(
+                                                          item.createdAt,
+                                                      ).toLocaleString("vi-VN")
+                                                    : ""}
+                                            </Text>
+                                        </View>
+                                    ))}
+                                </ScrollView>
+                            </View>
+                        </TouchableWithoutFeedback>
+                    </View>
+                </TouchableWithoutFeedback>
+            </Modal>
+
+            <Modal
+                visible={showMediaSheet}
+                transparent
+                animationType="slide"
+                onRequestClose={() => setShowMediaSheet(false)}
+            >
+                <TouchableWithoutFeedback
+                    onPress={() => setShowMediaSheet(false)}
+                >
+                    <View className="flex-1 bg-black/30 justify-end">
+                        <TouchableWithoutFeedback>
+                            <View className="bg-white rounded-t-3xl px-4 pt-4 pb-7 max-h-[70%]">
+                                <Text className="text-base font-semibold text-gray-900 mb-3">
+                                    Media trong cuộc trò chuyện
+                                </Text>
+
+                                {mediaLoading && (
+                                    <ActivityIndicator
+                                        size="small"
+                                        color="#2563eb"
+                                    />
+                                )}
+
+                                <ScrollView>
+                                    {mediaItems.length === 0 &&
+                                        !mediaLoading && (
+                                            <Text className="text-xs text-gray-500">
+                                                Chưa có media
+                                            </Text>
+                                        )}
+                                    {mediaItems.map((item: any) => {
+                                        const fileUrl = resolveFileUrl(
+                                            item?.attachment?.fileUrl,
+                                        );
+                                        const isVideo = item?.type === "VIDEO";
+                                        const isImage = item?.type === "IMAGE";
+
+                                        return (
+                                            <TouchableOpacity
+                                                key={item.id}
+                                                className="py-2 border-b border-gray-100"
+                                                onPress={() => {
+                                                    if (!fileUrl) return;
+                                                    setViewingMediaMessage({
+                                                        imageUri: isImage
+                                                            ? fileUrl
+                                                            : null,
+                                                        videoUri: isVideo
+                                                            ? fileUrl
+                                                            : null,
+                                                    });
+                                                }}
+                                            >
+                                                <Text className="text-sm text-gray-800">
+                                                    {item?.attachment
+                                                        ?.fileName ||
+                                                        item?.type ||
+                                                        "Media"}
+                                                </Text>
+                                                <Text className="text-xs text-gray-500 mt-1">
+                                                    {item?.createdAt
+                                                        ? new Date(
+                                                              item.createdAt,
+                                                          ).toLocaleString(
+                                                              "vi-VN",
+                                                          )
+                                                        : ""}
+                                                </Text>
+                                            </TouchableOpacity>
+                                        );
+                                    })}
+                                </ScrollView>
+                            </View>
+                        </TouchableWithoutFeedback>
+                    </View>
+                </TouchableWithoutFeedback>
+            </Modal>
+
             <Modal
                 visible={!!viewingMediaMessage}
-                transparent={true}
+                transparent
                 animationType="fade"
                 onRequestClose={() => setViewingMediaMessage(null)}
             >
                 {viewingMediaMessage && (
                     <View className="flex-1 bg-black justify-center items-center">
-                        {/* HEADER */}
-                        {showHeader && (
-                            <View className="absolute top-0 w-full bg-black/60 z-10 px-5 pt-14 pb-4">
-                                <View className="flex-row justify-between items-center">
-                                    <View>
-                                        <Text className="text-white text-[17px] font-semibold">
-                                            {(viewingMediaMessage as any)
-                                                .type === "right"
-                                                ? "Bạn"
-                                                : name}
-                                        </Text>
-                                        <Text className="text-white/70 text-[12px] mt-0.5">
-                                            Đã gửi{" "}
-                                            {(viewingMediaMessage as any).time}
-                                        </Text>
-                                    </View>
-
-                                    <TouchableOpacity
-                                        className="bg-white/10 p-2 rounded-full px-4"
-                                        onPress={() =>
-                                            setViewingMediaMessage(null)
-                                        }
-                                    >
-                                        <Text className="text-white text-base font-semibold">
-                                            Đóng
-                                        </Text>
-                                    </TouchableOpacity>
-                                </View>
-                            </View>
-                        )}
-
-                        {/* KIỂM TRA ĐỂ RENDER VIDEO HOẶC ẢNH */}
-                        <TouchableWithoutFeedback
-                            onPress={() => setShowHeader(!showHeader)}
+                        <TouchableOpacity
+                            className="absolute top-14 right-5 z-20"
+                            onPress={() => setViewingMediaMessage(null)}
                         >
-                            <View className="w-full h-full">
-                                {(viewingMediaMessage as any).videoUri ? (
-                                    <AVVideo
-                                        source={{
-                                            uri: (viewingMediaMessage as any)
-                                                .videoUri,
-                                        }}
-                                        style={{
-                                            width: "100%",
-                                            height: "100%",
-                                        }}
-                                        resizeMode={ResizeMode.CONTAIN}
-                                        useNativeControls={true}
-                                        shouldPlay={true}
-                                    />
-                                ) : (
-                                    <RNImage
-                                        source={{
-                                            uri: (viewingMediaMessage as any)
-                                                .imageUri,
-                                        }}
-                                        className="w-full h-full"
-                                        resizeMode="contain"
-                                    />
-                                )}
-                            </View>
-                        </TouchableWithoutFeedback>
+                            <Text className="text-white text-lg">Đóng</Text>
+                        </TouchableOpacity>
+
+                        {viewingMediaMessage.videoUri ? (
+                            <AVVideo
+                                source={{ uri: viewingMediaMessage.videoUri }}
+                                style={{ width: "95%", height: "60%" }}
+                                useNativeControls
+                                resizeMode={ResizeMode.CONTAIN}
+                                shouldPlay
+                            />
+                        ) : viewingMediaMessage.imageUri ? (
+                            <RNImage
+                                source={{ uri: viewingMediaMessage.imageUri }}
+                                style={{
+                                    width: "95%",
+                                    height: "70%",
+                                    resizeMode: "contain",
+                                }}
+                            />
+                        ) : null}
                     </View>
                 )}
             </Modal>

@@ -1,7 +1,7 @@
 import { friendApi } from "@/src/api/friend/friendApi"; // Bổ sung import API
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { MoveLeft } from "lucide-react-native";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
     Alert, // Thêm Alert để báo lỗi nếu có
     Modal,
@@ -55,6 +55,22 @@ export default function FriendProfileOptionScreen() {
     const [blockMyActivity, setBlockMyActivity] = useState(false);
     const [hideTheirActivity, setHideTheirActivity] = useState(false);
     const [showUnfriendConfirm, setShowUnfriendConfirm] = useState(false);
+    const [loadingBlock, setLoadingBlock] = useState(false);
+    // Khi vào màn hình, kiểm tra user này đã bị block chưa
+    useEffect(() => {
+        if (!id) return;
+        (async () => {
+            try {
+                const blockedList = await friendApi.getBlockedUsers();
+                const isBlocked = Array.isArray(blockedList)
+                    ? blockedList.some((u: any) => u.id === id)
+                    : false;
+                setBlockMyActivity(isBlocked);
+            } catch {
+                // Bỏ qua lỗi
+            }
+        })();
+    }, [id]);
 
     return (
         <SafeAreaView className="flex-1 bg-gray-100">
@@ -123,7 +139,35 @@ export default function FriendProfileOptionScreen() {
                         right={
                             <Switch
                                 value={blockMyActivity}
-                                onValueChange={setBlockMyActivity}
+                                onValueChange={async (val: boolean) => {
+                                    if (!id) return;
+                                    setLoadingBlock(true);
+                                    try {
+                                        if (val) {
+                                            await friendApi.blockUser(id);
+                                            setBlockMyActivity(true);
+                                            Alert.alert(
+                                                "Thành công",
+                                                "Đã chặn người dùng này.",
+                                            );
+                                        } else {
+                                            await friendApi.unblockUser(id);
+                                            setBlockMyActivity(false);
+                                            Alert.alert(
+                                                "Thành công",
+                                                "Đã bỏ chặn người dùng này.",
+                                            );
+                                        }
+                                    } catch {
+                                        Alert.alert(
+                                            "Lỗi",
+                                            "Không thể cập nhật trạng thái chặn. Vui lòng thử lại.",
+                                        );
+                                    } finally {
+                                        setLoadingBlock(false);
+                                    }
+                                }}
+                                disabled={loadingBlock}
                             />
                         }
                     />

@@ -1,3 +1,4 @@
+import { connectionsApi } from "@/src/api/friend/connectionsApi";
 import { friendApi } from "@/src/api/friend/friendApi"; // Thêm API
 import { AntDesign, Feather } from "@expo/vector-icons";
 import { useFocusEffect, useRouter } from "expo-router"; // Thêm useFocusEffect
@@ -28,6 +29,7 @@ export default function ContactsScreen() {
     // === STATE DỮ LIỆU THẬT TỪ BE ===
     const [contacts, setContacts] = useState<Contact[]>([]);
     const [pendingCount, setPendingCount] = useState(0); // Số lời mời kết bạn
+    const [blockedCount, setBlockedCount] = useState(0);
     const [isLoading, setIsLoading] = useState(true);
 
     useEffect(() => {
@@ -55,13 +57,16 @@ export default function ContactsScreen() {
                 setIsLoading(true);
 
                 try {
-                    const [friendsRes, pendingRes] = await Promise.all([
-                        friendApi.getFriends(),
-                        friendApi.getPendingRequests(),
-                    ]);
+                    const [friendsRes, pendingRes, blockedRes] =
+                        await Promise.all([
+                            connectionsApi.getFriendsList(),
+                            friendApi.getPendingRequests(),
+                            connectionsApi.getBlockedList(),
+                        ]);
 
-                    const friendsList = friendsRes?.data || friendsRes || {};
+                    const friendsList = friendsRes || [];
                     const pendingList = pendingRes?.data || pendingRes || [];
+                    const blockedList = blockedRes || [];
 
                     console.log(
                         "=== DANH SÁCH BẠN BÈ TỪ SERVER ===",
@@ -72,16 +77,28 @@ export default function ContactsScreen() {
                         setPendingCount(pendingList.length);
                     }
 
+                    if (Array.isArray(blockedList)) {
+                        setBlockedCount(blockedList.length);
+                    }
+
                     // SỬA Ở ĐÂY: Trích xuất mảng từ thuộc tính .friends
-                    const friendsArray =
-                        friendsList.friends ||
-                        (Array.isArray(friendsList) ? friendsList : []);
+                    const friendsArray = Array.isArray(friendsList)
+                        ? friendsList
+                        : [];
 
                     if (Array.isArray(friendsArray)) {
                         const mappedFriends = friendsArray.map((item: any) => ({
-                            id: item.friendId,
-                            name: item.friendUserName || "Người dùng",
-                            avatar: item.friendAvatar || "",
+                            id: item.friendId || item.id,
+                            name:
+                                item.friendUserName ||
+                                item.userName ||
+                                item.name ||
+                                "Người dùng",
+                            avatar:
+                                item.friendAvatar ||
+                                item.avatar ||
+                                item.avatarUrl ||
+                                "",
                         }));
 
                         // Sau khi có dữ liệu mới nhất từ Server (đã có người mới accept)
@@ -208,6 +225,22 @@ export default function ContactsScreen() {
                                 </View>
                                 <Text className="text-base font-normal text-black ml-3">
                                     Sinh nhật
+                                </Text>
+                            </TouchableOpacity>
+
+                            <TouchableOpacity
+                                className="flex-row items-center px-4 py-3"
+                                onPress={() =>
+                                    router.push(
+                                        "/contact/friend/blocked" as any,
+                                    )
+                                }
+                            >
+                                <View className="w-10 h-10 rounded-full bg-[#FF6B6B] items-center justify-center">
+                                    <Users size={22} color={"white"} />
+                                </View>
+                                <Text className="text-base font-normal text-black ml-3">
+                                    Danh sách đã chặn ({blockedCount})
                                 </Text>
                             </TouchableOpacity>
                         </View>

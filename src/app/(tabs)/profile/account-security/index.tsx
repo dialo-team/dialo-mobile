@@ -1,3 +1,8 @@
+import { securityApi } from "@/src/api/auth/securityApi";
+import { SessionDeviceItem } from "@/src/api/auth/types";
+import { AccountLockConfirmModal } from "@/src/components/account-security/AccountLockConfirmModal";
+import { DeviceSessionsList } from "@/src/components/account-security/DeviceSessionsList";
+import { useQrLoginFlow } from "@/src/hooks/useQrLoginFlow";
 import { useRouter } from "expo-router";
 import {
     ChevronRight,
@@ -10,6 +15,7 @@ import {
 } from "lucide-react-native";
 import React, { useState } from "react";
 import {
+    Alert,
     Image,
     ScrollView,
     Switch,
@@ -21,14 +27,89 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 export default function AccountSecurityScreen() {
     const [is2FAEnabled, setIs2FAEnabled] = useState(false);
+    const [showLockModal, setShowLockModal] = useState(false);
+    const [isLocking, setIsLocking] = useState(false);
+    const [showSessions, setShowSessions] = useState(false);
+    const [isLoadingSessions, setIsLoadingSessions] = useState(false);
+    const [activeSessions, setActiveSessions] = useState<SessionDeviceItem[]>(
+        [],
+    );
+    const [inactiveSessions, setInactiveSessions] = useState<
+        SessionDeviceItem[]
+    >([]);
     const router = useRouter();
+    const qrFlow = useQrLoginFlow();
+
+    const fetchSessions = async () => {
+        setIsLoadingSessions(true);
+        try {
+            const [active, inactive] = await Promise.all([
+                securityApi.getActiveSessions(),
+                securityApi.getInactiveSessions(),
+            ]);
+            setActiveSessions(active);
+            setInactiveSessions(inactive);
+        } catch {
+            Alert.alert("Lỗi", "Không thể tải danh sách thiết bị.");
+        } finally {
+            setIsLoadingSessions(false);
+        }
+    };
+
+    const handleConfirmLock = async () => {
+        try {
+            setIsLocking(true);
+            await securityApi.lockAccount();
+            setShowLockModal(false);
+            Alert.alert("Thành công", "Đã gửi yêu cầu khóa tài khoản.");
+        } catch {
+            Alert.alert("Lỗi", "Khóa tài khoản thất bại. Vui lòng thử lại.");
+        } finally {
+            setIsLocking(false);
+        }
+    };
+
+    const handleQrLoginChallenge = async () => {
+        try {
+            const result = await qrFlow.startLogin({
+                pollIntervalMs: 2000,
+                maxAttempts: 30,
+            });
+
+            if (result.status === "authenticated") {
+                Alert.alert("QR Login", "Thiết bị đã xác thực thành công.");
+                return;
+            }
+
+            if (result.status === "approved") {
+                Alert.alert(
+                    "QR Login",
+                    "Challenge đã được duyệt, đang chờ token đăng nhập.",
+                );
+                return;
+            }
+
+            Alert.alert(
+                "QR Login",
+                "Challenge đã hết hạn hoặc chưa được duyệt.",
+            );
+        } catch {
+            Alert.alert("Lỗi", "Không thể khởi tạo QR login challenge.");
+        }
+    };
 
     return (
         <SafeAreaView className="flex-1 bg-white">
             {/* Header */}
             <View className="flex-row items-center px-4 py-5 bg-blue-600">
                 <TouchableOpacity
-                    onPress={() => router.push("/profile" as any)}
+                    onPress={() => {
+                        if (router.canGoBack()) {
+                            router.back();
+                            return;
+                        }
+                        router.replace("/profile" as any);
+                    }}
                     hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
                 >
                     <MoveLeft size={24} color="white" />
@@ -99,10 +180,18 @@ export default function AccountSecurityScreen() {
                     {/* Mã QR */}
                     <TouchableOpacity
                         className="flex-row items-center px-4 py-4"
+                        onPress={handleQrLoginChallenge}
                         activeOpacity={0.8}
                     >
                         <Text className="flex-1 text-base font-normal text-black">
                             Mã QR của tôi
+                        </Text>
+                        <Text className="mr-2 text-[12px] text-gray-500">
+                            {qrFlow.status === "pending_approval"
+                                ? "Đang chờ duyệt"
+                                : qrFlow.status === "authenticated"
+                                  ? "Đã xác thực"
+                                  : "Sẵn sàng"}
                         </Text>
                         <ScanQrCode size={24} color="#888" />
                         <ChevronRight size={24} color="#C4C4C4" />
@@ -141,6 +230,7 @@ export default function AccountSecurityScreen() {
                     {/* Khóa Zalo */}
                     <TouchableOpacity
                         className="flex-row items-center px-4 py-4"
+                        onPress={() => setShowLockModal(true)}
                         activeOpacity={0.8}
                     >
                         <View className="w-8">
@@ -187,6 +277,13 @@ export default function AccountSecurityScreen() {
                     {/* Thiết bị đăng nhập */}
                     <TouchableOpacity
                         className="flex-row items-center px-4 py-3 border-b border-gray-100"
+                        onPress={async () => {
+                            const next = !showSessions;
+                            setShowSessions(next);
+                            if (next) {
+                                await fetchSessions();
+                            }
+                        }}
                         activeOpacity={0.8}
                     >
                         <View className="flex-1 pr-4">
@@ -219,7 +316,31 @@ export default function AccountSecurityScreen() {
                         <ChevronRight size={24} color="#C4C4C4" />
                     </TouchableOpacity>
                 </View>
+
+                {showSessions && (
+                    <>
+                        <DeviceSessionsList
+                            title="Thiết bị đang hoạt động"
+                            sessions={activeSessions}
+                            isLoading={isLoadingSessions}
+                            emptyText="Không có thiết bị đang hoạt động"
+                        />
+                        <DeviceSessionsList
+                            title="Lịch sử thiết bị"
+                            sessions={inactiveSessions}
+                            isLoading={isLoadingSessions}
+                            emptyText="Không có lịch sử thiết bị"
+                        />
+                    </>
+                )}
             </ScrollView>
+
+            <AccountLockConfirmModal
+                visible={showLockModal}
+                loading={isLocking}
+                onClose={() => setShowLockModal(false)}
+                onConfirm={handleConfirmLock}
+            />
         </SafeAreaView>
     );
 }

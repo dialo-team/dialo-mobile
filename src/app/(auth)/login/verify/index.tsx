@@ -1,5 +1,5 @@
 import { authenticationApi } from "@/src/api/auth/authenticationApi";
-import { saveAuthTokens } from "@/src/api/auth/authStorage";
+import { saveAuthData } from "@/src/api/auth/authStorage";
 import BackHeader from "@/src/components/ui/BackHeader";
 import PrimaryButton from "@/src/components/ui/PrimaryButton";
 import { maskPhone, normalizePhoneTo84 } from "@/src/utils/phone";
@@ -30,8 +30,18 @@ export default function LoginVerifyScreen() {
     const isOtpValid = otp.every((digit) => digit !== "");
 
     const phoneStr = String(phone ?? "");
-    const formattedPhone = normalizePhoneTo84(phoneStr);
     const maskedPhone = maskPhone(phoneStr);
+
+    const extractTokens = (response: any) => {
+        const root = response?.data ?? response;
+        const payload = root?.data ?? root?.result ?? root;
+        const accessToken = payload?.accessToken ?? payload?.access_token;
+        const refreshToken = payload?.refreshToken ?? payload?.refresh_token;
+        return {
+            accessToken: typeof accessToken === "string" ? accessToken : "",
+            refreshToken: typeof refreshToken === "string" ? refreshToken : "",
+        };
+    };
 
     useEffect(() => {
         if (countdown === 0) return;
@@ -72,11 +82,21 @@ export default function LoginVerifyScreen() {
                 otp: otpString,
             });
 
-            const accessToken = response?.data?.accessToken;
-            const refreshToken = response?.data?.refreshToken;
+            const responseRoot = response?.data ?? response;
+            if (
+                typeof responseRoot?.status === "number" &&
+                responseRoot.status >= 400
+            ) {
+                throw new Error(
+                    responseRoot?.message ||
+                        "Xác thực đăng nhập thất bại do lỗi máy chủ.",
+                );
+            }
+
+            const { accessToken, refreshToken } = extractTokens(response);
 
             if (accessToken && refreshToken) {
-                await saveAuthTokens(accessToken, refreshToken);
+                await saveAuthData(accessToken, refreshToken);
                 console.log("Đăng nhập verify thành công:", response);
                 Alert.alert("Thành công", "Đăng nhập thành công!");
                 router.replace("/(tabs)/message" as any);

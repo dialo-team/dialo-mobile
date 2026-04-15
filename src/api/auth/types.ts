@@ -42,3 +42,30 @@ export interface ChangePasswordPayload {
 export interface SignoutPayload {
     refreshToken: string;
 }
+
+export interface QrChallengeRequestResponse {
+    id: string;
+    qrToken?: string;
+    expiresAt?: string;
+    [key: string]: unknown;
+}
+
+export interface QrChallengeExchangeResponse {
+    accessToken?: string;
+    refreshToken?: string;
+    approved?: boolean;
+    status?: string;
+    [key: string]: unknown;
+}
+
+export interface SessionDeviceItem {
+    sessId?: string;
+    id?: string;
+    deviceName?: string;
+    platform?: string;
+    ip?: string;
+    userAgent?: string;
+    lastActiveAt?: string;
+    createdAt?: string;
+    [key: string]: unknown;
+}
