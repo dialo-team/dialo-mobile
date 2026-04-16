@@ -55,7 +55,8 @@ export type SendMessagePayload = {
     conversationId: string;
     senderId?: string;
     content?: string;
-    type?: "TEXT" | "IMAGE" | "VIDEO" | string;
+    // Cập nhật lại các giá trị Enum mà Backend hỗ trợ
+    type?: "TEXT" | "IMAGE" | "VIDEO" | "FILE" | string;
 };
 
 export type ForwardMessagePayload = {

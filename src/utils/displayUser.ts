@@ -2,7 +2,6 @@ const UUID_REGEX =
     /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const OBJECT_ID_REGEX = /^[0-9a-f]{24}$/i;
 const DIGITS_ONLY_REGEX = /^\d+$/;
-const PHONE_LIKE_REGEX = /^\+?\d[\d\s.-]{5,}$/;
 
 function sanitizeName(value?: string | null): string {
     const raw = value == null ? "" : String(value);
@@ -25,10 +24,6 @@ function sanitizeName(value?: string | null): string {
     // Avoid rendering backend IDs or phone-like numeric values as display names.
     const compact = trimmed.replace(/[\s.-]/g, "");
     if (DIGITS_ONLY_REGEX.test(compact)) {
-        return "";
-    }
-
-    if (PHONE_LIKE_REGEX.test(trimmed) && compact.length >= 6) {
         return "";
     }
 

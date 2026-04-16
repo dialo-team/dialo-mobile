@@ -11,6 +11,7 @@ import {
     Folder,
     MoveLeft,
     Pin,
+    Search,
     Shield,
     Trash,
     User,
@@ -193,6 +194,14 @@ export default function ChatOptionsScreen() {
         router.replace("/(tabs)/message" as any);
     };
 
+    const handleOpenMedia = () => {
+        if (!conversationId) return;
+        router.push({
+            pathname: "/(tabs)/message/option/media-list" as any,
+            params: { conversationId, name: displayName },
+        });
+    };
+
     return (
         <SafeAreaView className="flex-1 bg-gray-100">
             {/* HEADER */}
@@ -246,19 +255,22 @@ export default function ChatOptionsScreen() {
                                     className="bg-gray-100 p-3 rounded-full"
                                     onPress={handleOpenProfile}
                                 >
-                                    <Bell size={22} />
+                                    <Search size={22} />
                                 </TouchableOpacity>
                                 <Text className="text-xs mt-1">
-                                    Trang cá nhân
+                                    Tìm tin nhắn
                                 </Text>
                             </View>
 
                             <View className="items-center">
-                                <TouchableOpacity className="bg-gray-100 p-3 rounded-full">
+                                <TouchableOpacity
+                                    className="bg-gray-100 p-3 rounded-full"
+                                    onPress={handleOpenProfile}
+                                >
                                     <User size={22} />
                                 </TouchableOpacity>
                                 <Text className="text-xs mt-1">
-                                    Tìm tin nhắn
+                                    Trang cá nhân
                                 </Text>
                             </View>
 
@@ -272,14 +284,11 @@ export default function ChatOptionsScreen() {
                             </View>
 
                             <View className="items-center">
-                                <TouchableOpacity
-                                    className="bg-gray-100 p-3 rounded-full"
-                                    onPress={handleClearHistory}
-                                >
+                                <TouchableOpacity className="bg-gray-100 p-3 rounded-full">
                                     <Bell size={22} />
                                 </TouchableOpacity>
                                 <Text className="text-xs mt-1">
-                                    Xóa lịch sử
+                                    Tắt thông báo
                                 </Text>
                             </View>
                         </View>
@@ -305,6 +314,7 @@ export default function ChatOptionsScreen() {
                         <OptionItem
                             icon={<FileImage size={20} />}
                             title="Ảnh, file, link"
+                            onPress={handleOpenMedia}
                         />
                     </View>
 
@@ -402,9 +412,13 @@ export default function ChatOptionsScreen() {
     );
 }
 
-function OptionItem({ icon, title, right }: any) {
+function OptionItem({ icon, title, right, onPress }: any) {
     return (
-        <TouchableOpacity className="flex-row items-center px-4 py-4 border-b border-gray-100">
+        <TouchableOpacity
+            className="flex-row items-center px-4 py-4 border-b border-gray-100"
+            onPress={onPress} // Thêm onPress vào đây
+            disabled={!onPress} // Nếu không truyền onPress thì vô hiệu hóa hiệu ứng bấm
+        >
             <View className="mr-3">{icon}</View>
             <Text className="flex-1 text-[15px]">{title}</Text>
             {right}

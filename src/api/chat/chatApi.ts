@@ -1,6 +1,6 @@
+import { pickBestDisplayName } from "@/src/utils/displayUser";
 import axios, { AxiosRequestConfig } from "axios";
 import { getAccessToken } from "../auth/authStorage";
-import { pickBestDisplayName } from "@/src/utils/displayUser";
 import {
     ChatConversationDetail,
     ChatConversationItem,
@@ -261,6 +261,25 @@ export const chatApi = {
             : [];
     },
 
+    findConversationIdByUserId: async (
+        userId: string,
+    ): Promise<string | null> => {
+        if (!userId?.trim()) return null;
+
+        const conversations = await chatApi.getConversations();
+        const matched = conversations.find((conversation) => {
+            const counterpartId =
+                conversation?.counterpartId ||
+                conversation?.targetUserId ||
+                conversation?.userId ||
+                "";
+
+            return String(counterpartId) === String(userId);
+        });
+
+        return matched?.conversationId || null;
+    },
+
     getConversationDetail: async (
         conversationId: string,
     ): Promise<ChatConversationDetail> => {
@@ -325,6 +344,7 @@ export const chatApi = {
     },
 
     // message-controller
+    // message-controller
     sendMessage: async (payload: SendMessagePayload) => {
         const token = await getAccessToken();
         const senderId = payload.senderId || decodeJwtSub(token);
@@ -335,7 +355,7 @@ export const chatApi = {
 
         if (!senderId?.trim()) {
             throw new Error(
-                "Không xác định được senderId. Vui lòng đăng nhập lại rồi thử lại.",
+                "Không xác định được senderId. Vui lòng đăng nhập lại.",
             );
         }
 
@@ -365,17 +385,32 @@ export const chatApi = {
         });
     },
 
-    sendFileMessage: async (conversationId: string, file: any) => {
+    async sendFileMessage(
+        conversationId: string,
+        fileData: { uri: string; name: string; type: string },
+    ) {
         const formData = new FormData();
-        formData.append("conversationId", conversationId);
-        formData.append("file", file as any);
 
-        return request("/api/v1/messages/file", {
+        // 1. Tạo object file cho FormData
+        // Lưu ý: Key 'file' phải khớp với định nghĩa @RequestParam("file") của Backend
+        const fileObj = {
+            uri: fileData.uri,
+            name: fileData.name,
+            type: fileData.type,
+        } as any;
+
+        formData.append("file", fileObj);
+        formData.append("conversationId", conversationId);
+
+        const senderId = await chatAuthUtils.getCurrentUserId();
+        if (senderId) {
+            formData.append("senderId", senderId);
+        }
+
+        return request<any>("/api/v1/messages/file", {
             method: "POST",
             data: formData,
-            headers: {
-                "Content-Type": "multipart/form-data",
-            },
+            transformRequest: (data) => data,
         });
     },
 

@@ -1,3 +1,4 @@
+import { friendApi } from "@/src/api/friend/friendApi"; // Đảm bảo đúng đường dẫn
 import { useLocalSearchParams, useRouter } from "expo-router";
 import {
     CircleX,
@@ -30,21 +31,55 @@ export default function FriendProfileScreen() {
         avatar,
         openRename: openRenameParam,
     } = useLocalSearchParams();
-    const [openRename, setOpenRename] = useState(false);
 
-    const safeName =
-        typeof name === "string" ? name : Array.isArray(name) ? name[0] : "";
+    // --- STATES ---
+    const [openRename, setOpenRename] = useState(false);
+    const [isLoading, setIsLoading] = useState(true);
+    const [userData, setUserData] = useState<any>(null);
 
     const safeId = typeof id === "string" ? id : Array.isArray(id) ? id[0] : "";
+    const safeName =
+        typeof name === "string" ? name : Array.isArray(name) ? name[0] : "";
+    const safeAvatar =
+        typeof avatar === "string"
+            ? avatar
+            : Array.isArray(avatar)
+              ? avatar[0]
+              : "";
 
     const [displayName, setDisplayName] = useState(safeName);
     const [nickname, setNickname] = useState(safeName);
 
+    // --- FETCH FULL PROFILE ---
     useEffect(() => {
-        setDisplayName(safeName);
-        setNickname(safeName);
-    }, [safeName]);
+        const fetchFullProfile = async () => {
+            if (!safeId) return;
+            try {
+                setIsLoading(true);
+                const res = await friendApi.getUserById(safeId);
+                // Cập nhật data từ API (bio, background, name mới nhất...)
+                const data = res?.data || res;
+                setUserData(data);
 
+                // Cập nhật lại tên hiển thị nếu server có tên khác/mới
+                const finalName =
+                    data?.displayName ||
+                    data?.fullName ||
+                    data?.userName ||
+                    safeName;
+                setDisplayName(finalName);
+                setNickname(finalName);
+            } catch (error) {
+                console.error("[FriendProfile] Fetch error:", error);
+            } finally {
+                setIsLoading(false);
+            }
+        };
+
+        fetchFullProfile();
+    }, [safeId, safeName]);
+
+    // --- LOGIC RENAME ---
     useEffect(() => {
         if (openRenameParam === "1") {
             setOpenRename(true);
@@ -52,17 +87,24 @@ export default function FriendProfileScreen() {
     }, [openRenameParam]);
 
     const hasNameChanged =
-        nickname.trim() !== safeName.trim() && nickname.trim().length > 0;
+        nickname.trim() !== displayName.trim() && nickname.trim().length > 0;
 
-    // THÊM HÀM NÀY VÀO ĐÂY:
+    // --- MAPPING DATA (Ưu tiên API -> Fallback Params) ---
+    const currentAvatar = userData?.avatar || userData?.avatarUrl || safeAvatar;
+    const currentCover =
+        userData?.coverImage || userData?.background || currentAvatar;
+    const currentBio =
+        userData?.bio ||
+        "Chưa có hoạt động nào. Hãy trò chuyện để hiểu nhau hơn!";
+
     const handleHeaderBack = () => {
         if (safeId) {
             router.replace({
                 pathname: "/(tabs)/message/option/account-option" as any,
                 params: {
                     id: safeId,
-                    ...(displayName != null ? { name: displayName } : {}),
-                    ...(avatar != null ? { avatar } : {}),
+                    name: displayName,
+                    avatar: currentAvatar,
                 },
             });
             return;
@@ -77,12 +119,11 @@ export default function FriendProfileScreen() {
     return (
         <SafeAreaView className="flex-1 bg-white">
             {/* COVER IMAGE */}
-            <View className="h-60 w-full">
+            <View className="h-60 w-full bg-gray-200">
                 <Image
-                    source={{
-                        uri: avatar as string,
-                    }}
+                    source={{ uri: currentCover }}
                     className="w-full h-full"
+                    resizeMode="cover"
                 />
 
                 {/* TOP ICONS */}
@@ -92,7 +133,7 @@ export default function FriendProfileScreen() {
                     </TouchableOpacity>
                 </View>
 
-                <View className="absolute top-4 right-4 flex-row items-center space-x-4 ">
+                <View className="absolute top-4 right-4 flex-row items-center space-x-4">
                     <TouchableOpacity>
                         <Phone size={24} color="white" />
                     </TouchableOpacity>
@@ -105,17 +146,22 @@ export default function FriendProfileScreen() {
                         />
                     </TouchableOpacity>
 
-                    <TouchableOpacity>
+                    <TouchableOpacity
+                        onPress={() =>
+                            router.push({
+                                pathname: "../friend/profile-option",
+                                params: {
+                                    id: safeId,
+                                    name: displayName,
+                                    avatar: currentAvatar,
+                                },
+                            })
+                        }
+                    >
                         <MoreHorizontal
                             size={24}
                             color="white"
                             style={{ marginLeft: 10 }}
-                            onPress={() =>
-                                router.push({
-                                    pathname: "../friend/profile-option",
-                                    params: { id, name, avatar },
-                                })
-                            }
                         />
                     </TouchableOpacity>
                 </View>
@@ -124,13 +170,13 @@ export default function FriendProfileScreen() {
             {/* AVATAR */}
             <View className="items-center -mt-16">
                 <Image
-                    source={{ uri: avatar as string }}
-                    className="w-32 h-32 rounded-full border-4 border-white"
+                    source={{ uri: currentAvatar }}
+                    className="w-32 h-32 rounded-full border-4 border-white bg-white"
                 />
             </View>
 
-            {/* NAME */}
-            <View className="items-center mt-3">
+            {/* NAME & BIO */}
+            <View className="items-center mt-3 px-6">
                 <View className="flex-row items-center">
                     <Text className="text-2xl font-semibold">
                         {displayName}
@@ -144,8 +190,8 @@ export default function FriendProfileScreen() {
                     </TouchableOpacity>
                 </View>
 
-                <Text className="text-gray-400 text-center mt-2 px-8">
-                    Chưa có hoạt động nào. Hãy trò chuyện để hiểu nhau hơn!
+                <Text className="text-gray-400 text-center mt-2 px-4">
+                    {currentBio}
                 </Text>
             </View>
 
@@ -162,7 +208,7 @@ export default function FriendProfileScreen() {
                             params: {
                                 id: safeId,
                                 name: displayName,
-                                avatar,
+                                avatar: currentAvatar,
                                 from: "friend",
                             },
                         });
@@ -175,6 +221,7 @@ export default function FriendProfileScreen() {
                 </TouchableOpacity>
             </View>
 
+            {/* RENAME MODAL */}
             <Modal visible={openRename} animationType="slide" transparent>
                 <KeyboardAvoidingView
                     behavior={Platform.OS === "ios" ? "padding" : undefined}
@@ -185,11 +232,9 @@ export default function FriendProfileScreen() {
                             {/* HEADER */}
                             <View className="flex-row items-center justify-between mb-4">
                                 <View className="w-6" />
-
                                 <Text className="text-lg font-semibold">
                                     Đổi tên gợi nhớ
                                 </Text>
-
                                 <TouchableOpacity
                                     onPress={() => setOpenRename(false)}
                                 >
@@ -201,12 +246,10 @@ export default function FriendProfileScreen() {
                             <View className="border-b border-gray-300 pb-2 flex-row items-center">
                                 <TextInput
                                     value={nickname}
-                                    onChangeText={(value) => {
-                                        setNickname(value);
-                                        setDisplayName(value);
-                                    }}
+                                    onChangeText={(value) => setNickname(value)}
                                     maxLength={40}
                                     className="flex-1 text-lg"
+                                    autoFocus
                                 />
 
                                 {nickname.length > 0 && (
@@ -224,34 +267,28 @@ export default function FriendProfileScreen() {
 
                             {/* DESCRIPTION */}
                             <Text className="text-gray-400 mt-3">
-                                Tên của người này trong danh bạ máy là{" "}
-                                {nickname}
+                                Tên của người này sẽ hiển thị là:{" "}
+                                {nickname || "Chưa nhập"}
                             </Text>
 
                             {/* SAVE BUTTON */}
-
-                            {hasNameChanged ? (
-                                <TouchableOpacity
-                                    className="mt-6 bg-blue-600 py-4 rounded-full items-center"
-                                    onPress={() => {
-                                        setDisplayName(nickname.trim());
-                                        setOpenRename(false);
-                                    }}
-                                >
-                                    <Text className="text-white text-lg font-medium">
-                                        Lưu
-                                    </Text>
-                                </TouchableOpacity>
-                            ) : (
-                                <TouchableOpacity
-                                    className="mt-6 bg-gray-300 py-4 rounded-full items-center opacity-50"
-                                    disabled
-                                >
-                                    <Text className="text-white text-lg font-medium">
-                                        Lưu
-                                    </Text>
-                                </TouchableOpacity>
-                            )}
+                            <TouchableOpacity
+                                className={`mt-6 py-4 rounded-full items-center ${
+                                    hasNameChanged
+                                        ? "bg-blue-600"
+                                        : "bg-gray-300 opacity-50"
+                                }`}
+                                disabled={!hasNameChanged}
+                                onPress={() => {
+                                    setDisplayName(nickname.trim());
+                                    setOpenRename(false);
+                                    // Ở đây bạn có thể gọi thêm API cập nhật nickname nếu cần
+                                }}
+                            >
+                                <Text className="text-white text-lg font-medium">
+                                    Lưu
+                                </Text>
+                            </TouchableOpacity>
                         </View>
                     </View>
                 </KeyboardAvoidingView>

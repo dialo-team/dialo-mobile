@@ -1,10 +1,11 @@
+import { chatApi } from "@/src/api/chat/chatApi";
 import { connectionsApi } from "@/src/api/friend/connectionsApi";
 import { friendApi } from "@/src/api/friend/friendApi"; // Thêm API
 import { getInitials, pickBestDisplayName } from "@/src/utils/displayUser";
-import { AntDesign, Feather } from "@expo/vector-icons";
+import { Feather } from "@expo/vector-icons";
 import { useFocusEffect, useRouter } from "expo-router"; // Thêm useFocusEffect
 import { Cake, Phone, Search, Users, Video } from "lucide-react-native";
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useState } from "react";
 import {
     ActivityIndicator,
     Image,
@@ -16,6 +17,14 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+const isValidImage = (url?: string | null) => {
+    return (
+        typeof url === "string" &&
+        url.trim() !== "" &&
+        /^https?:\/\//i.test(url)
+    );
+};
+
 // Định nghĩa kiểu dữ liệu Bạn bè
 type Contact = {
     id: string;
@@ -26,99 +35,107 @@ type Contact = {
 export default function ContactsScreen() {
     const router = useRouter();
     const [searchText, setSearchText] = useState("");
-
-    // === STATE DỮ LIỆU THẬT TỪ BE ===
     const [contacts, setContacts] = useState<Contact[]>([]);
-    const [pendingCount, setPendingCount] = useState(0); // Số lời mời kết bạn
+    const [pendingCount, setPendingCount] = useState(0);
     const [blockedCount, setBlockedCount] = useState(0);
     const [isLoading, setIsLoading] = useState(true);
 
-    useEffect(() => {
-        console.log("Danh bạ hiện tại trong App:", contacts);
-    }, [contacts]);
+    // ... (Giữ nguyên các phần khác)
 
-    // Kiểm tra link ảnh hợp lệ
-    const isValidImage = (url: string | undefined) => {
-        return url && url !== "undefined" && url.trim() !== "";
-    };
-
-    // === TỰ ĐỘNG LOAD DỮ LIỆU KHI VÀO TRANG ===
     useFocusEffect(
         useCallback(() => {
-            const fetchContacts = async () => {
-                setContacts([]);
-                setIsLoading(true);
+            let isMounted = true;
 
+            const fetchData = async () => {
                 try {
-                    const [friendsRes, pendingRes, blockedRes] =
+                    setIsLoading(true);
+
+                    // 1. Gọi API - Sử dụng trực tiếp apiClient hoặc xem response thô
+                    const [friendsResRaw, pendingRes, blockedRes] =
                         await Promise.all([
+                            // Gọi trực tiếp để xem cấu trúc thật
                             connectionsApi.getFriendsList(),
                             friendApi.getPendingRequests(),
                             connectionsApi.getBlockedList(),
                         ]);
 
-                    const friendsList = friendsRes || [];
-                    const pendingList = pendingRes?.data || pendingRes || [];
-                    const blockedList = blockedRes || [];
-
+                    // LOG KIỂM TRA: Bạn hãy xem log này ở terminal
                     console.log(
-                        "=== DANH SÁCH BẠN BÈ TỪ SERVER ===",
-                        JSON.stringify(friendsList, null, 2),
+                        "DEBUG FRIENDS RES:",
+                        JSON.stringify(friendsResRaw),
                     );
 
-                    if (Array.isArray(pendingList)) {
-                        setPendingCount(pendingList.length);
-                    }
+                    if (!isMounted) return;
 
-                    if (Array.isArray(blockedList)) {
-                        setBlockedCount(blockedList.length);
-                    }
-
-                    // SỬA Ở ĐÂY: Trích xuất mảng từ thuộc tính .friends
-                    const friendsArray = Array.isArray(friendsList)
-                        ? friendsList
+                    // 2. Xử lý logic mapping cực kỳ linh hoạt
+                    // Nếu friendsResRaw rỗng, có thể do normalizeList không quét đúng key
+                    const rawArray = Array.isArray(friendsResRaw)
+                        ? friendsResRaw
                         : [];
 
-                    if (Array.isArray(friendsArray)) {
-                        const mappedFriends = friendsArray.map((item: any) => ({
-                            id: item.friendId || item.id,
+                    const mappedFriends = rawArray.map((item: any) => {
+                        // Cố gắng tìm thông tin user dù Backend trả về kiểu gì
+                        const u = item.friend || item.user || item;
+
+                        return {
+                            id:
+                                u.id ||
+                                u.userId ||
+                                item.friendId ||
+                                item.id ||
+                                Math.random().toString(),
                             name: pickBestDisplayName(
                                 [
+                                    u.displayName,
+                                    u.fullName,
+                                    u.userName,
                                     item.friendUserName,
-                                    item.userName,
-                                    item.name,
-                                    item.displayName,
-                                    item.fullName,
+                                    u.name,
                                 ],
-                                "Nguoi dung",
+                                "Người dùng",
                             ),
                             avatar:
+                                u.avatar ||
+                                u.avatarUrl ||
                                 item.friendAvatar ||
-                                item.avatar ||
-                                item.avatarUrl ||
                                 "",
-                        }));
+                        };
+                    });
 
-                        // Sau khi có dữ liệu mới nhất từ Server (đã có người mới accept)
+                    if (isMounted) {
                         setContacts(mappedFriends);
+
+                        const pData = pendingRes?.data || pendingRes || [];
+                        setPendingCount(
+                            Array.isArray(pData) ? pData.length : 0,
+                        );
+
+                        setBlockedCount(
+                            Array.isArray(blockedRes) ? blockedRes.length : 0,
+                        );
                     }
                 } catch (error) {
-                    console.log("Lỗi tải danh bạ:", error);
+                    console.error("Lỗi fetch danh bạ:", error);
                 } finally {
-                    setIsLoading(false);
+                    if (isMounted) setIsLoading(false);
                 }
             };
 
-            fetchContacts();
-        }, []), // Giữ nguyên mảng rỗng để useCallback không bị tạo lại liên tục
+            fetchData();
+            return () => {
+                isMounted = false;
+            };
+        }, []),
     );
 
-    // groupBy chữ cái đầu tiên của tên
+    // groupBy: Ưu tiên group theo chữ cái đầu của TÊN (từ cuối cùng)
     const groupContacts = (contactList: Contact[]) => {
         const grouped: Record<string, Contact[]> = {};
 
         contactList.forEach((contact) => {
-            const firstLetter = getInitials(contact.name).charAt(0);
+            const nameParts = contact.name.trim().split(/\s+/);
+            const firstName = nameParts[nameParts.length - 1]; // Lấy "Anh" trong "Nguyễn Văn Anh"
+            const firstLetter = firstName.charAt(0).toUpperCase();
 
             if (!grouped[firstLetter]) {
                 grouped[firstLetter] = [];
@@ -130,17 +147,16 @@ export default function ContactsScreen() {
             .sort()
             .map((letter) => ({
                 section: letter,
-                data: grouped[letter],
-                isStarred: false,
+                data: grouped[letter].sort((a, b) =>
+                    a.name.localeCompare(b.name),
+                ),
             }));
     };
 
-    // filter contacts by search text
     const filteredContacts = contacts.filter((contact) =>
         contact.name.toLowerCase().includes(searchText.toLowerCase().trim()),
     );
 
-    // Bỏ section bạn thân (hoặc bạn có thể tự code API bạn thân sau), chỉ hiện danh sách gom nhóm
     const contactsData = groupContacts(filteredContacts);
 
     return (
@@ -276,14 +292,6 @@ export default function ContactsScreen() {
                                     {/* Section Header */}
                                     <View className="flex-row items-center justify-between px-4 py-3 bg-white">
                                         <View className="flex-row items-center">
-                                            {section.isStarred ? (
-                                                <AntDesign
-                                                    name="star"
-                                                    size={14}
-                                                    color="#E58A00"
-                                                    className="mr-2"
-                                                />
-                                            ) : null}
                                             <Text className="font-bold text-black text-[14px]">
                                                 {section.section}
                                             </Text>
@@ -295,18 +303,36 @@ export default function ContactsScreen() {
                                         <TouchableOpacity
                                             key={user.id}
                                             className="flex-row items-center px-4 py-2 bg-white border-b border-gray-50"
-                                            onPress={() =>
+                                            onPress={async () => {
+                                                let chatId = user.id;
+
+                                                try {
+                                                    const existingId =
+                                                        await chatApi.findConversationIdByUserId(
+                                                            user.id,
+                                                        );
+                                                    if (existingId) {
+                                                        chatId = existingId;
+                                                    }
+                                                } catch (error) {
+                                                    console.warn(
+                                                        "Could not resolve conversationId for contact:",
+                                                        error,
+                                                    );
+                                                }
+
                                                 router.push({
                                                     pathname:
                                                         "/message/chat/[id]",
                                                     params: {
-                                                        id: user.id,
+                                                        id: chatId,
+                                                        targetUserId: user.id,
                                                         name: user.name,
                                                         avatar: user.avatar,
                                                         from: "contact",
                                                     },
-                                                } as any)
-                                            }
+                                                } as any);
+                                            }}
                                         >
                                             {isValidImage(user.avatar) ? (
                                                 <Image

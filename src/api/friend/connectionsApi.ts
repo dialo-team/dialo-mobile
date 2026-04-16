@@ -6,16 +6,17 @@ const normalizeList = <T>(data: unknown): T[] => {
         return data as T[];
     }
     if (data && typeof data === "object") {
-        const value = data as Record<string, unknown>;
-        if (Array.isArray(value.data)) {
-            return value.data as T[];
+        const value = data as any;
+
+        // SỬA Ở ĐÂY: Ưu tiên lấy từ data.friends trước (theo đúng ảnh Swagger)
+        if (value.data && Array.isArray(value.data.friends)) {
+            return value.data.friends as T[];
         }
-        if (Array.isArray(value.friends)) {
-            return value.friends as T[];
-        }
-        if (Array.isArray(value.blocks)) {
-            return value.blocks as T[];
-        }
+
+        // Các trường hợp fallback cũ
+        if (Array.isArray(value.data)) return value.data;
+        if (Array.isArray(value.friends)) return value.friends;
+        if (Array.isArray(value.blocks)) return value.blocks;
     }
     return [];
 };

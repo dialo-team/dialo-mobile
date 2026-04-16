@@ -258,7 +258,7 @@ export default function AccountSecurityScreen() {
                                 Số điện thoại
                             </Text>
                             <Text className="text-[14px] text-gray-500">
-                                {phoneNumber}
+                                {getInitials(phoneNumber)}
                             </Text>
                         </View>
                         <ChevronRight size={24} color="#C4C4C4" />
