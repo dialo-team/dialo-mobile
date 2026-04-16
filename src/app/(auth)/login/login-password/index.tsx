@@ -14,8 +14,8 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { authenticationApi } from "@/src/api/auth/authenticationApi";
-import { saveAuthData } from "@/src/api/auth/authStorage"; // Bổ sung hàm lưu Token
-import { maskPhone, normalizePhoneTo84 } from "@/src/utils/phone";
+import { saveAuthData } from "@/src/api/auth/authStorage";
+import { keepPhoneDigitsOnly, maskPhone } from "@/src/utils/phone";
 
 export default function LoginWithPasswordScreen() {
     const router = useRouter();
@@ -25,7 +25,7 @@ export default function LoginWithPasswordScreen() {
     const [showPassword, setShowPassword] = useState(false);
     const [isSubmitting, setIsSubmitting] = useState(false);
 
-    // --- LOGIC RÀNG BUỘC MẬT KHẨU MỚI ---
+    // --- LOGIC RÀNG BUỘC MẬT KHẨU ---
     const isValidLength = password.length >= 6 && password.length <= 32;
     const hasLetterAndNumberOrSpecial = /(?=.*[a-zA-Z])(?=.*[\d\W_])/.test(
         password,
@@ -34,11 +34,33 @@ export default function LoginWithPasswordScreen() {
 
     const maskedPhone = phone ? maskPhone(String(phone)) : "";
 
+    /**
+     * ✅ Chuẩn hoá phone giống Signup
+     * - +84xxxxxxxx  -> 0xxxxxxxx
+     * - 84xxxxxxxx   -> 0xxxxxxxx
+     * - xxxxxxxxx    -> 0xxxxxxxx
+     */
+    const normalizePhoneLikeSignup = (input: string) => {
+        const digits = keepPhoneDigitsOnly(input);
+
+        if (digits.startsWith("84")) {
+            return "0" + digits.slice(2);
+        }
+
+        if (!digits.startsWith("0")) {
+            return "0" + digits;
+        }
+
+        return digits;
+    };
+
     const extractTokens = (response: any) => {
         const root = response?.data ?? response;
         const payload = root?.data ?? root?.result ?? root;
+
         const accessToken = payload?.accessToken ?? payload?.access_token;
         const refreshToken = payload?.refreshToken ?? payload?.refresh_token;
+
         return {
             accessToken: typeof accessToken === "string" ? accessToken : "",
             refreshToken: typeof refreshToken === "string" ? refreshToken : "",
@@ -48,33 +70,19 @@ export default function LoginWithPasswordScreen() {
     const handleLogin = async () => {
         if (!phone) return;
         setIsSubmitting(true);
+
         try {
             const rawPhone = String(phone);
-            const normalizedPhone = normalizePhoneTo84(rawPhone);
-            let response: any;
+            const normalizedPhone = normalizePhoneLikeSignup(rawPhone);
 
-            console.log("Số điện thoại gửi lên API Login:", normalizedPhone);
+            console.log("Phone gửi lên API Login:", normalizedPhone);
 
-            try {
-                response = await authenticationApi.signin({
-                    phone: normalizedPhone,
-                    password,
-                });
-            } catch (firstError: any) {
-                if (rawPhone !== normalizedPhone) {
-                    console.warn(
-                        "Login với định dạng +84 thất bại, thử lại với định dạng gốc.",
-                    );
-                    response = await authenticationApi.signin({
-                        phone: rawPhone,
-                        password,
-                    });
-                } else {
-                    throw firstError;
-                }
-            }
+            const response = await authenticationApi.signin({
+                phone: normalizedPhone,
+                password,
+            });
 
-            console.log("Response từ server:", response);
+            console.log("✅ Response server:", response);
 
             const responseRoot = response?.data ?? response;
             if (
@@ -89,7 +97,7 @@ export default function LoginWithPasswordScreen() {
 
             const { accessToken, refreshToken } = extractTokens(response);
 
-            // Trường hợp backend trả token trực tiếp sau khi nhập password
+            // ✅ Backend trả token trực tiếp
             if (accessToken && refreshToken) {
                 await saveAuthData(accessToken, refreshToken);
                 Alert.alert("Thành công", "Đăng nhập thành công!");
@@ -97,7 +105,7 @@ export default function LoginWithPasswordScreen() {
                 return;
             }
 
-            // Trường hợp backend yêu cầu xác thực OTP tiếp theo
+            // ✅ Backend yêu cầu OTP
             router.push({
                 pathname: "/login/verify" as any,
                 params: {
@@ -107,11 +115,11 @@ export default function LoginWithPasswordScreen() {
             });
         } catch (error: any) {
             console.error(
-                "Chi tiết lỗi API:",
+                "❌ Lỗi login:",
                 error.response?.data || error.message,
             );
 
-            let errorMessage =
+            const errorMessage =
                 error.response?.data?.message ||
                 error.response?.data?.error ||
                 error.message ||
@@ -119,7 +127,9 @@ export default function LoginWithPasswordScreen() {
 
             Alert.alert(
                 "Lỗi đăng nhập",
-                `${errorMessage}\n\n(Status: ${error.response?.status || "unknown"})`,
+                `${errorMessage}\n\n(Status: ${
+                    error.response?.status ?? "unknown"
+                })`,
             );
         } finally {
             setIsSubmitting(false);
@@ -127,12 +137,7 @@ export default function LoginWithPasswordScreen() {
     };
 
     return (
-        <SafeAreaView
-            style={{
-                flex: 1,
-            }}
-            className="bg-white"
-        >
+        <SafeAreaView className="flex-1 bg-white">
             <KeyboardAvoidingView
                 behavior={Platform.OS === "ios" ? "padding" : undefined}
                 className="flex-1 bg-white"
@@ -167,15 +172,23 @@ export default function LoginWithPasswordScreen() {
                         </TouchableOpacity>
                     </View>
 
-                    {/* --- GIAO DIỆN GỢI Ý ĐIỀU KIỆN MẬT KHẨU --- */}
+                    {/* Password hints */}
                     <View className="mt-3 px-2 space-y-1">
                         <Text
-                            className={`text-[13px] ${isValidLength ? "text-blue-600" : "text-gray-500"}`}
+                            className={`text-[13px] ${
+                                isValidLength
+                                    ? "text-blue-600"
+                                    : "text-gray-500"
+                            }`}
                         >
                             • Từ 6 đến 32 ký tự
                         </Text>
                         <Text
-                            className={`text-[13px] ${hasLetterAndNumberOrSpecial ? "text-blue-600" : "text-gray-500"}`}
+                            className={`text-[13px] ${
+                                hasLetterAndNumberOrSpecial
+                                    ? "text-blue-600"
+                                    : "text-gray-500"
+                            }`}
                         >
                             • Gồm chữ và ít nhất 1 số hoặc 1 ký tự đặc biệt
                         </Text>
@@ -193,14 +206,14 @@ export default function LoginWithPasswordScreen() {
                     {/* Forgot password */}
                     <View className="flex-1 justify-end items-center pb-10">
                         <TouchableOpacity
-                            onPress={() => {
+                            onPress={() =>
                                 router.push({
                                     pathname: "/login/forgot-password" as any,
                                     params: {
                                         phone: String(phone ?? ""),
                                     },
-                                });
-                            }}
+                                })
+                            }
                         >
                             <Text className="text-blue-600 font-semibold">
                                 Quên mật khẩu?
