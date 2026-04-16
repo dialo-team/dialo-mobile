@@ -39,7 +39,11 @@ export default function AddFriendScreen() {
                 if (profileData) {
                     setUserName(
                         profileData.userName ||
+                            profileData.username ||
                             profileData.name ||
+                            profileData.displayName ||
+                            profileData.nickName ||
+                            profileData.nickname ||
                             profileData.fullName,
                     );
                     console.log("Tên User lấy được:", profileData.userName); // Log kiểm tra
@@ -124,9 +128,19 @@ export default function AddFriendScreen() {
                             id: userData.id,
                             name:
                                 userData.userName ||
+                                userData.username ||
                                 userData.name ||
+                                userData.displayName ||
+                                userData.nickName ||
+                                userData.nickname ||
                                 userData.fullName,
-                            avatar: userData.avatarUrl || userData.avatar,
+                            avatar:
+                                userData.avatarUrl ||
+                                userData.avatar ||
+                                userData.profilePictureUrl ||
+                                userData.profilePicture ||
+                                userData.photoUrl ||
+                                userData.imageUrl,
                         },
                     });
                 } else {
@@ -137,10 +151,24 @@ export default function AddFriendScreen() {
                             id: userData.id,
                             name:
                                 userData.userName ||
+                                userData.username ||
                                 userData.name ||
+                                userData.displayName ||
+                                userData.nickName ||
+                                userData.nickname ||
                                 userData.fullName,
-                            avatar: userData.avatarUrl || userData.avatar,
-                            cover: userData.backgroundUrl || userData.cover,
+                            avatar:
+                                userData.avatarUrl ||
+                                userData.avatar ||
+                                userData.profilePictureUrl ||
+                                userData.profilePicture ||
+                                userData.photoUrl ||
+                                userData.imageUrl,
+                            cover:
+                                userData.backgroundUrl ||
+                                userData.background ||
+                                userData.coverUrl ||
+                                userData.cover,
                         },
                     });
                 }

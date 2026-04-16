@@ -1,5 +1,6 @@
 import { connectionsApi } from "@/src/api/friend/connectionsApi";
 import { friendApi } from "@/src/api/friend/friendApi"; // Thêm API
+import { getInitials, pickBestDisplayName } from "@/src/utils/displayUser";
 import { AntDesign, Feather } from "@expo/vector-icons";
 import { useFocusEffect, useRouter } from "expo-router"; // Thêm useFocusEffect
 import { Cake, Phone, Search, Users, Video } from "lucide-react-native";
@@ -35,14 +36,6 @@ export default function ContactsScreen() {
     useEffect(() => {
         console.log("Danh bạ hiện tại trong App:", contacts);
     }, [contacts]);
-
-    // Lấy chữ cái đầu làm Avatar dự phòng
-    const getInitials = (text: string) => {
-        if (!text || text === "undefined") return "U";
-        const words = text.trim().split(" ");
-        if (words.length === 1) return words[0][0].toUpperCase();
-        return (words[0][0] + words[words.length - 1][0]).toUpperCase();
-    };
 
     // Kiểm tra link ảnh hợp lệ
     const isValidImage = (url: string | undefined) => {
@@ -89,11 +82,16 @@ export default function ContactsScreen() {
                     if (Array.isArray(friendsArray)) {
                         const mappedFriends = friendsArray.map((item: any) => ({
                             id: item.friendId || item.id,
-                            name:
-                                item.friendUserName ||
-                                item.userName ||
-                                item.name ||
-                                "Người dùng",
+                            name: pickBestDisplayName(
+                                [
+                                    item.friendUserName,
+                                    item.userName,
+                                    item.name,
+                                    item.displayName,
+                                    item.fullName,
+                                ],
+                                "Nguoi dung",
+                            ),
                             avatar:
                                 item.friendAvatar ||
                                 item.avatar ||
@@ -120,7 +118,7 @@ export default function ContactsScreen() {
         const grouped: Record<string, Contact[]> = {};
 
         contactList.forEach((contact) => {
-            const firstLetter = contact.name[0].toUpperCase();
+            const firstLetter = getInitials(contact.name).charAt(0);
 
             if (!grouped[firstLetter]) {
                 grouped[firstLetter] = [];

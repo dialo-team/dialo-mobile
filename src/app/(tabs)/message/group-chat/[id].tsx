@@ -46,7 +46,6 @@ export default function GroupChatScreen() {
 
     // State quản lý tin nhắn đang được chọn
     const [selectedMessage, setSelectedMessage] = useState(null);
-    const [unsendMessageState, setUnsendMessageState] = useState(null);
 
     // State quản lý tin nhắn hình ảnh/video đang được xem phóng to
     const [viewingMediaMessage, setViewingMediaMessage] = useState(null);

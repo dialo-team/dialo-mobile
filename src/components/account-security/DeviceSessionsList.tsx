@@ -1,12 +1,14 @@
 import { SessionDeviceItem } from "@/src/api/auth/types";
 import React from "react";
-import { ActivityIndicator, Text, View } from "react-native";
+import { ActivityIndicator, Text, TouchableOpacity, View } from "react-native";
 
 type DeviceSessionsListProps = {
     title: string;
     sessions: SessionDeviceItem[];
     isLoading?: boolean;
     emptyText?: string;
+    actionLabel?: string;
+    onActionPress?: (sessId?: string) => void | Promise<void>;
 };
 
 const formatTime = (raw?: string) => {
@@ -21,6 +23,8 @@ export function DeviceSessionsList({
     sessions,
     isLoading = false,
     emptyText = "Không có dữ liệu",
+    actionLabel,
+    onActionPress,
 }: DeviceSessionsListProps) {
     return (
         <View className="mx-3 mt-3 rounded-2xl bg-white p-4">
@@ -58,6 +62,18 @@ export function DeviceSessionsList({
                             <Text className="mt-1 text-xs text-gray-400">
                                 Hoạt động: {activeAt}
                             </Text>
+                            {actionLabel && onActionPress ? (
+                                <TouchableOpacity
+                                    className="mt-2 self-start rounded-full bg-blue-50 px-3 py-1"
+                                    onPress={() =>
+                                        onActionPress(item.sessId || item.id)
+                                    }
+                                >
+                                    <Text className="text-xs font-medium text-blue-600">
+                                        {actionLabel}
+                                    </Text>
+                                </TouchableOpacity>
+                            ) : null}
                         </View>
                     );
                 })

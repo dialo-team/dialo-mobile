@@ -1,15 +1,9 @@
 import { chatApi, chatAuthUtils } from "@/src/api/chat/chatApi";
+import { friendApi } from "@/src/api/friend/friendApi";
 import { useChatRealtime } from "@/src/hooks/useChatRealtime";
+import { getInitials, pickBestDisplayName } from "@/src/utils/displayUser";
 import { useRouter } from "expo-router";
-import {
-    Calendar,
-    Folder,
-    Plus,
-    ScanQrCode,
-    Search,
-    UsersRound,
-    Video,
-} from "lucide-react-native";
+import { Plus, ScanQrCode, Search } from "lucide-react-native";
 import React, {
     useCallback,
     useEffect,
@@ -18,6 +12,8 @@ import React, {
     useState,
 } from "react";
 import {
+    Animated,
+    Easing,
     Image,
     Modal,
     Pressable,
@@ -50,6 +46,7 @@ export default function MessagesScreen() {
     const [error, setError] = useState("");
     const [currentUserId, setCurrentUserId] = useState("");
     const refreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const listEntrance = useRef(new Animated.Value(0)).current;
 
     const loadConversations = useCallback(async () => {
         if (!currentUserId) {
@@ -63,8 +60,100 @@ export default function MessagesScreen() {
         try {
             console.log("[MessagesScreen] Loading conversations...");
             const data = await chatApi.getConversations();
-            console.log("[MessagesScreen] Loaded conversations:", data?.length);
-            setConversations(Array.isArray(data) ? data : []);
+            const list = Array.isArray(data) ? data : [];
+
+            const extractProfileDisplayInfo = (profile: any) => ({
+                name: pickBestDisplayName(
+                    [
+                        profile?.userName,
+                        profile?.username,
+                        profile?.name,
+                        profile?.displayName,
+                        profile?.nickName,
+                        profile?.nickname,
+                        profile?.fullName,
+                    ],
+                    "Nguoi dung",
+                ),
+                avatar:
+                    profile?.avatarUrl ||
+                    profile?.avatar ||
+                    profile?.profilePictureUrl ||
+                    profile?.profilePicture ||
+                    profile?.photoUrl ||
+                    profile?.imageUrl ||
+                    "",
+            });
+
+            const enriched = await Promise.all(
+                list.map(async (conversation: any) => {
+                    const baseName = pickBestDisplayName(
+                        [
+                            conversation.counterpartName,
+                            conversation.remarkName,
+                            conversation.counterpartUserName,
+                            conversation.displayName,
+                            conversation.userName,
+                            conversation.name,
+                            conversation.fullName,
+                        ],
+                        "Nguoi dung",
+                    );
+
+                    const baseAvatar =
+                        conversation.counterpartAvatarUrl ||
+                        conversation.counterpartAvatar ||
+                        conversation.profilePictureUrl ||
+                        conversation.profilePicture ||
+                        conversation.photoUrl ||
+                        conversation.imageUrl ||
+                        conversation.avatarUrl ||
+                        conversation.avatar ||
+                        "";
+
+                    const needsLookup =
+                        !baseName || baseName === "Nguoi dung" || !baseAvatar;
+
+                    if (!needsLookup || !conversation.counterpartId) {
+                        return {
+                            ...conversation,
+                            counterpartName: baseName,
+                            counterpartAvatarUrl: baseAvatar,
+                        };
+                    }
+
+                    try {
+                        const userRes = await friendApi.getUserById(
+                            conversation.counterpartId,
+                        );
+                        const profile = userRes?.data || userRes;
+                        const profileDisplay =
+                            extractProfileDisplayInfo(profile);
+
+                        return {
+                            ...conversation,
+                            counterpartName:
+                                baseName !== "Nguoi dung"
+                                    ? baseName
+                                    : profileDisplay.name,
+                            counterpartAvatarUrl:
+                                baseAvatar || profileDisplay.avatar,
+                        };
+                    } catch {
+                        return {
+                            ...conversation,
+                            counterpartName: baseName,
+                            counterpartAvatarUrl: baseAvatar,
+                        };
+                    }
+                }),
+            );
+
+            console.log(
+                "[MessagesScreen] Loaded conversations:",
+                enriched?.length,
+            );
+            setConversations(enriched);
         } catch (e: any) {
             let errorMsg =
                 e?.message || "Không thể tải danh sách cuộc trò chuyện";
@@ -150,6 +239,20 @@ export default function MessagesScreen() {
         return colors[hash % colors.length];
     };
 
+    const getConversationDisplayName = (conversation: Conversation) =>
+        pickBestDisplayName(
+            [
+                conversation.counterpartName,
+                (conversation as any)?.remarkName,
+                (conversation as any)?.counterpartUserName,
+                (conversation as any)?.displayName,
+                (conversation as any)?.userName,
+                (conversation as any)?.name,
+                (conversation as any)?.fullName,
+            ],
+            "Nguoi dung",
+        );
+
     const plusMenu = [
         {
             id: "1",
@@ -157,37 +260,21 @@ export default function MessagesScreen() {
             title: "Thêm bạn",
             route: "/contact/friend/add",
         },
-        {
-            id: "2",
-            icon: <UsersRound size={20} color="gray" />,
-            title: "Tạo/Open conversation",
-            route: "/message/new-conversation",
-        },
-        {
-            id: "3",
-            icon: <Folder size={20} color="gray" />,
-            title: "My Documents",
-        },
-        {
-            id: "4",
-            icon: <Calendar size={20} color="gray" />,
-            title: "Lịch Zalo",
-        },
-        {
-            id: "5",
-            icon: <Video size={20} color="gray" />,
-            title: "Tạo cuộc gọi nhóm",
-        },
     ];
+
+    useEffect(() => {
+        Animated.timing(listEntrance, {
+            toValue: 1,
+            duration: 350,
+            easing: Easing.out(Easing.cubic),
+            useNativeDriver: true,
+        }).start();
+    }, [listEntrance]);
 
     const filteredConversations = useMemo(
         () =>
             conversations.filter((conversation) =>
-                (
-                    conversation.counterpartName ||
-                    conversation.counterpartId ||
-                    ""
-                )
+                getConversationDisplayName(conversation)
                     .toLowerCase()
                     .includes(searchText.toLowerCase().trim()),
             ),
@@ -236,26 +323,15 @@ export default function MessagesScreen() {
                 >
                     <Plus size={26} color="white" />
                 </TouchableOpacity>
-
-                <TouchableOpacity className="ml-3" onPress={loadConversations}>
-                    <Text className="text-white text-sm">Tải lại</Text>
-                </TouchableOpacity>
             </View>
 
-            <View className="px-4 py-2 bg-blue-50 border-b border-blue-100 flex-row items-center justify-between">
-                <Text className="text-xs text-blue-900">
-                    Realtime: {connected ? "Đang kết nối" : "Mất kết nối"}
-                </Text>
-                <TouchableOpacity
-                    onPress={() =>
-                        router.push("/message/new-conversation" as any)
-                    }
-                >
-                    <Text className="text-xs text-blue-700 font-semibold">
-                        Tạo/Open conversation
+            {!connected && (
+                <View className="px-4 py-2 bg-amber-50 border-b border-amber-200">
+                    <Text className="text-xs text-amber-800">
+                        Realtime đang gián đoạn, danh sách có thể cập nhật chậm.
                     </Text>
-                </TouchableOpacity>
-            </View>
+                </View>
+            )}
 
             {!!error && (
                 <View className="px-4 py-2 bg-red-50 border-b border-red-200">
@@ -264,114 +340,121 @@ export default function MessagesScreen() {
             )}
 
             {/* Conversations List */}
-            <ScrollView
-                className="flex-1"
-                refreshControl={
-                    <RefreshControl
-                        refreshing={loading}
-                        onRefresh={loadConversations}
-                    />
-                }
+            <Animated.View
+                style={{
+                    flex: 1,
+                    opacity: listEntrance,
+                    transform: [
+                        {
+                            translateY: listEntrance.interpolate({
+                                inputRange: [0, 1],
+                                outputRange: [10, 0],
+                            }),
+                        },
+                    ],
+                }}
             >
-                {loading && (
-                    <Text className="text-center text-gray-500 mt-6">
-                        Đang tải cuộc trò chuyện...
-                    </Text>
-                )}
-                {filteredConversations.map((conversation) => (
-                    <TouchableOpacity
-                        key={conversation.conversationId}
-                        onPress={() => {
-                            router.push({
-                                pathname: "/message/chat/[id]",
-                                params: {
-                                    id: conversation.conversationId,
-                                    name:
-                                        conversation.counterpartName ||
-                                        conversation.counterpartId ||
-                                        "Người dùng",
-                                    avatar:
-                                        conversation.counterpartAvatarUrl || "",
-                                    from: "message",
-                                },
-                            });
-                        }}
-                        className="mx-3 mt-2 flex-row items-center px-3 py-3 rounded-2xl border border-gray-100 bg-white"
-                    >
-                        {/* Avatar */}
-                        <View className="relative">
-                            {conversation.counterpartAvatarUrl ? (
-                                <Image
-                                    source={{
-                                        uri: conversation.counterpartAvatarUrl,
-                                    }}
-                                    className="w-12 h-12 rounded-full"
-                                />
-                            ) : (
-                                <View
-                                    className={`w-12 h-12 rounded-full items-center justify-center ${getAvatarColor(
-                                        (
-                                            conversation.counterpartName ||
-                                            conversation.counterpartId ||
-                                            "U"
-                                        )
-                                            .slice(0, 2)
-                                            .toUpperCase(),
-                                    )}`}
-                                >
-                                    <Text className="text-white font-semibold text-base">
-                                        {(
-                                            conversation.counterpartName ||
-                                            conversation.counterpartId ||
-                                            "U"
-                                        )
-                                            .slice(0, 2)
-                                            .toUpperCase()}
+                <ScrollView
+                    className="flex-1"
+                    refreshControl={
+                        <RefreshControl
+                            refreshing={loading}
+                            onRefresh={loadConversations}
+                        />
+                    }
+                >
+                    {loading && (
+                        <Text className="text-center text-gray-500 mt-6">
+                            Đang tải cuộc trò chuyện...
+                        </Text>
+                    )}
+                    {filteredConversations.map((conversation) => {
+                        const displayName =
+                            getConversationDisplayName(conversation);
+                        const initials = getInitials(displayName);
+
+                        return (
+                            <TouchableOpacity
+                                key={conversation.conversationId}
+                                onPress={() => {
+                                    router.push({
+                                        pathname: "/message/chat/[id]",
+                                        params: {
+                                            id: conversation.conversationId,
+                                            name: displayName,
+                                            avatar:
+                                                conversation.counterpartAvatarUrl ||
+                                                "",
+                                            from: "message",
+                                        },
+                                    });
+                                }}
+                                className="mx-3 mt-2 flex-row items-center px-3 py-3 rounded-2xl border border-gray-100 bg-white"
+                            >
+                                {/* Avatar */}
+                                <View className="relative">
+                                    {conversation.counterpartAvatarUrl ? (
+                                        <Image
+                                            source={{
+                                                uri: conversation.counterpartAvatarUrl,
+                                            }}
+                                            className="w-12 h-12 rounded-full"
+                                        />
+                                    ) : (
+                                        <View
+                                            className={`w-12 h-12 rounded-full items-center justify-center ${getAvatarColor(
+                                                initials,
+                                            )}`}
+                                        >
+                                            <Text className="text-white font-semibold text-base">
+                                                {initials}
+                                            </Text>
+                                        </View>
+                                    )}
+                                </View>
+
+                                {/* Content */}
+                                <View className="flex-1 ml-3">
+                                    <View className="flex-row items-center justify-between">
+                                        <Text className="font-semibold text-gray-900 text-base">
+                                            {displayName}
+                                        </Text>
+                                        <Text className="text-gray-400 text-xs">
+                                            {formatLastTime(
+                                                conversation.lastMessageAt,
+                                            )}
+                                        </Text>
+                                    </View>
+                                    <Text
+                                        className="text-gray-600 text-sm mt-1 pr-2"
+                                        numberOfLines={1}
+                                    >
+                                        {formatPreview(conversation)}
                                     </Text>
                                 </View>
-                            )}
-                        </View>
 
-                        {/* Content */}
-                        <View className="flex-1 ml-3">
-                            <View className="flex-row items-center justify-between">
-                                <Text className="font-semibold text-gray-900 text-base">
-                                    {conversation.counterpartName ||
-                                        conversation.counterpartId ||
-                                        "Người dùng"}
-                                </Text>
-                                <Text className="text-gray-400 text-xs">
-                                    {formatLastTime(conversation.lastMessageAt)}
-                                </Text>
-                            </View>
-                            <Text
-                                className="text-gray-600 text-sm mt-1 pr-2"
-                                numberOfLines={1}
-                            >
-                                {formatPreview(conversation)}
-                            </Text>
-                        </View>
+                                {/* Unread indicator */}
+                                {(conversation.unreadCount || 0) > 0 ? (
+                                    <View className="min-w-[20px] h-5 px-1 rounded-full bg-red-500 items-center justify-center ml-2">
+                                        <Text className="text-white text-[11px] font-semibold">
+                                            {conversation.unreadCount &&
+                                            conversation.unreadCount > 99
+                                                ? "99+"
+                                                : conversation.unreadCount}
+                                        </Text>
+                                    </View>
+                                ) : null}
+                            </TouchableOpacity>
+                        );
+                    })}
 
-                        {/* Unread indicator */}
-                        {(conversation.unreadCount || 0) > 0 ? (
-                            <View className="min-w-[20px] h-5 px-1 rounded-full bg-red-500 items-center justify-center ml-2">
-                                <Text className="text-white text-[11px] font-semibold">
-                                    {conversation.unreadCount &&
-                                    conversation.unreadCount > 99
-                                        ? "99+"
-                                        : conversation.unreadCount}
-                                </Text>
-                            </View>
-                        ) : null}
-                    </TouchableOpacity>
-                ))}
-
-                {!loading && filteredConversations.length === 0 && (
-                    <Text className="text-center text-gray-500 mt-6">
-                        Chưa có cuộc trò chuyện
-                    </Text>
-                )}
-            </ScrollView>
+                    {!loading && filteredConversations.length === 0 && (
+                        <Text className="text-center text-gray-500 mt-6">
+                            Chưa có cuộc trò chuyện
+                        </Text>
+                    )}
+                </ScrollView>
+            </Animated.View>
 
             <Modal visible={showMenu} transparent animationType="fade">
                 <Pressable

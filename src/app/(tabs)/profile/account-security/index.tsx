@@ -1,8 +1,12 @@
+import { authenticationApi } from "@/src/api/auth/authenticationApi";
+import { getAccessToken, getRefreshToken } from "@/src/api/auth/authStorage";
 import { securityApi } from "@/src/api/auth/securityApi";
 import { SessionDeviceItem } from "@/src/api/auth/types";
+import { userApi } from "@/src/api/user/userApi";
 import { AccountLockConfirmModal } from "@/src/components/account-security/AccountLockConfirmModal";
 import { DeviceSessionsList } from "@/src/components/account-security/DeviceSessionsList";
 import { useQrLoginFlow } from "@/src/hooks/useQrLoginFlow";
+import { getInitials, pickBestDisplayName } from "@/src/utils/displayUser";
 import { useRouter } from "expo-router";
 import {
     ChevronRight,
@@ -13,7 +17,7 @@ import {
     ShieldHalf,
     TriangleAlert,
 } from "lucide-react-native";
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
     Alert,
     Image,
@@ -37,8 +41,55 @@ export default function AccountSecurityScreen() {
     const [inactiveSessions, setInactiveSessions] = useState<
         SessionDeviceItem[]
     >([]);
+    const [userName, setUserName] = useState("Đang tải...");
+    const [phoneNumber, setPhoneNumber] = useState("-");
+    const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
     const router = useRouter();
     const qrFlow = useQrLoginFlow();
+
+    useEffect(() => {
+        let mounted = true;
+
+        const loadProfile = async () => {
+            try {
+                const profile = await userApi.getProfile();
+                if (!mounted) return;
+
+                setUserName(
+                    pickBestDisplayName(
+                        [
+                            profile?.userName,
+                            profile?.username,
+                            profile?.name,
+                            profile?.displayName,
+                            profile?.nickName,
+                            profile?.nickname,
+                            profile?.fullName,
+                        ],
+                        "Nguoi dung",
+                    ),
+                );
+                setPhoneNumber(profile?.phone || "-");
+                setAvatarUrl(
+                    profile?.avatarUrl ||
+                        profile?.avatar ||
+                        profile?.profilePictureUrl ||
+                        profile?.profilePicture ||
+                        profile?.photoUrl ||
+                        profile?.imageUrl ||
+                        null,
+                );
+            } catch (error) {
+                console.error("[account-security] loadProfile error:", error);
+            }
+        };
+
+        loadProfile();
+
+        return () => {
+            mounted = false;
+        };
+    }, []);
 
     const fetchSessions = async () => {
         setIsLoadingSessions(true);
@@ -53,6 +104,50 @@ export default function AccountSecurityScreen() {
             Alert.alert("Lỗi", "Không thể tải danh sách thiết bị.");
         } finally {
             setIsLoadingSessions(false);
+        }
+    };
+
+    const handleLogoutSession = async (sessId?: string) => {
+        if (!sessId) return;
+
+        try {
+            const accessToken = await getAccessToken();
+            await authenticationApi.signoutBySession(
+                sessId,
+                accessToken || undefined,
+            );
+            Alert.alert("Thành công", "Đã đăng xuất thiết bị.");
+            await fetchSessions();
+        } catch (error: any) {
+            Alert.alert(
+                "Lỗi",
+                error?.message || "Không thể đăng xuất thiết bị.",
+            );
+        }
+    };
+
+    const handleLogoutAllDevices = async () => {
+        try {
+            const [accessToken, refreshToken] = await Promise.all([
+                getAccessToken(),
+                getRefreshToken(),
+            ]);
+
+            if (!refreshToken) {
+                Alert.alert("Lỗi", "Không tìm thấy refresh token.");
+                return;
+            }
+
+            await authenticationApi.signoutAll(
+                { refreshToken },
+                accessToken || undefined,
+            );
+            Alert.alert("Thành công", "Đã đăng xuất tất cả thiết bị.");
+        } catch (error: any) {
+            Alert.alert(
+                "Lỗi",
+                error?.message || "Không thể đăng xuất tất cả thiết bị.",
+            );
         }
     };
 
@@ -130,16 +225,24 @@ export default function AccountSecurityScreen() {
                         className="flex-row items-center px-4 py-3 border-b border-gray-100"
                         activeOpacity={0.8}
                     >
-                        <Image
-                            source={{ uri: "https://i.pravatar.cc/150?img=11" }} // Link ảnh minh họa
-                            className="w-[46px] h-[46px] rounded-full mr-3"
-                        />
+                        {avatarUrl ? (
+                            <Image
+                                source={{ uri: avatarUrl }}
+                                className="w-[46px] h-[46px] rounded-full mr-3"
+                            />
+                        ) : (
+                            <View className="w-[46px] h-[46px] rounded-full mr-3 bg-blue-500 items-center justify-center">
+                                <Text className="text-white font-semibold">
+                                    {getInitials(userName)}
+                                </Text>
+                            </View>
+                        )}
                         <View className="flex-1">
                             <Text className="text-[13px] text-gray-500 mb-[2px]">
                                 Thông tin cá nhân
                             </Text>
                             <Text className="text-base font-normal text-black">
-                                Phan Nhật Tiến
+                                {userName}
                             </Text>
                         </View>
                         <ChevronRight size={24} color="#C4C4C4" />
@@ -155,7 +258,7 @@ export default function AccountSecurityScreen() {
                                 Số điện thoại
                             </Text>
                             <Text className="text-[14px] text-gray-500">
-                                (+84) 906 766 050
+                                {phoneNumber}
                             </Text>
                         </View>
                         <ChevronRight size={24} color="#C4C4C4" />
@@ -315,6 +418,20 @@ export default function AccountSecurityScreen() {
                         </Text>
                         <ChevronRight size={24} color="#C4C4C4" />
                     </TouchableOpacity>
+
+                    <TouchableOpacity
+                        className="flex-row items-center px-4 py-4 border-t border-gray-100"
+                        onPress={handleLogoutAllDevices}
+                        activeOpacity={0.8}
+                    >
+                        <View className="w-8">
+                            <TriangleAlert size={24} color="#dc2626" />
+                        </View>
+                        <Text className="flex-1 text-base font-normal text-black">
+                            Đăng xuất tất cả thiết bị
+                        </Text>
+                        <ChevronRight size={24} color="#C4C4C4" />
+                    </TouchableOpacity>
                 </View>
 
                 {showSessions && (
@@ -324,6 +441,8 @@ export default function AccountSecurityScreen() {
                             sessions={activeSessions}
                             isLoading={isLoadingSessions}
                             emptyText="Không có thiết bị đang hoạt động"
+                            actionLabel="Đăng xuất"
+                            onActionPress={handleLogoutSession}
                         />
                         <DeviceSessionsList
                             title="Lịch sử thiết bị"

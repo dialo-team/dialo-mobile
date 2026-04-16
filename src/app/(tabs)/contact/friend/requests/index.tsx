@@ -1,4 +1,5 @@
 import { friendApi } from "@/src/api/friend/friendApi";
+import { getInitials, pickBestDisplayName } from "@/src/utils/displayUser";
 import { useFocusEffect, useRouter } from "expo-router";
 import { MoveLeft } from "lucide-react-native";
 import { useCallback, useMemo, useState } from "react";
@@ -27,13 +28,6 @@ export default function FriendRequestsScreen() {
     const [pending, setPending] = useState<FriendRequest[]>([]);
     const [sentList, setSentList] = useState<FriendRequest[]>([]); // Đổi state lưu danh sách đã gửi
     const [isLoading, setIsLoading] = useState(true);
-
-    const getInitials = (text: string) => {
-        if (!text) return "U";
-        const words = text.trim().split(" ");
-        if (words.length === 1) return words[0][0].toUpperCase();
-        return (words[0][0] + words[words.length - 1][0]).toUpperCase();
-    };
 
     useFocusEffect(
         useCallback(() => {
@@ -64,10 +58,15 @@ export default function FriendRequestsScreen() {
                             const user = userRes?.data || userRes;
                             return {
                                 id: item.senderId,
-                                name:
-                                    user?.userName ||
-                                    user?.name ||
-                                    "Người dùng",
+                                name: pickBestDisplayName(
+                                    [
+                                        user?.userName,
+                                        user?.name,
+                                        user?.displayName,
+                                        user?.fullName,
+                                    ],
+                                    "Nguoi dung",
+                                ),
                                 avatar: user?.avatarUrl || user?.avatar || "",
                             };
                         } catch {
@@ -94,10 +93,15 @@ export default function FriendRequestsScreen() {
                             const user = userRes?.data || userRes;
                             return {
                                 id: targetId,
-                                name:
-                                    user?.userName ||
-                                    user?.name ||
-                                    "Người dùng",
+                                name: pickBestDisplayName(
+                                    [
+                                        user?.userName,
+                                        user?.name,
+                                        user?.displayName,
+                                        user?.fullName,
+                                    ],
+                                    "Nguoi dung",
+                                ),
                                 avatar: user?.avatarUrl || user?.avatar || "",
                             };
                         } catch {

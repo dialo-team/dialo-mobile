@@ -1,4 +1,5 @@
 import { userApi } from "@/src/api/user/userApi";
+import { getInitials } from "@/src/utils/displayUser";
 import * as ImagePicker from "expo-image-picker";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { MoveLeft } from "lucide-react-native";
@@ -13,18 +14,6 @@ export default function UpdateAvatarScreen() {
     const [image, setImage] = useState<string | null>(null);
 
     const [isSubmitting, setIsSubmitting] = useState(false);
-
-    // Lấy chữ cái đầu (VD: "Trâm Anh" → "TA")
-    const getInitials = (fullName?: string) => {
-        if (!fullName) return "NT";
-
-        const words = fullName.trim().split(" ");
-        if (words.length === 1) return words[0][0].toUpperCase();
-
-        return (
-            words[0][0].toUpperCase() + words[words.length - 1][0].toUpperCase()
-        );
-    };
 
     // Hàm xin quyền + mở thư viện
     const pickImage = async () => {
@@ -105,7 +94,7 @@ export default function UpdateAvatarScreen() {
                     ) : (
                         <View className="w-32 h-32 rounded-full bg-green-600 items-center justify-center">
                             <Text className="text-white text-3xl font-semibold">
-                                {getInitials(name)}
+                                {getInitials(name, "U")}
                             </Text>
                         </View>
                     )}

@@ -51,15 +51,11 @@ export type ChatUserProfile = {
     [key: string]: any;
 };
 
-export type CreateConversationPayload = {
-    participantIds: string[];
-    initialSystemMessage?: string | null;
-};
-
 export type SendMessagePayload = {
     conversationId: string;
+    senderId?: string;
     content?: string;
-    type?: string;
+    type?: "TEXT" | "IMAGE" | "VIDEO" | string;
 };
 
 export type ForwardMessagePayload = {

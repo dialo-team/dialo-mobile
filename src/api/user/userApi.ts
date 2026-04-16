@@ -62,11 +62,11 @@ export const userApi = {
 
     getProfile: async () => {
         const response = await apiClient.get("/api/v1/me");
-        return response.data;
+        return response.data?.data || response.data;
     },
 
     getMyQr: async () => {
         const response = await apiClient.get("/api/v1/me/qr");
-        return response.data;
+        return response.data?.data || response.data;
     },
 };

@@ -1,5 +1,6 @@
 import { friendApi } from "@/src/api/friend/friendApi";
 import { userApi } from "@/src/api/user/userApi";
+import { getInitials, pickBestDisplayName } from "@/src/utils/displayUser";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import { ChevronLeft } from "lucide-react-native";
 import { useCallback, useEffect, useState } from "react";
@@ -18,7 +19,7 @@ export default function NewFriendScreen() {
 
     // State dữ liệu hiển thị người dùng (TK2)
     const [userData, setUserData] = useState({
-        name: params.name,
+        name: pickBestDisplayName([params.name], "Nguoi dung"),
         avatar: params.avatar,
         cover: params.cover,
     });
@@ -82,13 +83,25 @@ export default function NewFriendScreen() {
                     setUserData({
                         name:
                             data.userName ||
+                            data.username ||
                             data.name ||
+                            data.displayName ||
+                            data.nickName ||
+                            data.nickname ||
                             data.fullName ||
                             "Người dùng",
-                        avatar: data.avatarUrl || data.avatar || "",
+                        avatar:
+                            data.avatarUrl ||
+                            data.avatar ||
+                            data.profilePictureUrl ||
+                            data.profilePicture ||
+                            data.photoUrl ||
+                            data.imageUrl ||
+                            "",
                         cover:
                             data.backgroundUrl ||
                             data.background ||
+                            data.coverUrl ||
                             data.cover ||
                             "",
                     });
@@ -159,14 +172,6 @@ export default function NewFriendScreen() {
         } finally {
             setIsLoading(false);
         }
-    };
-
-    const getInitials = (text: string) => {
-        if (!text || text === "undefined") return "U";
-        const words = text.trim().split(" ");
-        return words.length === 1
-            ? words[0][0].toUpperCase()
-            : (words[0][0] + words[words.length - 1][0]).toUpperCase();
     };
 
     const isValidImage = (url: string | undefined) =>

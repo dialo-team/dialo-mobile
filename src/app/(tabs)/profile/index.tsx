@@ -1,4 +1,5 @@
 import { userApi } from "@/src/api/user/userApi"; // Thêm import API
+import { getInitials, pickBestDisplayName } from "@/src/utils/displayUser";
 import { useFocusEffect, useRouter } from "expo-router";
 import {
     ChevronRight,
@@ -39,31 +40,40 @@ export default function ProfileScreen() {
     const [userName, setUserName] = useState("Đang tải...");
     const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
 
-    // Lấy chữ cái đầu làm Avatar mặc định (Ví dụ: "Phan Nhất Tiến" -> "PT")
-    const getInitials = (fullName: string) => {
-        if (!fullName || fullName === "Đang tải...") return "U";
-        const words = fullName.trim().split(" ");
-        if (words.length === 1) return words[0][0].toUpperCase();
-        return (words[0][0] + words[words.length - 1][0]).toUpperCase();
-    };
-
     // Dùng useFocusEffect để tự động reload data mỗi khi quay lại tab này
     useFocusEffect(
         useCallback(() => {
             const fetchProfile = async () => {
                 try {
-                    const response = await userApi.getProfile();
+                    const profile = await userApi.getProfile();
 
                     // IN LOG RA ĐỂ KIỂM TRA BE TRẢ VỀ TÊN BIẾN LÀ GÌ
-                    console.log("Dữ liệu Profile từ BE:", response.data);
+                    console.log("Dữ liệu Profile từ BE:", profile);
 
-                    if (response.data) {
-                        setUserName(response.data.userName || "Người dùng");
+                    if (profile) {
+                        setUserName(
+                            pickBestDisplayName(
+                                [
+                                    profile.userName,
+                                    profile.username,
+                                    profile.name,
+                                    profile.displayName,
+                                    profile.nickName,
+                                    profile.nickname,
+                                    profile.fullName,
+                                ],
+                                "Nguoi dung",
+                            ),
+                        );
 
                         // Phòng hờ BE trả về 'avatarUrl' hoặc 'avatar'
                         setAvatarUrl(
-                            response.data.avatarUrl ||
-                                response.data.avatar ||
+                            profile.avatarUrl ||
+                                profile.avatar ||
+                                profile.profilePictureUrl ||
+                                profile.profilePicture ||
+                                profile.photoUrl ||
+                                profile.imageUrl ||
                                 null,
                         );
                     }

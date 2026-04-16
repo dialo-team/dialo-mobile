@@ -147,9 +147,9 @@ export default function ChangePasswordScreen() {
                         </Text>
                     </View>
 
-                    <View className="mt-8 space-y-4">
+                    <View className="mt-8">
                         <View
-                            className={`flex-row items-center border rounded-[10px] h-[50px] px-4 bg-white ${inputBorderOld}`}
+                            className={`flex-row items-center border rounded-[10px] h-[50px] px-4 bg-white mb-4 ${inputBorderOld}`}
                         >
                             <TextInput
                                 className="flex-1 text-[16px] text-black"
@@ -171,7 +171,7 @@ export default function ChangePasswordScreen() {
                         </View>
 
                         <View
-                            className={`flex-row items-center border rounded-[10px] h-[50px] px-4 bg-white ${inputBorderNew}`}
+                            className={`flex-row items-center border rounded-[10px] h-[50px] px-4 bg-white mb-4 ${inputBorderNew}`}
                         >
                             <TextInput
                                 className="flex-1 text-[16px] text-black"

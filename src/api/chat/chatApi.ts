@@ -1,10 +1,10 @@
 import axios, { AxiosRequestConfig } from "axios";
 import { getAccessToken } from "../auth/authStorage";
+import { pickBestDisplayName } from "@/src/utils/displayUser";
 import {
     ChatConversationDetail,
     ChatConversationItem,
     ChatUserProfile,
-    CreateConversationPayload,
     ForwardMessagePayload,
     SendMessagePayload,
 } from "./types";
@@ -119,6 +119,82 @@ const unwrapData = <T>(value: any): T => {
     return value as T;
 };
 
+function collectNestedStringValues(
+    value: any,
+    keyPattern: RegExp,
+    depth = 0,
+    seen = new WeakSet<object>(),
+): string[] {
+    if (!value || typeof value !== "object" || depth > 3) return [];
+    if (seen.has(value)) return [];
+    seen.add(value);
+
+    const results: string[] = [];
+    for (const [key, nestedValue] of Object.entries(value)) {
+        if (typeof nestedValue === "string" && keyPattern.test(key)) {
+            results.push(nestedValue);
+        } else if (nestedValue && typeof nestedValue === "object") {
+            results.push(
+                ...collectNestedStringValues(
+                    nestedValue,
+                    keyPattern,
+                    depth + 1,
+                    seen,
+                ),
+            );
+        }
+    }
+
+    return results;
+}
+
+const normalizeConversationIdentity = <T extends Record<string, any>>(
+    value: T,
+): T => {
+    const counterpartId =
+        value?.counterpartId || value?.targetUserId || value?.userId || "";
+
+    const nameCandidates = [
+        value?.remarkName,
+        value?.counterpartName,
+        value?.counterpartUserName,
+        value?.counterpartDisplayName,
+        value?.displayName,
+        value?.userName,
+        value?.username,
+        value?.nickName,
+        value?.nickname,
+        value?.name,
+        value?.fullName,
+        ...collectNestedStringValues(value, /(name|display|full|nick)/i),
+    ];
+
+    const counterpartName = pickBestDisplayName(nameCandidates, "Nguoi dung");
+
+    const counterpartAvatarUrl =
+        value?.counterpartAvatarUrl ||
+        value?.counterpartAvatar ||
+        value?.profilePictureUrl ||
+        value?.profilePicture ||
+        value?.photoUrl ||
+        value?.imageUrl ||
+        value?.avatarUrl ||
+        value?.avatarURL ||
+        value?.avatar ||
+        collectNestedStringValues(
+            value,
+            /(avatar|photo|image|profilepicture)/i,
+        )[0] ||
+        "";
+
+    return {
+        ...value,
+        counterpartId,
+        counterpartName,
+        counterpartAvatarUrl,
+    } as T;
+};
+
 const request = async <T>(
     path: string,
     config?: AxiosRequestConfig,
@@ -179,25 +255,26 @@ const request = async <T>(
 export const chatApi = {
     // conversation-controller
     getConversations: async (): Promise<ChatConversationItem[]> => {
-        return request<ChatConversationItem[]>("/api/v1/conversations");
-    },
-
-    createConversation: async (payload: CreateConversationPayload) => {
-        return request<{ id?: string; conversationId?: string }>(
-            "/api/v1/conversations",
-            {
-                method: "POST",
-                data: payload,
-            },
-        );
+        const data = await request<any[]>("/api/v1/conversations");
+        return Array.isArray(data)
+            ? data.map((item) => normalizeConversationIdentity(item))
+            : [];
     },
 
     getConversationDetail: async (
         conversationId: string,
     ): Promise<ChatConversationDetail> => {
-        return request<ChatConversationDetail>(
+        const detail = await request<any>(
             `/api/v1/conversations/${conversationId}`,
         );
+
+        const normalized = normalizeConversationIdentity(detail || {});
+
+        return {
+            ...normalized,
+            conversationId: normalized?.conversationId || conversationId,
+            messages: Array.isArray(detail?.messages) ? detail.messages : [],
+        };
     },
 
     updateRemark: async (conversationId: string, remarkName: string) => {
@@ -249,9 +326,29 @@ export const chatApi = {
 
     // message-controller
     sendMessage: async (payload: SendMessagePayload) => {
+        const token = await getAccessToken();
+        const senderId = payload.senderId || decodeJwtSub(token);
+
+        if (!payload.conversationId?.trim()) {
+            throw new Error("Thiếu conversationId khi gửi tin nhắn");
+        }
+
+        if (!senderId?.trim()) {
+            throw new Error(
+                "Không xác định được senderId. Vui lòng đăng nhập lại rồi thử lại.",
+            );
+        }
+
+        const normalizedPayload = {
+            conversationId: payload.conversationId.trim(),
+            senderId,
+            type: payload.type || "TEXT",
+            content: payload.content || "",
+        };
+
         return request("/api/v1/messages", {
             method: "POST",
-            data: payload,
+            data: normalizedPayload,
         });
     },
 

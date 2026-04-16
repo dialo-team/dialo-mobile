@@ -1,5 +1,7 @@
 import { chatApi, chatAuthUtils } from "@/src/api/chat/chatApi";
+import { friendApi } from "@/src/api/friend/friendApi";
 import { useChatRealtime } from "@/src/hooks/useChatRealtime";
+import { getInitials, pickBestDisplayName } from "@/src/utils/displayUser";
 import { Video as AVVideo, ResizeMode } from "expo-av";
 import * as ImagePicker from "expo-image-picker";
 import { useLocalSearchParams, useRouter } from "expo-router";
@@ -15,10 +17,12 @@ import {
     Trash2,
     Video,
 } from "lucide-react-native";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
     ActivityIndicator,
     Alert,
+    Animated,
+    Easing,
     KeyboardAvoidingView,
     Modal,
     Platform,
@@ -46,6 +50,85 @@ function resolveFileUrl(fileUrl?: string) {
     return `${CHAT_BASE_URL}${fileUrl.startsWith("/") ? "" : "/"}${fileUrl}`;
 }
 
+function formatRelativeActivity(value?: string) {
+    if (!value) return "";
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return "";
+
+    const diffMs = Date.now() - date.getTime();
+    const diffMinutes = Math.floor(diffMs / 60000);
+
+    if (diffMinutes < 1) return "vừa xong";
+    if (diffMinutes < 60) return `${diffMinutes} phút trước`;
+
+    const diffHours = Math.floor(diffMinutes / 60);
+    if (diffHours < 24) return `${diffHours} giờ trước`;
+
+    return date.toLocaleString("vi-VN");
+}
+
+function getMessageStatusLabel(message: any) {
+    if (message?.pending) return "đang gửi...";
+
+    const rawStatus = String(
+        message?.raw?.status || message?.messageStatus || "",
+    ).toUpperCase();
+
+    if (message?.readAt || message?.raw?.readAt || message?.raw?.seenAt) {
+        return "đã xem";
+    }
+
+    if (rawStatus === "READ" || rawStatus === "SEEN") {
+        return "đã xem";
+    }
+
+    if (
+        rawStatus === "DELIVERED" ||
+        message?.deliveredAt ||
+        message?.raw?.deliveredAt
+    ) {
+        return "đã gửi";
+    }
+
+    return message?.time || "";
+}
+
+function getMessageKey(item: any, index: number) {
+    return item?.id || item?.raw?.id || `message-${index}`;
+}
+
+function dedupeMessages(items: any[]) {
+    const seen = new Set<string>();
+    const result: any[] = [];
+
+    for (const item of items) {
+        const key = item?.id || item?.raw?.id;
+        if (key) {
+            if (seen.has(key)) {
+                continue;
+            }
+            seen.add(key);
+        }
+        result.push(item);
+    }
+
+    return result;
+}
+
+function isGenericDisplayName(value?: string) {
+    const normalized = (value || "").trim().toLowerCase();
+    if (!normalized) return true;
+
+    return (
+        normalized === "nguoi dung" ||
+        normalized === "người dùng" ||
+        normalized === "tro chuyen" ||
+        normalized === "trò chuyện" ||
+        normalized === "user" ||
+        normalized === "unknown"
+    );
+}
+
 export default function ChatScreen() {
     const router = useRouter();
     const params = useLocalSearchParams<{
@@ -64,13 +147,17 @@ export default function ChatScreen() {
     const [currentUserId, setCurrentUserId] = useState("");
     const [messages, setMessages] = useState<any[]>([]);
     const [message, setMessage] = useState("");
-    const [remarkInput, setRemarkInput] = useState("");
     const [searchKeyword, setSearchKeyword] = useState("");
     const [searchResults, setSearchResults] = useState<any[]>([]);
     const [mediaItems, setMediaItems] = useState<any[]>([]);
-    const [forwardTargetConversationId, setForwardTargetConversationId] =
-        useState("");
-    const [showManageSheet, setShowManageSheet] = useState(false);
+    const [forwardTargets, setForwardTargets] = useState<any[]>([]);
+    const [forwardLoading, setForwardLoading] = useState(false);
+    const [counterpartId, setCounterpartId] = useState("");
+    const [counterpartName, setCounterpartName] = useState("");
+    const [counterpartAvatar, setCounterpartAvatar] = useState("");
+    const [counterpartOnline, setCounterpartOnline] = useState(false);
+    const [counterpartLastActiveAt, setCounterpartLastActiveAt] = useState("");
+    const [remoteTyping, setRemoteTyping] = useState(false);
     const [showSearchSheet, setShowSearchSheet] = useState(false);
     const [showMediaSheet, setShowMediaSheet] = useState(false);
     const [searchLoading, setSearchLoading] = useState(false);
@@ -78,14 +165,31 @@ export default function ChatScreen() {
 
     const [selectedMessage, setSelectedMessage] = useState<any>(null);
     const [viewingMediaMessage, setViewingMediaMessage] = useState<any>(null);
+    const typingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const entranceAnim = useRef(new Animated.Value(0)).current;
 
     const avatarUrl =
-        typeof avatar === "string" &&
+        counterpartAvatar ||
+        (typeof avatar === "string" &&
         (avatar.startsWith("http://") || avatar.startsWith("https://"))
             ? avatar
-            : null;
+            : "");
+    const displayName = pickBestDisplayName(
+        [counterpartName, name],
+        "Tro chuyen",
+    );
 
     const normalizedConversationId = id || "";
+
+    useEffect(() => {
+        entranceAnim.setValue(0);
+        Animated.timing(entranceAnim, {
+            toValue: 1,
+            duration: 280,
+            easing: Easing.out(Easing.cubic),
+            useNativeDriver: true,
+        }).start();
+    }, [entranceAnim, normalizedConversationId]);
 
     const mapApiMessageToUi = useCallback(
         (item: any) => {
@@ -93,8 +197,12 @@ export default function ChatScreen() {
                 !!item?.senderId &&
                 !!currentUserId &&
                 item.senderId === currentUserId;
-            const mineByPosition = item?.displayPosition === "RIGHT";
-            const isMe = mineBySender || mineByPosition;
+            const rawPosition = String(
+                item?.displayPosition || item?.position || "",
+            ).toUpperCase();
+            const isCenter = rawPosition === "CENTER" || !!item?.system;
+            const mineByPosition = rawPosition === "RIGHT";
+            const isMe = !isCenter && (mineBySender || mineByPosition);
 
             const fileUrl = item?.attachment?.fileUrl;
             const type = item?.type || "TEXT";
@@ -119,12 +227,18 @@ export default function ChatScreen() {
                         ? resolveFileUrl(fileUrl)
                         : null,
                 system: !!item?.system,
+                position: isCenter ? "center" : isMe ? "right" : "left",
+                readAt: item?.readAt || item?.seenAt || null,
+                deliveredAt: item?.deliveredAt || null,
+                messageStatus: item?.status || item?.messageStatus || null,
                 pending: false,
                 raw: item,
             };
         },
         [currentUserId],
     );
+
+    const getMessageSide = (msg: any) => msg?.position || msg?.type || "left";
 
     const mergeIncomingMessage = useCallback(
         (incomingMessage: any) => {
@@ -185,12 +299,108 @@ export default function ChatScreen() {
             const detail = await chatApi.getConversationDetail(
                 normalizedConversationId,
             );
-            const mapped = Array.isArray(detail?.messages)
-                ? detail.messages.map(mapApiMessageToUi)
-                : [];
+
+            const needsLookup =
+                isGenericDisplayName(detail?.counterpartName) ||
+                !(
+                    detail?.counterpartAvatarUrl ||
+                    detail?.counterpartAvatar ||
+                    detail?.profilePictureUrl ||
+                    detail?.profilePicture ||
+                    detail?.photoUrl ||
+                    detail?.imageUrl ||
+                    detail?.avatarUrl ||
+                    detail?.avatar
+                );
+
+            let counterpartDisplayName = pickBestDisplayName(
+                [
+                    isGenericDisplayName(detail?.counterpartName)
+                        ? ""
+                        : detail?.counterpartName,
+                    name,
+                ],
+                "Tro chuyen",
+            );
+            let counterpartDisplayAvatar =
+                detail?.counterpartAvatarUrl ||
+                detail?.counterpartAvatar ||
+                detail?.profilePictureUrl ||
+                detail?.profilePicture ||
+                detail?.photoUrl ||
+                detail?.imageUrl ||
+                detail?.avatarUrl ||
+                detail?.avatar ||
+                "";
+
+            if (needsLookup && detail?.counterpartId) {
+                try {
+                    const userRes = await friendApi.getUserById(
+                        detail.counterpartId,
+                    );
+                    const profile = userRes?.data || userRes;
+                    counterpartDisplayName = pickBestDisplayName(
+                        [
+                            isGenericDisplayName(detail?.counterpartName)
+                                ? ""
+                                : detail?.counterpartName,
+                            profile?.userName,
+                            profile?.username,
+                            profile?.name,
+                            profile?.displayName,
+                            profile?.nickName,
+                            profile?.nickname,
+                            profile?.fullName,
+                            name,
+                        ],
+                        "Tro chuyen",
+                    );
+                    counterpartDisplayAvatar =
+                        counterpartDisplayAvatar ||
+                        profile?.avatarUrl ||
+                        profile?.avatar ||
+                        profile?.profilePictureUrl ||
+                        profile?.profilePicture ||
+                        profile?.photoUrl ||
+                        profile?.imageUrl ||
+                        "";
+                } catch (error) {
+                    console.error(
+                        "[ChatScreen] counterpart lookup error:",
+                        error,
+                    );
+                }
+            }
+
+            const mapped = dedupeMessages(
+                Array.isArray(detail?.messages)
+                    ? detail.messages.map(mapApiMessageToUi)
+                    : [],
+            );
             console.log("[ChatScreen] Loaded messages:", mapped.length);
             setMessages(mapped);
-            setRemarkInput(detail?.remarkName || "");
+            setCounterpartId(detail?.counterpartId || "");
+            setCounterpartName(counterpartDisplayName);
+            setCounterpartAvatar(counterpartDisplayAvatar);
+            setCounterpartLastActiveAt(
+                detail?.counterpartLastActiveAt || detail?.lastActiveAt || "",
+            );
+            setCounterpartOnline(
+                Boolean(
+                    detail?.counterpartOnline ||
+                    detail?.online ||
+                    detail?.isOnline,
+                ) ||
+                    (Boolean(
+                        detail?.counterpartLastActiveAt || detail?.lastActiveAt,
+                    ) &&
+                        Date.now() -
+                            new Date(
+                                detail?.counterpartLastActiveAt ||
+                                    detail?.lastActiveAt,
+                            ).getTime() <
+                            5 * 60 * 1000),
+            );
 
             await chatApi.markRead(normalizedConversationId);
             console.log("[ChatScreen] Marked as read");
@@ -204,7 +414,7 @@ export default function ChatScreen() {
         } finally {
             setLoading(false);
         }
-    }, [mapApiMessageToUi, normalizedConversationId]);
+    }, [mapApiMessageToUi, name, normalizedConversationId]);
 
     useEffect(() => {
         (async () => {
@@ -227,13 +437,71 @@ export default function ChatScreen() {
     const handleIncomingRealtimeMessage = useCallback(
         (payload: any) => {
             const incoming = payload?.data || payload?.message || payload;
+
+            const incomingConversationId =
+                incoming?.conversationId || payload?.conversationId;
+            const incomingType = String(
+                incoming?.type || payload?.type || payload?.eventType || "",
+            ).toUpperCase();
+
+            if (
+                incomingConversationId &&
+                incomingConversationId !== normalizedConversationId
+            ) {
+                return;
+            }
+
+            if (incomingType === "TYPING") {
+                setRemoteTyping(true);
+                if (typingTimerRef.current) {
+                    clearTimeout(typingTimerRef.current);
+                }
+                typingTimerRef.current = setTimeout(() => {
+                    setRemoteTyping(false);
+                }, 2000);
+                return;
+            }
+
+            if (incomingType === "READ" || incomingType === "SEEN") {
+                const readMessageId = incoming?.messageId || incoming?.id;
+                if (readMessageId) {
+                    setMessages((prev) =>
+                        prev.map((item) =>
+                            (item?.id || item?.raw?.id) === readMessageId
+                                ? {
+                                      ...item,
+                                      readAt:
+                                          incoming?.readAt ||
+                                          incoming?.seenAt ||
+                                          new Date().toISOString(),
+                                      pending: false,
+                                      raw: {
+                                          ...(item?.raw || {}),
+                                          readAt:
+                                              incoming?.readAt ||
+                                              incoming?.seenAt ||
+                                              new Date().toISOString(),
+                                          status: "READ",
+                                      },
+                                  }
+                                : item,
+                        ),
+                    );
+                }
+                return;
+            }
+
             if (!incoming?.id) {
                 loadConversationDetail();
                 return;
             }
             mergeIncomingMessage(incoming);
         },
-        [loadConversationDetail, mergeIncomingMessage],
+        [
+            loadConversationDetail,
+            mergeIncomingMessage,
+            normalizedConversationId,
+        ],
     );
 
     const { connected } = useChatRealtime({
@@ -241,6 +509,14 @@ export default function ChatScreen() {
         conversationId: normalizedConversationId,
         onConversationMessage: handleIncomingRealtimeMessage,
     });
+
+    useEffect(() => {
+        return () => {
+            if (typingTimerRef.current) {
+                clearTimeout(typingTimerRef.current);
+            }
+        };
+    }, []);
 
     const handleSend = async () => {
         const content = message.trim();
@@ -252,6 +528,8 @@ export default function ChatScreen() {
         }
         const payload = {
             conversationId: normalizedConversationId,
+            senderId: currentUserId,
+            type: "TEXT",
             content,
         };
         console.log("[ChatScreen] Sending message:", payload);
@@ -282,7 +560,7 @@ export default function ChatScreen() {
             },
         };
 
-        setMessages((prev) => [...prev, optimisticMessage]);
+        setMessages((prev) => dedupeMessages([...prev, optimisticMessage]));
         setMessage("");
 
         try {
@@ -291,26 +569,30 @@ export default function ChatScreen() {
             if (sent && typeof sent === "object" && "id" in sent) {
                 const serverMessage = mapApiMessageToUi(sent);
                 setMessages((prev) =>
-                    prev.map((item) =>
-                        item.id === optimisticId
-                            ? {
-                                  ...serverMessage,
-                                  pending: false,
-                              }
-                            : item,
+                    dedupeMessages(
+                        prev.map((item) =>
+                            item.id === optimisticId
+                                ? {
+                                      ...serverMessage,
+                                      pending: false,
+                                  }
+                                : item,
+                        ),
                     ),
                 );
                 return;
             }
 
             setMessages((prev) =>
-                prev.map((item) =>
-                    item.id === optimisticId
-                        ? {
-                              ...item,
-                              pending: false,
-                          }
-                        : item,
+                dedupeMessages(
+                    prev.map((item) =>
+                        item.id === optimisticId
+                            ? {
+                                  ...item,
+                                  pending: false,
+                              }
+                            : item,
+                    ),
                 ),
             );
         } catch (error: any) {
@@ -320,7 +602,7 @@ export default function ChatScreen() {
                 error?.response?.data,
             );
             setMessages((prev) =>
-                prev.filter((item) => item.id !== optimisticId),
+                dedupeMessages(prev.filter((item) => item.id !== optimisticId)),
             );
             setMessage(content);
             const errorMsg =
@@ -386,17 +668,45 @@ export default function ChatScreen() {
         }
     };
 
-    const handleForwardMessage = async () => {
+    const loadForwardTargets = useCallback(async () => {
+        setForwardLoading(true);
+        try {
+            const conversations = await chatApi.getConversations();
+            setForwardTargets(
+                Array.isArray(conversations)
+                    ? conversations.filter(
+                          (item: any) =>
+                              item?.conversationId !== normalizedConversationId,
+                      )
+                    : [],
+            );
+        } catch (error) {
+            console.error("[ChatScreen] loadForwardTargets error:", error);
+            setForwardTargets([]);
+        } finally {
+            setForwardLoading(false);
+        }
+    }, [normalizedConversationId]);
+
+    useEffect(() => {
+        if (selectedMessage) {
+            loadForwardTargets();
+        } else {
+            setForwardTargets([]);
+        }
+    }, [loadForwardTargets, selectedMessage]);
+
+    const handleForwardMessage = async (targetConversationId: string) => {
         if (!selectedMessage?.id) return;
-        if (!forwardTargetConversationId.trim()) {
-            Alert.alert("Thiếu thông tin", "Nhập conversationId đích trước");
+        if (!targetConversationId.trim()) {
+            Alert.alert("Thiếu thông tin", "Chọn cuộc trò chuyện đích trước");
             return;
         }
 
         try {
             await chatApi.forwardMessage({
                 sourceMessageId: selectedMessage.id,
-                targetConversationId: forwardTargetConversationId.trim(),
+                targetConversationId: targetConversationId.trim(),
             });
             Alert.alert("Thành công", "Đã chuyển tiếp tin nhắn");
             setSelectedMessage(null);
@@ -405,27 +715,6 @@ export default function ChatScreen() {
                 "Lỗi",
                 error?.message || "Không thể chuyển tiếp tin nhắn",
             );
-        }
-    };
-
-    const handleUpdateRemark = async () => {
-        if (!normalizedConversationId) return;
-        try {
-            await chatApi.updateRemark(normalizedConversationId, remarkInput);
-            Alert.alert("Thành công", "Đã cập nhật remark");
-        } catch (error: any) {
-            Alert.alert("Lỗi", error?.message || "Không thể cập nhật remark");
-        }
-    };
-
-    const handleClearHistory = async () => {
-        if (!normalizedConversationId) return;
-        try {
-            await chatApi.clearHistory(normalizedConversationId);
-            await loadConversationDetail();
-            Alert.alert("Thành công", "Đã clear history");
-        } catch (error: any) {
-            Alert.alert("Lỗi", error?.message || "Không thể clear history");
         }
     };
 
@@ -487,11 +776,17 @@ export default function ChatScreen() {
 
                         <View className="ml-3">
                             <Text className="text-white font-semibold text-[16px]">
-                                {name || "Trò chuyện"}
+                                {displayName}
                             </Text>
-                            <View className="flex-row items-center">
+                            <View className="flex-row items-center flex-wrap">
                                 <Text className="text-white text-[12px] opacity-80">
-                                    {normalizedConversationId}
+                                    {remoteTyping
+                                        ? "đang nhập"
+                                        : counterpartOnline
+                                          ? "đang hoạt động"
+                                          : counterpartLastActiveAt
+                                            ? `Hoạt động ${formatRelativeActivity(counterpartLastActiveAt)}`
+                                            : "không hiển thị trạng thái"}
                                 </Text>
                                 <Text className="text-white text-[12px] opacity-80 ml-2">
                                     {connected
@@ -511,7 +806,19 @@ export default function ChatScreen() {
                         </TouchableOpacity>
                         <TouchableOpacity
                             style={{ marginLeft: 10 }}
-                            onPress={() => setShowManageSheet(true)}
+                            onPress={() => {
+                                router.push({
+                                    pathname:
+                                        "/(tabs)/message/option/account-option" as any,
+                                    params: {
+                                        conversationId:
+                                            normalizedConversationId,
+                                        targetUserId: counterpartId,
+                                        name: displayName,
+                                        avatar: avatar || "",
+                                    },
+                                });
+                            }}
                         >
                             <MoreHorizontal size={24} color="white" />
                         </TouchableOpacity>
@@ -522,37 +829,164 @@ export default function ChatScreen() {
                     className="flex-1 px-3 pt-4"
                     showsVerticalScrollIndicator={false}
                 >
-                    {loading && (
-                        <View className="py-8 items-center justify-center">
-                            <ActivityIndicator size="small" color="#2563eb" />
-                        </View>
-                    )}
+                    <Animated.View
+                        style={{
+                            opacity: entranceAnim,
+                            transform: [
+                                {
+                                    translateY: entranceAnim.interpolate({
+                                        inputRange: [0, 1],
+                                        outputRange: [8, 0],
+                                    }),
+                                },
+                            ],
+                        }}
+                    >
+                        {loading && (
+                            <View className="py-8 items-center justify-center">
+                                <ActivityIndicator
+                                    size="small"
+                                    color="#2563eb"
+                                />
+                            </View>
+                        )}
 
-                    {!loading &&
-                        messages.map((msg) => {
-                            if (msg.type === "left") {
+                        {!loading &&
+                            messages.map((msg, index) => {
+                                const messageKey = getMessageKey(msg, index);
+                                const messageSide = getMessageSide(msg);
+
+                                if (messageSide === "center") {
+                                    return (
+                                        <View
+                                            key={messageKey}
+                                            className="flex-row justify-center mb-3"
+                                        >
+                                            <View className="bg-gray-200 px-3 py-2 rounded-full max-w-[85%]">
+                                                {msg.text !== "" && (
+                                                    <Text className="text-[13px] text-gray-700 text-center">
+                                                        {msg.text}
+                                                    </Text>
+                                                )}
+
+                                                {!msg.isUnsent && (
+                                                    <Text className="text-gray-500 text-[11px] mt-1 text-center">
+                                                        {msg.time}
+                                                    </Text>
+                                                )}
+                                            </View>
+                                        </View>
+                                    );
+                                }
+
+                                if (messageSide === "left") {
+                                    return (
+                                        <View
+                                            key={messageKey}
+                                            className="flex-row mb-3"
+                                        >
+                                            {avatarUrl ? (
+                                                <RNImage
+                                                    source={{ uri: avatarUrl }}
+                                                    className="w-8 h-8 rounded-full mr-2"
+                                                />
+                                            ) : (
+                                                <View className="w-8 h-8 rounded-full bg-blue-500 mr-2 items-center justify-center">
+                                                    <Text className="text-white text-xs font-semibold">
+                                                        {getInitials(
+                                                            displayName,
+                                                        )}
+                                                    </Text>
+                                                </View>
+                                            )}
+
+                                            <TouchableOpacity
+                                                activeOpacity={0.8}
+                                                onPress={() => {
+                                                    if (
+                                                        msg.imageUri ||
+                                                        msg.videoUri
+                                                    ) {
+                                                        setViewingMediaMessage(
+                                                            msg,
+                                                        );
+                                                    }
+                                                }}
+                                                onLongPress={() => {
+                                                    if (!msg.system) {
+                                                        setSelectedMessage(
+                                                            msg.raw || msg,
+                                                        );
+                                                    }
+                                                }}
+                                                className="bg-white px-4 py-2 rounded-2xl max-w-[70%]"
+                                            >
+                                                {msg.senderName && (
+                                                    <Text className="mb-1 text-[11px] font-medium text-gray-400">
+                                                        {msg.senderName}
+                                                    </Text>
+                                                )}
+
+                                                {msg.videoUri ? (
+                                                    <View
+                                                        style={{
+                                                            width: 150,
+                                                            height: 150,
+                                                            borderRadius: 10,
+                                                            marginBottom: 4,
+                                                            overflow: "hidden",
+                                                            backgroundColor:
+                                                                "black",
+                                                        }}
+                                                    >
+                                                        <AVVideo
+                                                            source={{
+                                                                uri: msg.videoUri,
+                                                            }}
+                                                            style={{
+                                                                width: "100%",
+                                                                height: "100%",
+                                                            }}
+                                                            resizeMode={
+                                                                ResizeMode.COVER
+                                                            }
+                                                            shouldPlay={false}
+                                                        />
+                                                    </View>
+                                                ) : msg.imageUri ? (
+                                                    <RNImage
+                                                        source={{
+                                                            uri: msg.imageUri,
+                                                        }}
+                                                        style={{
+                                                            width: 150,
+                                                            height: 150,
+                                                            borderRadius: 10,
+                                                            marginBottom: 4,
+                                                        }}
+                                                        resizeMode="cover"
+                                                    />
+                                                ) : null}
+
+                                                {msg.text !== "" && (
+                                                    <Text className="text-[15px] text-black">
+                                                        {msg.text}
+                                                    </Text>
+                                                )}
+
+                                                <Text className="text-gray-500 text-[11px] mt-1">
+                                                    {msg.time}
+                                                </Text>
+                                            </TouchableOpacity>
+                                        </View>
+                                    );
+                                }
+
                                 return (
                                     <View
-                                        key={msg.id}
-                                        className="flex-row mb-3"
+                                        key={messageKey}
+                                        className="flex-row justify-end mb-3"
                                     >
-                                        {avatarUrl ? (
-                                            <RNImage
-                                                source={{ uri: avatarUrl }}
-                                                className="w-8 h-8 rounded-full mr-2"
-                                            />
-                                        ) : (
-                                            <View className="w-8 h-8 rounded-full bg-blue-500 mr-2 items-center justify-center">
-                                                <Text className="text-white text-xs font-semibold">
-                                                    {typeof avatar === "string"
-                                                        ? avatar
-                                                              .slice(0, 2)
-                                                              .toUpperCase()
-                                                        : "?"}
-                                                </Text>
-                                            </View>
-                                        )}
-
                                         <TouchableOpacity
                                             activeOpacity={0.8}
                                             onPress={() => {
@@ -570,7 +1004,9 @@ export default function ChatScreen() {
                                                     );
                                                 }
                                             }}
-                                            className="bg-white px-4 py-2 rounded-2xl max-w-[70%]"
+                                            className={`bg-blue-600 px-4 py-2 rounded-2xl max-w-[70%] ${
+                                                msg.pending ? "opacity-70" : ""
+                                            }`}
                                         >
                                             {msg.videoUri ? (
                                                 <View
@@ -614,95 +1050,19 @@ export default function ChatScreen() {
                                             ) : null}
 
                                             {msg.text !== "" && (
-                                                <Text className="text-[15px] text-black">
+                                                <Text className="text-[15px] text-white">
                                                     {msg.text}
                                                 </Text>
                                             )}
 
-                                            <Text className="text-gray-500 text-[11px] mt-1">
-                                                {msg.time}
+                                            <Text className="text-blue-100 text-[11px] mt-1 text-right">
+                                                {getMessageStatusLabel(msg)}
                                             </Text>
                                         </TouchableOpacity>
                                     </View>
                                 );
-                            }
-
-                            return (
-                                <View
-                                    key={msg.id}
-                                    className="flex-row justify-end mb-3"
-                                >
-                                    <TouchableOpacity
-                                        activeOpacity={0.8}
-                                        onPress={() => {
-                                            if (msg.imageUri || msg.videoUri) {
-                                                setViewingMediaMessage(msg);
-                                            }
-                                        }}
-                                        onLongPress={() => {
-                                            if (!msg.system) {
-                                                setSelectedMessage(
-                                                    msg.raw || msg,
-                                                );
-                                            }
-                                        }}
-                                        className={`bg-blue-600 px-4 py-2 rounded-2xl max-w-[70%] ${
-                                            msg.pending ? "opacity-70" : ""
-                                        }`}
-                                    >
-                                        {msg.videoUri ? (
-                                            <View
-                                                style={{
-                                                    width: 150,
-                                                    height: 150,
-                                                    borderRadius: 10,
-                                                    marginBottom: 4,
-                                                    overflow: "hidden",
-                                                    backgroundColor: "black",
-                                                }}
-                                            >
-                                                <AVVideo
-                                                    source={{
-                                                        uri: msg.videoUri,
-                                                    }}
-                                                    style={{
-                                                        width: "100%",
-                                                        height: "100%",
-                                                    }}
-                                                    resizeMode={
-                                                        ResizeMode.COVER
-                                                    }
-                                                    shouldPlay={false}
-                                                />
-                                            </View>
-                                        ) : msg.imageUri ? (
-                                            <RNImage
-                                                source={{ uri: msg.imageUri }}
-                                                style={{
-                                                    width: 150,
-                                                    height: 150,
-                                                    borderRadius: 10,
-                                                    marginBottom: 4,
-                                                }}
-                                                resizeMode="cover"
-                                            />
-                                        ) : null}
-
-                                        {msg.text !== "" && (
-                                            <Text className="text-[15px] text-white">
-                                                {msg.text}
-                                            </Text>
-                                        )}
-
-                                        <Text className="text-blue-100 text-[11px] mt-1 text-right">
-                                            {msg.pending
-                                                ? `${msg.time} • đang gửi...`
-                                                : msg.time}
-                                        </Text>
-                                    </TouchableOpacity>
-                                </View>
-                            );
-                        })}
+                            })}
+                    </Animated.View>
                 </ScrollView>
 
                 <View className="bg-white px-3 py-2 border-t border-gray-200">
@@ -729,7 +1089,7 @@ export default function ChatScreen() {
                             <Image size={22} color="#6b7280" />
                         </TouchableOpacity>
                         <TextInput
-                            className="flex-1 bg-gray-100 rounded-full px-4 py-2 text-[15px]"
+                            className="flex-1 bg-gray-100 rounded-full px-4 py-3 mt-1 text-[15px]"
                             placeholder="Nhập tin nhắn"
                             value={message}
                             onChangeText={setMessage}
@@ -755,13 +1115,6 @@ export default function ChatScreen() {
                 >
                     <View className="flex-1 bg-black/40 justify-end px-4 pb-10">
                         <View className="bg-white rounded-2xl p-4">
-                            <TextInput
-                                className="border border-gray-200 rounded-xl px-3 py-2 text-sm mb-2"
-                                placeholder="Forward target conversationId"
-                                value={forwardTargetConversationId}
-                                onChangeText={setForwardTargetConversationId}
-                            />
-
                             <TouchableOpacity
                                 className="py-3 flex-row items-center"
                                 onPress={handleUnsendMessage}
@@ -782,87 +1135,73 @@ export default function ChatScreen() {
                                 </Text>
                             </TouchableOpacity>
 
-                            <TouchableOpacity
-                                className="py-3 flex-row items-center"
-                                onPress={handleForwardMessage}
-                            >
-                                <CornerUpLeft size={18} color="#374151" />
-                                <Text className="ml-2 text-sm text-gray-700">
-                                    Forward
-                                </Text>
-                            </TouchableOpacity>
-                        </View>
-                    </View>
-                </TouchableWithoutFeedback>
-            </Modal>
-
-            <Modal
-                visible={showManageSheet}
-                transparent
-                animationType="slide"
-                onRequestClose={() => setShowManageSheet(false)}
-            >
-                <TouchableWithoutFeedback
-                    onPress={() => setShowManageSheet(false)}
-                >
-                    <View className="flex-1 bg-black/30 justify-end">
-                        <TouchableWithoutFeedback>
-                            <View className="bg-white rounded-t-3xl px-4 pt-4 pb-7">
-                                <Text className="text-base font-semibold text-gray-900 mb-3">
-                                    Quản lý hội thoại
+                            <View className="mt-2 border-t border-gray-100 pt-3">
+                                <Text className="text-sm font-semibold text-gray-900 mb-2">
+                                    Chuyển tiếp tới
                                 </Text>
 
-                                <TextInput
-                                    className="border border-gray-200 rounded-xl px-3 py-2 text-sm"
-                                    placeholder="Remark name"
-                                    value={remarkInput}
-                                    onChangeText={setRemarkInput}
-                                />
-
-                                <View className="flex-row mt-3">
-                                    <TouchableOpacity
-                                        className="px-3 py-2 rounded-xl bg-blue-500 mr-2"
-                                        onPress={handleUpdateRemark}
+                                {forwardLoading ? (
+                                    <ActivityIndicator
+                                        size="small"
+                                        color="#2563eb"
+                                    />
+                                ) : (
+                                    <ScrollView
+                                        className="max-h-[240px]"
+                                        showsVerticalScrollIndicator={false}
                                     >
-                                        <Text className="text-white text-xs">
-                                            Remark
-                                        </Text>
-                                    </TouchableOpacity>
-                                    <TouchableOpacity
-                                        className="px-3 py-2 rounded-xl bg-gray-700 mr-2"
-                                        onPress={() => {
-                                            setShowManageSheet(false);
-                                            setShowSearchSheet(true);
-                                        }}
-                                    >
-                                        <Text className="text-white text-xs">
-                                            Search
-                                        </Text>
-                                    </TouchableOpacity>
-                                    <TouchableOpacity
-                                        className="px-3 py-2 rounded-xl bg-gray-700"
-                                        onPress={() => {
-                                            setShowManageSheet(false);
-                                            setShowMediaSheet(true);
-                                            handleLoadMedia();
-                                        }}
-                                    >
-                                        <Text className="text-white text-xs">
-                                            Media
-                                        </Text>
-                                    </TouchableOpacity>
-                                </View>
-
-                                <TouchableOpacity
-                                    className="px-3 py-2 rounded-xl bg-red-500 self-start mt-3"
-                                    onPress={handleClearHistory}
-                                >
-                                    <Text className="text-white text-xs">
-                                        Clear history
-                                    </Text>
-                                </TouchableOpacity>
+                                        {forwardTargets.length === 0 ? (
+                                            <Text className="text-xs text-gray-500">
+                                                Không có cuộc trò chuyện khác.
+                                            </Text>
+                                        ) : (
+                                            forwardTargets.map((item: any) => (
+                                                <TouchableOpacity
+                                                    key={item.conversationId}
+                                                    className="flex-row items-center py-3 border-b border-gray-100"
+                                                    onPress={() =>
+                                                        handleForwardMessage(
+                                                            item.conversationId,
+                                                        )
+                                                    }
+                                                >
+                                                    <View className="w-9 h-9 rounded-full bg-blue-500 items-center justify-center mr-3">
+                                                        <Text className="text-white text-[11px] font-semibold">
+                                                            {getInitials(
+                                                                pickBestDisplayName(
+                                                                    [
+                                                                        item.counterpartName,
+                                                                    ],
+                                                                    "Nguoi dung",
+                                                                ),
+                                                            )}
+                                                        </Text>
+                                                    </View>
+                                                    <View className="flex-1">
+                                                        <Text className="text-sm font-medium text-gray-900">
+                                                            {pickBestDisplayName(
+                                                                [
+                                                                    item.counterpartName,
+                                                                ],
+                                                                "Nguoi dung",
+                                                            )}
+                                                        </Text>
+                                                        <Text className="text-[11px] text-gray-500 mt-0.5">
+                                                            {item.lastMessage ||
+                                                                "Nhấn để chuyển tiếp"}
+                                                        </Text>
+                                                    </View>
+                                                    <CornerUpLeft
+                                                        size={18}
+                                                        color="#2563eb"
+                                                    />
+                                                </TouchableOpacity>
+                                            ))
+                                        )}
+                                    </ScrollView>
+                                )}
                             </View>
-                        </TouchableWithoutFeedback>
+                        </View>
                     </View>
                 </TouchableWithoutFeedback>
             </Modal>
@@ -991,10 +1330,11 @@ export default function ChatScreen() {
                                                 }}
                                             >
                                                 <Text className="text-sm text-gray-800">
-                                                    {item?.attachment
-                                                        ?.fileName ||
-                                                        item?.type ||
-                                                        "Media"}
+                                                    {item?.type === "VIDEO"
+                                                        ? "Video"
+                                                        : item?.type === "IMAGE"
+                                                          ? "Hình ảnh"
+                                                          : "Media"}
                                                 </Text>
                                                 <Text className="text-xs text-gray-500 mt-1">
                                                     {item?.createdAt

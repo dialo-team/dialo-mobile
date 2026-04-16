@@ -1,4 +1,5 @@
 import { userApi } from "@/src/api/user/userApi";
+import { getInitials } from "@/src/utils/displayUser";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import * as ImagePicker from "expo-image-picker";
 import { useRouter } from "expo-router";
@@ -44,42 +45,47 @@ export default function EditProfile() {
 
     const genderOptions = ["Nam", "Nữ", "Khác"];
 
-    const getInitials = (text: string) => {
-        if (!text || text === "undefined") return "U";
-        const words = text.trim().split(" ");
-        if (words.length === 1) return words[0][0].toUpperCase();
-        return (words[0][0] + words[words.length - 1][0]).toUpperCase();
-    };
-
     // === FETCH DỮ LIỆU TỪ BACKEND ===
     useEffect(() => {
         const fetchProfile = async () => {
             try {
-                const response = await userApi.getProfile();
-                if (response.data) {
-                    setName(response.data.userName || "");
-                    setBio(response.data.bio || ""); // Load Bio từ BE
+                const profile = await userApi.getProfile();
+                if (profile) {
+                    setName(
+                        profile.userName ||
+                            profile.name ||
+                            profile.displayName ||
+                            profile.fullName ||
+                            "",
+                    );
+                    setBio(profile.bio || "");
                     setAvatar(
-                        response.data.avatarUrl || response.data.avatar || null,
+                        profile.avatarUrl ||
+                            profile.avatar ||
+                            profile.photoUrl ||
+                            profile.imageUrl ||
+                            null,
                     );
                     setBackground(
-                        response.data.backgroundUrl ||
-                            response.data.background ||
+                        profile.backgroundUrl ||
+                            profile.background ||
+                            profile.coverUrl ||
+                            profile.cover ||
                             null,
                     );
 
-                    if (response.data.gender) {
+                    if (profile.gender) {
                         setGender(
-                            response.data.gender === "MALE"
+                            profile.gender === "MALE"
                                 ? "Nam"
-                                : response.data.gender === "FEMALE"
+                                : profile.gender === "FEMALE"
                                   ? "Nữ"
                                   : "Khác",
                         );
                     }
 
-                    if (response.data.dob) {
-                        const dobString = response.data.dob;
+                    if (profile.dob) {
+                        const dobString = profile.dob;
                         const [year, month, day] = dobString.split("-");
                         if (year && month && day) {
                             setDob(
