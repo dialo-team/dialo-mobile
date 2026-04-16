@@ -224,10 +224,8 @@ export default function ChatScreen() {
         loadConversationDetail();
     }, [loadConversationDetail]);
 
-    const { connected } = useChatRealtime({
-        currentUserId,
-        conversationId: normalizedConversationId,
-        onConversationMessage: (payload) => {
+    const handleIncomingRealtimeMessage = useCallback(
+        (payload: any) => {
             const incoming = payload?.data || payload?.message || payload;
             if (!incoming?.id) {
                 loadConversationDetail();
@@ -235,6 +233,13 @@ export default function ChatScreen() {
             }
             mergeIncomingMessage(incoming);
         },
+        [loadConversationDetail, mergeIncomingMessage],
+    );
+
+    const { connected } = useChatRealtime({
+        currentUserId,
+        conversationId: normalizedConversationId,
+        onConversationMessage: handleIncomingRealtimeMessage,
     });
 
     const handleSend = async () => {
@@ -245,7 +250,11 @@ export default function ChatScreen() {
             );
             return;
         }
-        console.log("[ChatScreen] Sending message:", content.substring(0, 50));
+        const payload = {
+            conversationId: normalizedConversationId,
+            content,
+        };
+        console.log("[ChatScreen] Sending message:", payload);
 
         const optimisticId = `tmp-${Date.now()}`;
         const now = new Date();
@@ -277,11 +286,7 @@ export default function ChatScreen() {
         setMessage("");
 
         try {
-            const sent = await chatApi.sendMessage({
-                conversationId: normalizedConversationId,
-                type: "TEXT",
-                content,
-            });
+            const sent = await chatApi.sendMessage(payload);
 
             if (sent && typeof sent === "object" && "id" in sent) {
                 const serverMessage = mapApiMessageToUi(sent);
@@ -310,11 +315,18 @@ export default function ChatScreen() {
             );
         } catch (error: any) {
             console.error("[ChatScreen] sendMessage error:", error);
+            console.error(
+                "[ChatScreen] sendMessage response data:",
+                error?.response?.data,
+            );
             setMessages((prev) =>
                 prev.filter((item) => item.id !== optimisticId),
             );
             setMessage(content);
-            const errorMsg = error?.message || "Không thể gửi tin nhắn";
+            const errorMsg =
+                error?.response?.data?.message ||
+                error?.message ||
+                "Không thể gửi tin nhắn";
             Alert.alert("Lỗi", errorMsg);
         }
     };

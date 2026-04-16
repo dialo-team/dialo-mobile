@@ -3,7 +3,6 @@ import {
     PasswordResetConfirmPayload,
     PasswordResetPayload,
     PasswordResetRequestPayload,
-    SigninPayload,
     SigninVerifyPayload,
     SignoutPayload,
     SignupPayload,
@@ -11,14 +10,6 @@ import {
 } from "./types";
 
 export const authenticationApi = {
-    signin: async (data: SigninPayload) => {
-        const response = await apiClient.post(
-            "/api/v1/auth/signin/request",
-            data,
-        );
-        return response.data;
-    },
-
     signup: async (data: SignupPayload) => {
         const response = await apiClient.post(
             "/api/v1/auth/signup/request",

@@ -30,6 +30,13 @@ export function useChatRealtime({
     const clientRef = useRef<Client | null>(null);
     const inboxSubRef = useRef<StompSubscription | null>(null);
     const conversationSubRef = useRef<StompSubscription | null>(null);
+    const onInboxPayloadRef = useRef(onInboxPayload);
+    const onConversationMessageRef = useRef(onConversationMessage);
+
+    useEffect(() => {
+        onInboxPayloadRef.current = onInboxPayload;
+        onConversationMessageRef.current = onConversationMessage;
+    }, [onInboxPayload, onConversationMessage]);
 
     const disconnect = useCallback(() => {
         if (inboxSubRef.current) {
@@ -58,32 +65,29 @@ export function useChatRealtime({
         setConnected(false);
     }, []);
 
-    const subscribeConversation = useCallback(
-        (id?: string) => {
-            const client = clientRef.current;
-            if (!client?.connected || !id) return;
+    const subscribeConversation = useCallback((id?: string) => {
+        const client = clientRef.current;
+        if (!client?.connected || !id) return;
 
-            if (conversationSubRef.current) {
-                try {
-                    conversationSubRef.current.unsubscribe();
-                } catch {
-                    // no-op
-                }
-                conversationSubRef.current = null;
+        if (conversationSubRef.current) {
+            try {
+                conversationSubRef.current.unsubscribe();
+            } catch {
+                // no-op
             }
+            conversationSubRef.current = null;
+        }
 
-            conversationSubRef.current = client.subscribe(
-                `/topic/conversations/${id}`,
-                (frame) => {
-                    const payload = parseFrameBody(frame);
-                    if (payload && onConversationMessage) {
-                        onConversationMessage(payload);
-                    }
-                },
-            );
-        },
-        [onConversationMessage],
-    );
+        conversationSubRef.current = client.subscribe(
+            `/topic/conversations/${id}`,
+            (frame) => {
+                const payload = parseFrameBody(frame);
+                if (payload && onConversationMessageRef.current) {
+                    onConversationMessageRef.current(payload);
+                }
+            },
+        );
+    }, []);
 
     const connect = useCallback(() => {
         if (!currentUserId) {
@@ -131,8 +135,8 @@ export function useChatRealtime({
                         `/topic/inbox/${currentUserId}`,
                         (frame) => {
                             const payload = parseFrameBody(frame);
-                            if (payload && onInboxPayload) {
-                                onInboxPayload(payload);
+                            if (payload && onInboxPayloadRef.current) {
+                                onInboxPayloadRef.current(payload);
                             }
                         },
                     );
@@ -171,13 +175,7 @@ export function useChatRealtime({
             console.error("[useChatRealtime] Activate error:", error);
             setConnected(false);
         }
-    }, [
-        conversationId,
-        currentUserId,
-        disconnect,
-        onInboxPayload,
-        subscribeConversation,
-    ]);
+    }, [conversationId, currentUserId, disconnect, subscribeConversation]);
 
     useEffect(() => {
         connect();

@@ -58,8 +58,8 @@ export type CreateConversationPayload = {
 
 export type SendMessagePayload = {
     conversationId: string;
-    type: string;
     content?: string;
+    type?: string;
 };
 
 export type ForwardMessagePayload = {

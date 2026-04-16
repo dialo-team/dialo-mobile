@@ -132,25 +132,33 @@ const request = async <T>(
         console.log(`[chatApi] Making request to ${path}`, {
             method: config?.method || "GET",
             baseURL: CHAT_BASE_URL,
+            payload: config?.data,
         });
         const response = await chatClient.request({
             url: path,
             ...config,
         });
-        console.log(`[chatApi] ${path} success`, { status: response.status });
+        console.log(`[chatApi] ${path} success`, {
+            status: response.status,
+            data: response.data,
+        });
         return unwrapData<T>(response.data);
     } catch (error: any) {
+        const status = error?.response?.status;
+        const data = error?.response?.data;
         const message =
-            error?.response?.data?.message ||
+            data?.message ||
             error?.message ||
-            "Request failed";
+            `Request failed with status code ${status}`;
 
         // Enhanced error logging for debugging
         console.error(`[chatApi] ${path} error:`, {
             message,
-            status: error?.response?.status,
+            status,
+            data,
             url: error?.config?.url,
             method: error?.config?.method,
+            payload: error?.config?.data,
             isCORSError: !error?.response && error?.code === "ERR_NETWORK",
         });
 
@@ -161,7 +169,10 @@ const request = async <T>(
             );
         }
 
-        throw new Error(message);
+        const apiError: any = new Error(message);
+        apiError.response = error?.response;
+        apiError.config = error?.config;
+        throw apiError;
     }
 };
 
