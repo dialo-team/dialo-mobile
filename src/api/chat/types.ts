@@ -63,3 +63,33 @@ export type ForwardMessagePayload = {
     sourceMessageId: string;
     targetConversationId: string;
 };
+
+export type MediaType = "IMAGE" | "VIDEO" | "FILE";
+
+export interface Attachment {
+    fileName: string;
+    fileUrl: string;
+    mimeType: string;
+    size: number;
+    thumbnailUrl?: string | null;
+}
+
+export interface ChatMediaItem {
+    id: string;
+    conversationId: string;
+    type: MediaType;
+
+    content?: string;
+
+    attachment?: Attachment;
+
+    createdAt: string;
+
+    senderId?: string;
+    senderName?: string;
+    senderAvatarUrl?: string;
+
+    displayPosition?: "LEFT" | "RIGHT";
+
+    revoked?: boolean;
+}

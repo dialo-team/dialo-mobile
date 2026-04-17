@@ -1,6 +1,6 @@
 import { chatApi } from "@/src/api/chat/chatApi";
 import { friendApi } from "@/src/api/friend/friendApi";
-import { getInitials, pickBestDisplayName } from "@/src/utils/displayUser";
+import { getInitials } from "@/src/utils/displayUser";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import {
     Bell,
@@ -17,6 +17,7 @@ import {
     User,
     UserPlus,
     Users,
+    X,
 } from "lucide-react-native";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -24,9 +25,13 @@ import {
     Animated,
     Easing,
     Image,
+    KeyboardAvoidingView,
+    Modal,
+    Platform,
     ScrollView,
     Switch,
     Text,
+    TextInput,
     TouchableOpacity,
     View,
 } from "react-native";
@@ -53,12 +58,59 @@ export default function ChatOptionsScreen() {
     const targetUserId = paramStr(params.targetUserId) || id || "";
     const name = paramStr(params.name);
     const avatar = paramStr(params.avatar);
-    const displayName = pickBestDisplayName([name], "Nguoi dung");
 
     const [isBlocked, setIsBlocked] = useState(false);
     const [loadingBlockState, setLoadingBlockState] = useState(false);
     const [loadingBlockAction, setLoadingBlockAction] = useState(false);
     const entranceAnim = useRef(new Animated.Value(0)).current;
+
+    const [openRename, setOpenRename] = useState(false);
+    const [remarkName, setRemarkName] = useState(name || "");
+    const [renamingLoading, setRenamingLoading] = useState(false);
+
+    const [displayName, setDisplayName] = useState(name || "");
+
+    useEffect(() => {
+        let mounted = true;
+
+        const loadConversationDetail = async () => {
+            if (!conversationId) return;
+            try {
+                const detail =
+                    await chatApi.getConversationDetail(conversationId);
+                if (mounted && detail?.remarkName) {
+                    setDisplayName(detail.remarkName);
+                    setRemarkName(detail.remarkName);
+                }
+            } catch (error) {
+                console.error("[ChatOptions] Load detail error:", error);
+            }
+        };
+
+        loadConversationDetail();
+        return () => {
+            mounted = false;
+        };
+    }, [conversationId]);
+
+    const handleSaveRemark = async () => {
+        if (!conversationId || !remarkName.trim()) return;
+
+        setRenamingLoading(true);
+        try {
+            await chatApi.updateConversationRemark(
+                conversationId,
+                remarkName.trim(),
+            );
+            setDisplayName(remarkName.trim());
+            Alert.alert("Thành công", "Đã cập nhật tên gợi nhớ");
+            setOpenRename(false);
+        } catch (error: any) {
+            Alert.alert("Lỗi", error?.message || "Không thể lưu tên");
+        } finally {
+            setRenamingLoading(false);
+        }
+    };
 
     useEffect(() => {
         Animated.timing(entranceAnim, {
@@ -299,6 +351,7 @@ export default function ChatOptionsScreen() {
                         <OptionItem
                             icon={<User size={20} />}
                             title="Đổi tên gợi nhớ"
+                            onPress={() => setOpenRename(true)}
                         />
 
                         <OptionItem
@@ -408,6 +461,67 @@ export default function ChatOptionsScreen() {
                     <View className="h-10" />
                 </ScrollView>
             </Animated.View>
+
+            {/* RENAME MODAL */}
+            <Modal visible={openRename} animationType="slide" transparent>
+                <KeyboardAvoidingView
+                    behavior={Platform.OS === "ios" ? "padding" : undefined}
+                    style={{ flex: 1 }}
+                >
+                    <View className="flex-1 justify-end bg-black/30">
+                        <View className="bg-white rounded-t-3xl p-4 min-h-[30%]">
+                            {/* HEADER */}
+                            <View className="flex-row items-center justify-between mb-4">
+                                <View className="w-6" />
+                                <Text className="text-lg font-semibold">
+                                    Đổi tên gợi nhớ
+                                </Text>
+                                <TouchableOpacity
+                                    onPress={() => setOpenRename(false)}
+                                >
+                                    <X size={22} />
+                                </TouchableOpacity>
+                            </View>
+
+                            {/* INPUT */}
+                            <View className="border-b border-gray-300 pb-2 flex-row items-center">
+                                <TextInput
+                                    value={remarkName}
+                                    onChangeText={setRemarkName}
+                                    maxLength={40}
+                                    className="flex-1 text-lg"
+                                    autoFocus
+                                    placeholder="Nhập tên gợi nhớ"
+                                />
+                            </View>
+
+                            {/* DESCRIPTION */}
+                            <Text className="text-gray-400 mt-3">
+                                Tên người này sẽ hiển thị là:{" "}
+                                {remarkName || "Chưa nhập"}
+                            </Text>
+
+                            {/* SAVE BUTTON */}
+                            <TouchableOpacity
+                                className={`mt-6 py-4 rounded-full items-center ${
+                                    remarkName.trim().length > 0
+                                        ? "bg-blue-600"
+                                        : "bg-gray-300 opacity-50"
+                                }`}
+                                disabled={
+                                    remarkName.trim().length === 0 ||
+                                    renamingLoading
+                                }
+                                onPress={handleSaveRemark}
+                            >
+                                <Text className="text-white text-lg font-medium">
+                                    {renamingLoading ? "Đang lưu..." : "Lưu"}
+                                </Text>
+                            </TouchableOpacity>
+                        </View>
+                    </View>
+                </KeyboardAvoidingView>
+            </Modal>
         </SafeAreaView>
     );
 }

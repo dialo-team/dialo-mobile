@@ -121,24 +121,23 @@ export default function RegisterScreen() {
                     </View>
 
                     {/* Password Input Box */}
-                    <View className="mt-4 border border-blue-500 rounded-xl px-4">
+                    <View className="mt-4 border border-blue-500 rounded-xl px-4 py-4 flex-row items-center justify-between">
                         <TextInput
                             placeholder="Mật khẩu"
                             secureTextEntry={!showPassword}
-                            className="py-4 text-base"
+                            className="flex-1 text-base"
                             value={password}
                             onChangeText={setPassword}
                         />
+                        <TouchableOpacity
+                            onPress={() => setShowPassword((prev) => !prev)}
+                            className="ml-2"
+                        >
+                            <Text className="text-blue-600 text-sm">
+                                {showPassword ? "Ẩn" : "Hiện"}
+                            </Text>
+                        </TouchableOpacity>
                     </View>
-
-                    <TouchableOpacity
-                        onPress={() => setShowPassword((prev) => !prev)}
-                        className="mt-2 mb-2"
-                    >
-                        <Text className="text-blue-600 text-sm">
-                            {showPassword ? "Ẩn mật khẩu" : "Hiện mật khẩu"}
-                        </Text>
-                    </TouchableOpacity>
 
                     {/* --- GIAO DIỆN GỢI Ý ĐIỀU KIỆN MẬT KHẨU --- */}
                     <View className="px-2 space-y-1">

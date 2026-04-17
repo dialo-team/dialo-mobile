@@ -407,10 +407,13 @@ export const chatApi = {
             formData.append("senderId", senderId);
         }
 
-        return request<any>("/api/v1/messages/file", {
-            method: "POST",
-            data: formData,
-            transformRequest: (data) => data,
+        const token = await getAccessToken();
+
+        return chatClient.post("/api/v1/messages/file", formData, {
+            headers: {
+                Authorization: `Bearer ${token}`,
+                "Content-Type": "multipart/form-data",
+            },
         });
     },
 

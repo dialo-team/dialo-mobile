@@ -57,11 +57,9 @@ export default function FriendProfileScreen() {
             try {
                 setIsLoading(true);
                 const res = await friendApi.getUserById(safeId);
-                // Cập nhật data từ API (bio, background, name mới nhất...)
                 const data = res?.data || res;
                 setUserData(data);
 
-                // Cập nhật lại tên hiển thị nếu server có tên khác/mới
                 const finalName =
                     data?.displayName ||
                     data?.fullName ||

@@ -73,7 +73,14 @@ function getMessageStatusLabel(message: any) {
         message?.raw?.status || message?.messageStatus || "",
     ).toUpperCase();
 
-    if (message?.readAt || message?.raw?.readAt || message?.raw?.seenAt) {
+    // Bổ sung check thêm isRead đề phòng Backend trả về boolean thay vì String "READ"
+    if (
+        message?.readAt ||
+        message?.raw?.readAt ||
+        message?.raw?.seenAt ||
+        message?.raw?.isRead === true ||
+        message?.raw?.is_read === true
+    ) {
         return "đã xem";
     }
 
@@ -202,9 +209,10 @@ export default function ChatScreen() {
             const rawPosition = String(
                 item?.displayPosition || item?.position || "",
             ).toUpperCase();
+
             const isCenter = rawPosition === "CENTER" || !!item?.system;
-            const mineByPosition = rawPosition === "RIGHT";
-            const isMe = !isCenter && (mineBySender || mineByPosition);
+
+            const isMe = !isCenter && mineBySender;
 
             const fileUrl = item?.attachment?.fileUrl;
             const type = item?.type || "TEXT";
@@ -416,8 +424,9 @@ export default function ChatScreen() {
             if (!normalizedConversationId && targetUserId) {
                 setResolvedConversationId(conversationKey);
             }
-            await updateConversationState(detail);
-            await chatApi.markRead(conversationKey);
+
+            updateConversationState(detail);
+            chatApi.markRead(conversationKey);
         } catch (error: any) {
             if (targetUserId && conversationKey === targetUserId) {
                 try {
@@ -470,11 +479,21 @@ export default function ChatScreen() {
 
     const handleIncomingRealtimeMessage = useCallback(
         (payload: any) => {
+            // CÁI BẪY QUAN TRỌNG: In ra chính xác những gì Socket bắn về
+            console.log(
+                "💌 [Socket Payload]:",
+                JSON.stringify(payload, null, 2),
+            );
+
             const incoming = payload?.data || payload?.message || payload;
             const incomingConversationId =
                 incoming?.conversationId || payload?.conversationId;
             const incomingType = String(
-                incoming?.type || payload?.type || "",
+                incoming?.type ||
+                    payload?.type ||
+                    incoming?.action ||
+                    payload?.action ||
+                    "",
             ).toUpperCase();
 
             if (
@@ -495,11 +514,54 @@ export default function ChatScreen() {
                 return;
             }
 
+            // Mở rộng lưới bắt sự kiện Đã đọc từ đối phương
+            const isReadEvent =
+                incomingType === "READ" ||
+                incomingType === "SEEN" ||
+                incomingType === "MARK_READ" ||
+                incoming?.status === "READ" ||
+                incoming?.isRead === true;
+
+            if (isReadEvent) {
+                setMessages((prev) =>
+                    prev.map((msg) => {
+                        // Chỉ set đã xem cho tin nhắn do mình gửi ra
+                        if (msg.type === "right") {
+                            return {
+                                ...msg,
+                                readAt:
+                                    incoming?.readAt ||
+                                    new Date().toISOString(),
+                                messageStatus: "READ",
+                                raw: {
+                                    ...msg.raw,
+                                    status: "READ",
+                                    isRead: true,
+                                },
+                            };
+                        }
+                        return msg;
+                    }),
+                );
+                return;
+            }
+
+            // Nếu payload không có ID và cũng không phải event Đã đọc -> tải lại cho chắc
             if (!incoming?.id) {
                 loadConversationDetail();
                 return;
             }
+
             mergeIncomingMessage(incoming);
+
+            if (normalizedConversationId) {
+                chatApi.markRead(normalizedConversationId).catch((err) => {
+                    console.log(
+                        "[ChatScreen] Lỗi đánh dấu đã đọc realtime:",
+                        err,
+                    );
+                });
+            }
         },
         [
             loadConversationDetail,

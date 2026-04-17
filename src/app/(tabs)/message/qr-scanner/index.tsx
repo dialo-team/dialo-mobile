@@ -133,6 +133,46 @@ function QRFrameOverlay() {
     );
 }
 
+function parseScannedQrData(data: string) {
+    const trimmed = data?.trim();
+    if (!trimmed) {
+        return { type: "unknown" as const };
+    }
+
+    const loginUrlMatch = trimmed.match(/auth\/qr\/challenges\/([^\/?#]+)/i);
+    if (loginUrlMatch?.[1]) {
+        return { type: "login" as const, challengeId: loginUrlMatch[1] };
+    }
+
+    try {
+        const url = new URL(trimmed);
+        const pathMatch = url.pathname.match(
+            /auth\/qr\/challenges\/([^\/?#]+)/i,
+        );
+        if (pathMatch?.[1]) {
+            return { type: "login" as const, challengeId: pathMatch[1] };
+        }
+
+        const challengeId =
+            url.searchParams.get("challengeId") ||
+            url.searchParams.get("challenge") ||
+            url.searchParams.get("qrToken");
+        if (challengeId) {
+            return { type: "login" as const, challengeId };
+        }
+    } catch {
+        // ignore invalid URL format
+    }
+
+    const uuidRegex =
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (uuidRegex.test(trimmed)) {
+        return { type: "login" as const, challengeId: trimmed };
+    }
+
+    return { type: "friend" as const, qrToken: trimmed };
+}
+
 export default function QRScanner() {
     const router = useRouter();
     const [permission, requestPermission] = useCameraPermissions();
@@ -178,7 +218,18 @@ export default function QRScanner() {
                             : ({ data }: { data: string }) => {
                                   setScanned(true);
                                   console.log("QR Data:", data);
-                                  // --- ĐÃ SỬA: Truyền id thay vì qr, giống hệt bên AddFriendScreen ---
+                                  const parsed = parseScannedQrData(data);
+
+                                  if (parsed.type === "login") {
+                                      router.push({
+                                          pathname: "/login/loginQr" as any,
+                                          params: {
+                                              challengeId: parsed.challengeId,
+                                          },
+                                      });
+                                      return;
+                                  }
+
                                   router.push({
                                       pathname: "/contact/friend/new" as any,
                                       params: { qrToken: data },

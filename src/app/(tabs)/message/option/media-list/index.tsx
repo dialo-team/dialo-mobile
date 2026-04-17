@@ -1,3 +1,6 @@
+import { mediaApi } from "@/src/api/chat/mediaApi";
+import { ChatMediaItem } from "@/src/api/chat/types";
+import { getFullUrl } from "@/src/utils/url";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { FileText, Link2, MoveLeft } from "lucide-react-native";
 import { useEffect, useState } from "react";
@@ -12,6 +15,12 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+function paramStr(v: string | string[] | undefined): string {
+    if (typeof v === "string") return v;
+    if (Array.isArray(v)) return v[0] || "";
+    return "";
+}
+
 type TabType = "MEDIA" | "FILE" | "LINK";
 
 export default function ChatMediaScreen() {
@@ -20,64 +29,46 @@ export default function ChatMediaScreen() {
         conversationId: string;
         name: string;
     }>();
+    const conversationId = paramStr(params.conversationId);
     const [activeTab, setActiveTab] = useState<TabType>("MEDIA");
     const [loading, setLoading] = useState(true);
     const [groupedData, setGroupedData] = useState<{ [key: string]: any[] }>(
         {},
     );
+    const [media, setMedia] = useState<ChatMediaItem[]>([]);
 
     useEffect(() => {
+        if (!conversationId) return;
         fetchMediaData();
-    }, [activeTab]);
+    }, [conversationId, activeTab]);
 
     const fetchMediaData = async () => {
         setLoading(true);
         try {
-            // TODO: GỌI API LẤY DỮ LIỆU CỦA BẠN TẠI ĐÂY
-            // Ví dụ: const res = await chatApi.getConversationAttachments(params.conversationId, activeTab);
-            // const rawData = res.data;
+            const data = await mediaApi.getMediaByConversation(conversationId);
+            console.log("conversationId:", conversationId);
 
-            // --- MOCK DATA ĐỂ BẠN TEST GIAO DIỆN TRƯỚC ---
-            const mockData = [
-                {
-                    id: "1",
-                    type: "IMAGE",
-                    url: "https://picsum.photos/200",
-                    createdAt: "2026-04-16T10:00:00Z",
-                    name: "image1.jpg",
-                },
-                {
-                    id: "2",
-                    type: "FILE",
-                    url: "https://example.com/doc.pdf",
-                    createdAt: "2026-04-16T11:00:00Z",
-                    name: "Tài liệu học tập.pdf",
-                },
-                {
-                    id: "3",
-                    type: "LINK",
-                    url: "https://google.com",
-                    createdAt: "2026-04-15T09:00:00Z",
-                    name: "https://google.com",
-                },
-                {
-                    id: "4",
-                    type: "IMAGE",
-                    url: "https://picsum.photos/201",
-                    createdAt: "2026-04-15T15:00:00Z",
-                    name: "image2.jpg",
-                },
-            ].filter((item) =>
-                activeTab === "MEDIA"
-                    ? item.type === "IMAGE" || item.type === "VIDEO"
-                    : item.type === activeTab,
-            );
+            // 🔥 Map API -> format UI đang dùng
+            const mapped = data
+                .filter((item) => item.attachment) // chỉ lấy item có file
+                .map((item) => ({
+                    id: item.id,
+                    type: item.type,
+                    url: getFullUrl(item.attachment?.fileUrl),
+                    createdAt: item.createdAt,
+                    name: item.attachment?.fileName || "File",
+                }))
+                .filter((item) =>
+                    activeTab === "MEDIA"
+                        ? item.type === "IMAGE" || item.type === "VIDEO"
+                        : item.type === activeTab,
+                );
 
-            // Thuật toán nhóm dữ liệu theo ngày tháng năm (DD/MM/YYYY)
-            const grouped = mockData.reduce((acc: any, curr: any) => {
+            // 🔥 group theo ngày
+            const grouped = mapped.reduce((acc: any, curr: any) => {
                 const date = new Date(curr.createdAt).toLocaleDateString(
                     "vi-VN",
-                ); // Format: DD/MM/YYYY
+                );
                 if (!acc[date]) acc[date] = [];
                 acc[date].push(curr);
                 return acc;
