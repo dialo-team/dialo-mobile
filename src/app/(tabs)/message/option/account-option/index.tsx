@@ -178,6 +178,7 @@ export default function ChatOptionsScreen() {
         try {
             await chatApi.clearHistory(conversationId);
             Alert.alert("Thành công", "Đã xóa lịch sử trò chuyện");
+            router.replace("/(tabs)/message" as any);
         } catch (error: any) {
             Alert.alert(
                 "Lỗi",

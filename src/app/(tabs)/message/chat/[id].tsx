@@ -73,7 +73,6 @@ function getMessageStatusLabel(message: any) {
         message?.raw?.status || message?.messageStatus || "",
     ).toUpperCase();
 
-    // Bổ sung check thêm isRead đề phòng Backend trả về boolean thay vì String "READ"
     if (
         message?.readAt ||
         message?.raw?.readAt ||
@@ -211,7 +210,6 @@ export default function ChatScreen() {
             ).toUpperCase();
 
             const isCenter = rawPosition === "CENTER" || !!item?.system;
-
             const isMe = !isCenter && mineBySender;
 
             const fileUrl = item?.attachment?.fileUrl;
@@ -313,12 +311,10 @@ export default function ChatScreen() {
         const updateConversationState = async (detail: any) => {
             const rawCounterpartName = detail?.counterpartName || "";
 
-            // Kiểm tra xem tên trả về có phải là số điện thoại không (chỉ chứa số)
             const isPhoneNumber = /^\+?\d{8,15}$/.test(
                 rawCounterpartName.replace(/[\s.-]/g, ""),
             );
 
-            // BẮT BUỘC lookup nếu tên là generic HOẶC tên đang là số điện thoại HOẶC thiếu avatar
             const needsLookup =
                 isGenericDisplayName(rawCounterpartName) ||
                 isPhoneNumber ||
@@ -329,7 +325,6 @@ export default function ChatScreen() {
                     detail?.avatar
                 );
 
-            // Khởi tạo mặc định
             let counterpartDisplayName = pickBestDisplayName(
                 [
                     isGenericDisplayName(rawCounterpartName)
@@ -363,8 +358,6 @@ export default function ChatScreen() {
                     const combinedName =
                         `${profile?.lastName || ""} ${profile?.firstName || ""}`.trim();
 
-                    // QUAN TRỌNG: Đảo thứ tự ưu tiên! Đưa các trường từ Profile (tên thật) lên đầu
-                    // Đẩy rawCounterpartName (có thể là sđt) xuống cuối cùng để làm phương án dự phòng
                     counterpartDisplayName = pickBestDisplayName(
                         [
                             profile?.fullName,
@@ -373,10 +366,10 @@ export default function ChatScreen() {
                             profile?.name,
                             profile?.userName,
                             profile?.username,
-                            name, // Tên truyền từ params sang
+                            name,
                             isGenericDisplayName(rawCounterpartName)
                                 ? ""
-                                : rawCounterpartName, // SĐT bị đẩy xuống đây
+                                : rawCounterpartName,
                         ],
                         "Tro chuyen",
                     );
@@ -479,11 +472,16 @@ export default function ChatScreen() {
 
     const handleIncomingRealtimeMessage = useCallback(
         (payload: any) => {
-            // CÁI BẪY QUAN TRỌNG: In ra chính xác những gì Socket bắn về
-            console.log(
-                "💌 [Socket Payload]:",
-                JSON.stringify(payload, null, 2),
-            );
+            if (Array.isArray(payload)) {
+                const currentConv = payload.find(
+                    (conv) => conv?.conversationId === normalizedConversationId,
+                );
+
+                if (currentConv) {
+                    loadConversationDetail();
+                }
+                return;
+            }
 
             const incoming = payload?.data || payload?.message || payload;
             const incomingConversationId =
@@ -514,7 +512,6 @@ export default function ChatScreen() {
                 return;
             }
 
-            // Mở rộng lưới bắt sự kiện Đã đọc từ đối phương
             const isReadEvent =
                 incomingType === "READ" ||
                 incomingType === "SEEN" ||
@@ -523,45 +520,22 @@ export default function ChatScreen() {
                 incoming?.isRead === true;
 
             if (isReadEvent) {
-                setMessages((prev) =>
-                    prev.map((msg) => {
-                        // Chỉ set đã xem cho tin nhắn do mình gửi ra
-                        if (msg.type === "right") {
-                            return {
-                                ...msg,
-                                readAt:
-                                    incoming?.readAt ||
-                                    new Date().toISOString(),
-                                messageStatus: "READ",
-                                raw: {
-                                    ...msg.raw,
-                                    status: "READ",
-                                    isRead: true,
-                                },
-                            };
-                        }
-                        return msg;
-                    }),
-                );
-                return;
-            }
-
-            // Nếu payload không có ID và cũng không phải event Đã đọc -> tải lại cho chắc
-            if (!incoming?.id) {
                 loadConversationDetail();
                 return;
             }
 
-            mergeIncomingMessage(incoming);
+            if (incoming?.id) {
+                mergeIncomingMessage(incoming);
 
-            if (normalizedConversationId) {
-                chatApi.markRead(normalizedConversationId).catch((err) => {
-                    console.log(
-                        "[ChatScreen] Lỗi đánh dấu đã đọc realtime:",
-                        err,
-                    );
-                });
+                if (normalizedConversationId) {
+                    chatApi.markRead(normalizedConversationId).catch((err) => {
+                        console.log("[ChatScreen] Mark read error:", err);
+                    });
+                }
+                return;
             }
+
+            loadConversationDetail();
         },
         [
             loadConversationDetail,
@@ -682,6 +656,116 @@ export default function ChatScreen() {
             setSearchResults(Array.isArray(result) ? result : []);
         } finally {
             setSearchLoading(false);
+        }
+    };
+
+    const handleSelectMessage = async (msg: any) => {
+        setSelectedMessage(msg.raw || msg);
+
+        try {
+            const conversations = await chatApi.getConversations();
+            let targets = Array.isArray(conversations)
+                ? conversations.filter(
+                      (conv) =>
+                          conv.conversationId !== normalizedConversationId,
+                  )
+                : [];
+
+            targets = await Promise.all(
+                targets.map(async (target) => {
+                    const rawCounterpartName = target?.counterpartName || "";
+
+                    const isPhoneNumber = /^\+?\d{8,15}$/.test(
+                        rawCounterpartName.replace(/[\s.-]/g, ""),
+                    );
+
+                    const needsLookup =
+                        isGenericDisplayName(rawCounterpartName) ||
+                        isPhoneNumber ||
+                        !(
+                            target?.counterpartAvatarUrl ||
+                            target?.counterpartAvatar ||
+                            target?.profilePicture ||
+                            target?.avatar
+                        );
+
+                    let displayName = pickBestDisplayName(
+                        [
+                            isGenericDisplayName(rawCounterpartName)
+                                ? ""
+                                : rawCounterpartName,
+                            target?.counterpartUserName,
+                            target?.counterpartDisplayName,
+                            target?.displayName,
+                            target?.userName,
+                            target?.username,
+                            target?.name,
+                        ],
+                        "Trò chuyện",
+                    );
+
+                    let displayAvatar =
+                        target?.counterpartAvatarUrl ||
+                        target?.counterpartAvatar ||
+                        target?.avatar ||
+                        "";
+
+                    const targetUserId =
+                        target?.counterpartId || target?.targetUserId || "";
+
+                    if (needsLookup && targetUserId) {
+                        try {
+                            const userRes =
+                                await friendApi.getUserById(targetUserId);
+                            const profile = userRes?.data || userRes;
+
+                            const combinedName =
+                                `${profile?.lastName || ""} ${profile?.firstName || ""}`.trim();
+
+                            displayName = pickBestDisplayName(
+                                [
+                                    profile?.fullName,
+                                    combinedName,
+                                    profile?.displayName,
+                                    profile?.name,
+                                    profile?.userName,
+                                    profile?.username,
+                                    isGenericDisplayName(rawCounterpartName)
+                                        ? ""
+                                        : rawCounterpartName,
+                                ],
+                                "Trò chuyện",
+                            );
+
+                            displayAvatar =
+                                displayAvatar ||
+                                profile?.avatarUrl ||
+                                profile?.avatar ||
+                                "";
+                        } catch (error) {
+                            console.warn(
+                                "[handleSelectMessage] User lookup failed for",
+                                targetUserId,
+                                error,
+                            );
+                        }
+                    }
+
+                    return {
+                        ...target,
+                        _displayName: displayName,
+                        _displayAvatar: displayAvatar,
+                    };
+                }),
+            );
+
+            setForwardTargets(targets);
+        } catch (error) {
+            console.error(
+                "[ChatScreen] Error fetching forward targets:",
+                error,
+            );
+            setForwardTargets([]);
         }
     };
 
@@ -852,9 +936,7 @@ export default function ChatScreen() {
                                             activeOpacity={0.8}
                                             onLongPress={() =>
                                                 !msg.system &&
-                                                setSelectedMessage(
-                                                    msg.raw || msg,
-                                                )
+                                                handleSelectMessage(msg)
                                             }
                                             onPress={() => {
                                                 if (
@@ -1008,7 +1090,7 @@ export default function ChatScreen() {
                 </View>
             </KeyboardAvoidingView>
 
-            {/* Modals (Selected, Search, Media, Viewing) - Giữ nguyên logic UI cũ */}
+            {/* Message Options Modal */}
             <Modal
                 visible={!!selectedMessage}
                 transparent
@@ -1043,28 +1125,49 @@ export default function ChatScreen() {
                                     Chuyển tiếp tới
                                 </Text>
                                 <ScrollView className="max-h-[200px]">
-                                    {forwardTargets.map((item: any) => (
-                                        <TouchableOpacity
-                                            key={item.conversationId}
-                                            className="flex-row items-center py-3 border-b border-gray-100"
-                                            onPress={() =>
-                                                handleForwardMessage(
-                                                    item.conversationId,
-                                                )
-                                            }
-                                        >
-                                            <View className="w-9 h-9 rounded-full bg-blue-200 items-center justify-center mr-3">
-                                                <Text className="text-white text-xs">
-                                                    {getInitials(
-                                                        item.counterpartName,
-                                                    )}
+                                    {forwardTargets.map((item: any) => {
+                                        const displayName =
+                                            item._displayName ||
+                                            item.counterpartName ||
+                                            "Trò chuyện";
+                                        const displayAvatar =
+                                            item._displayAvatar ||
+                                            item.counterpartAvatarUrl ||
+                                            item.counterpartAvatar ||
+                                            "";
+
+                                        return (
+                                            <TouchableOpacity
+                                                key={item.conversationId}
+                                                className="flex-row items-center py-3 border-b border-gray-100"
+                                                onPress={() =>
+                                                    handleForwardMessage(
+                                                        item.conversationId,
+                                                    )
+                                                }
+                                            >
+                                                {displayAvatar ? (
+                                                    <RNImage
+                                                        source={{
+                                                            uri: displayAvatar,
+                                                        }}
+                                                        className="w-9 h-9 rounded-full mr-3"
+                                                    />
+                                                ) : (
+                                                    <View className="w-9 h-9 rounded-full bg-blue-500 items-center justify-center mr-3">
+                                                        <Text className="text-white text-xs font-semibold">
+                                                            {getInitials(
+                                                                displayName,
+                                                            )}
+                                                        </Text>
+                                                    </View>
+                                                )}
+                                                <Text className="text-sm font-medium text-gray-800 flex-1">
+                                                    {displayName}
                                                 </Text>
-                                            </View>
-                                            <Text className="text-sm font-medium">
-                                                {item.counterpartName}
-                                            </Text>
-                                        </TouchableOpacity>
-                                    ))}
+                                            </TouchableOpacity>
+                                        );
+                                    })}
                                 </ScrollView>
                             </View>
                         </View>

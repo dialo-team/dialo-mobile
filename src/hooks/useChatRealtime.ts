@@ -82,6 +82,29 @@ export function useChatRealtime({
             `/topic/conversations/${id}`,
             (frame) => {
                 const payload = parseFrameBody(frame);
+
+                // 🔍 DETAILED LOGGING - CONVERSATION TOPIC
+                if (payload) {
+                    console.log("\n========== CONVERSATION MESSAGE ==========");
+                    console.log(
+                        "[Payload Full]:",
+                        JSON.stringify(payload, null, 2),
+                    );
+                    console.log("[Payload Summary]:", {
+                        type: payload?.type,
+                        action: payload?.action,
+                        status: payload?.status,
+                        messageId: payload?.id || payload?.messageId,
+                        conversationId: payload?.conversationId,
+                        readAt: payload?.readAt,
+                        seenAt: payload?.seenAt,
+                        isRead: payload?.isRead,
+                        senderId: payload?.senderId,
+                        senderName: payload?.senderName,
+                    });
+                    console.log("==========================================\n");
+                }
+
                 if (payload && onConversationMessageRef.current) {
                     onConversationMessageRef.current(payload);
                 }
@@ -135,6 +158,33 @@ export function useChatRealtime({
                         `/topic/inbox/${currentUserId}`,
                         (frame) => {
                             const payload = parseFrameBody(frame);
+
+                            // 🔍 DETAILED LOGGING - INBOX TOPIC
+                            if (payload) {
+                                console.log(
+                                    "\n========== INBOX MESSAGE ==========",
+                                );
+                                console.log(
+                                    "[Payload Full]:",
+                                    JSON.stringify(payload, null, 2),
+                                );
+                                console.log("[Payload Summary]:", {
+                                    type: payload?.type,
+                                    action: payload?.action,
+                                    status: payload?.status,
+                                    messageId:
+                                        payload?.id || payload?.messageId,
+                                    conversationId: payload?.conversationId,
+                                    readAt: payload?.readAt,
+                                    seenAt: payload?.seenAt,
+                                    isRead: payload?.isRead,
+                                    senderId: payload?.senderId,
+                                });
+                                console.log(
+                                    "===================================\n",
+                                );
+                            }
+
                             if (payload && onInboxPayloadRef.current) {
                                 onInboxPayloadRef.current(payload);
                             }
