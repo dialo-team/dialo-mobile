@@ -3,7 +3,13 @@ import { friendApi } from "@/src/api/friend/friendApi";
 import { useChatRealtime } from "@/src/hooks/useChatRealtime";
 import { getInitials, pickBestDisplayName } from "@/src/utils/displayUser";
 import { useRouter } from "expo-router";
-import { Plus, ScanQrCode, Search } from "lucide-react-native";
+import {
+    Plus,
+    ScanQrCode,
+    Search,
+    UserRoundPlus,
+    Users,
+} from "lucide-react-native";
 import React, {
     useCallback,
     useEffect,
@@ -256,9 +262,15 @@ export default function MessagesScreen() {
     const plusMenu = [
         {
             id: "1",
-            icon: <Plus size={20} color="gray" />,
+            icon: <UserRoundPlus size={20} color="gray" />,
             title: "Thêm bạn",
             route: "/contact/friend/add",
+        },
+        {
+            id: "2",
+            icon: <Users size={20} color="gray" />,
+            title: "Tạo nhóm",
+            route: "/contact/group/create",
         },
     ];
 
@@ -372,20 +384,27 @@ export default function MessagesScreen() {
                         const displayName =
                             getConversationDisplayName(conversation);
                         const initials = getInitials(displayName);
+                        const isGroup =
+                            conversation.conversationId ===
+                            conversation.counterpartId;
 
                         return (
                             <TouchableOpacity
                                 key={conversation.conversationId}
                                 onPress={() => {
                                     router.push({
-                                        pathname: "/message/chat/[id]",
+                                        pathname: isGroup
+                                            ? "/(tabs)/message/group-chat/[id]" // Nếu là group
+                                            : "/message/chat/[id]", // Nếu là chat đơn
                                         params: {
                                             id: conversation.conversationId,
-                                            name: displayName,
+                                            name: getConversationDisplayName(
+                                                conversation,
+                                            ),
                                             avatar:
                                                 conversation.counterpartAvatarUrl ||
                                                 "",
-                                            from: "message",
+                                            isGroup: isGroup ? "true" : "false",
                                         },
                                     });
                                 }}

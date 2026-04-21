@@ -119,6 +119,23 @@ const unwrapData = <T>(value: any): T => {
     return value as T;
 };
 
+const isGroupConversation = (value: any) => {
+    const type = String(
+        value?.conversationType ||
+            value?.type ||
+            value?.conversationTypeName ||
+            "",
+    ).toLowerCase();
+
+    return (
+        type === "group" ||
+        !!value?.groupName ||
+        !!value?.groupAvatarUrl ||
+        Array.isArray(value?.participants) ||
+        !!value?.memberRoles
+    );
+};
+
 function collectNestedStringValues(
     value: any,
     keyPattern: RegExp,
@@ -151,10 +168,14 @@ function collectNestedStringValues(
 const normalizeConversationIdentity = <T extends Record<string, any>>(
     value: T,
 ): T => {
-    const counterpartId =
-        value?.counterpartId || value?.targetUserId || value?.userId || "";
+    const group = isGroupConversation(value);
+    const conversationId = value?.conversationId || value?.id || "";
+    const counterpartId = group
+        ? conversationId
+        : value?.counterpartId || value?.targetUserId || value?.userId || "";
 
     const nameCandidates = [
+        value?.groupName,
         value?.remarkName,
         value?.counterpartName,
         value?.counterpartUserName,
@@ -172,6 +193,7 @@ const normalizeConversationIdentity = <T extends Record<string, any>>(
     const counterpartName = pickBestDisplayName(nameCandidates, "Nguoi dung");
 
     const counterpartAvatarUrl =
+        value?.groupAvatarUrl ||
         value?.counterpartAvatarUrl ||
         value?.counterpartAvatar ||
         value?.profilePictureUrl ||
@@ -189,9 +211,20 @@ const normalizeConversationIdentity = <T extends Record<string, any>>(
 
     return {
         ...value,
+        conversationId,
+        conversationType: group
+            ? "group"
+            : value?.conversationType || value?.type || "direct",
+        isGroup: group,
+        groupName: value?.groupName || (group ? counterpartName : ""),
+        groupAvatarUrl: value?.groupAvatarUrl || "",
         counterpartId,
-        counterpartName,
-        counterpartAvatarUrl,
+        counterpartName: group
+            ? value?.groupName || counterpartName
+            : counterpartName,
+        counterpartAvatarUrl: group
+            ? value?.groupAvatarUrl || counterpartAvatarUrl
+            : counterpartAvatarUrl,
     } as T;
 };
 

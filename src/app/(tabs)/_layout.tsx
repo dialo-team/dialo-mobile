@@ -9,6 +9,7 @@ export default function TabsLayout() {
 
     // Kiểm tra xem đường dẫn có chứa chữ "/chat" không (đường dẫn vào ChatScreen của bạn)
     const isChatScreen = pathname.includes("/chat");
+    const isGroupChatScreen = pathname.includes("/group-chat");
     const isQRScreen = pathname.includes("/qr");
 
     return (
@@ -16,7 +17,10 @@ export default function TabsLayout() {
             screenOptions={{
                 headerShown: false,
                 tabBarStyle: {
-                    display: isChatScreen || isQRScreen ? "none" : "flex",
+                    display:
+                        isChatScreen || isGroupChatScreen || isQRScreen
+                            ? "none"
+                            : "flex",
                     backgroundColor: "white",
                     borderTopWidth: 1,
                     borderTopColor: "#E5E7EB",

@@ -1,5 +1,11 @@
 export type ChatConversationItem = {
     conversationId: string;
+    conversationType?: string;
+    isGroup?: boolean;
+    groupName?: string;
+    groupAvatarUrl?: string;
+    participants?: string[];
+    memberRoles?: Record<string, string>;
     counterpartId?: string;
     counterpartName?: string;
     counterpartAvatarUrl?: string;
@@ -36,6 +42,12 @@ export type ChatMessageItem = {
 
 export type ChatConversationDetail = {
     conversationId: string;
+    conversationType?: string;
+    isGroup?: boolean;
+    groupName?: string;
+    groupAvatarUrl?: string;
+    participants?: string[];
+    memberRoles?: Record<string, string>;
     counterpartId?: string;
     counterpartName?: string;
     counterpartAvatarUrl?: string;

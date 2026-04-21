@@ -469,8 +469,13 @@ export default function ChatScreen() {
             setCounterpartName(counterpartDisplayName); // Sẽ trigger re-render biến displayName
             setCounterpartAvatar(counterpartDisplayAvatar);
             setCounterpartLastActiveAt(
-                detail?.counterpartLastActiveAt || detail?.lastActiveAt || "",
+                detail?.counterpartLastActiveAt ||
+                    detail?.lastActiveAt ||
+                    detail?.lastMessageAt ||
+                    detail?.updatedAt ||
+                    "",
             );
+
             setCounterpartOnline(
                 Boolean(
                     detail?.counterpartOnline ||
@@ -912,16 +917,9 @@ export default function ChatScreen() {
                                 </Text>
                                 <View className="flex-row items-center flex-wrap">
                                     <Text className="text-white text-[12px] opacity-80">
-                                        {counterpartOnline
-                                            ? "đang hoạt động"
-                                            : counterpartLastActiveAt
-                                              ? `Hoạt động ${formatRelativeActivity(counterpartLastActiveAt)}`
-                                              : "ngoại tuyến"}
-                                    </Text>
-                                    <Text className="text-white text-[12px] opacity-80 ml-2">
-                                        {connected
-                                            ? "• realtime on"
-                                            : "• realtime off"}
+                                        {counterpartLastActiveAt
+                                            ? `Hoạt động ${formatRelativeActivity(counterpartLastActiveAt)}`
+                                            : "Hoạt động gần đây"}
                                     </Text>
                                 </View>
                             </TouchableOpacity>
