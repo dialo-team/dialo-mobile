@@ -1,3 +1,4 @@
+import { chatAuthUtils } from "@/src/api/chat/chatApi";
 import { friendApi } from "@/src/api/friend/friendApi"; // Đảm bảo đúng đường dẫn
 import { useLocalSearchParams, useRouter } from "expo-router";
 import {
@@ -12,6 +13,7 @@ import {
 } from "lucide-react-native";
 import { useEffect, useState } from "react";
 import {
+    Alert,
     Image,
     KeyboardAvoidingView,
     Modal,
@@ -277,10 +279,23 @@ export default function FriendProfileScreen() {
                                         : "bg-gray-300 opacity-50"
                                 }`}
                                 disabled={!hasNameChanged}
-                                onPress={() => {
-                                    setDisplayName(nickname.trim());
-                                    setOpenRename(false);
-                                    // Ở đây bạn có thể gọi thêm API cập nhật nickname nếu cần
+                                onPress={async () => {
+                                    try {
+                                        const currentUserId =
+                                            await chatAuthUtils.getCurrentUserId();
+                                        await friendApi.updateConversationRemark(
+                                            conversationId, // Hãy đảm bảo bạn lấy được conversationId từ params
+                                            nickname.trim(),
+                                            currentUserId,
+                                        );
+                                        setDisplayName(nickname.trim());
+                                        setOpenRename(false);
+                                    } catch (error) {
+                                        Alert.alert(
+                                            "Lỗi",
+                                            "Không thể lưu tên gợi nhớ",
+                                        );
+                                    }
                                 }}
                             >
                                 <Text className="text-white text-lg font-medium">

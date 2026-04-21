@@ -1,7 +1,7 @@
 import { chatApi } from "@/src/api/chat/chatApi";
 import { friendApi } from "@/src/api/friend/friendApi";
 import { getInitials } from "@/src/utils/displayUser";
-import { useLocalSearchParams, useRouter } from "expo-router";
+import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import {
     Bell,
     Clock,
@@ -19,7 +19,7 @@ import {
     Users,
     X,
 } from "lucide-react-native";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
     Alert,
     Animated,
@@ -53,9 +53,14 @@ export default function ChatOptionsScreen() {
         avatar?: string | string[];
         from?: string | string[];
     }>();
+
     const id = paramStr(params.id);
     const conversationId = paramStr(params.conversationId) || id || "";
-    const targetUserId = paramStr(params.targetUserId) || id || "";
+
+    // FIX 1: Dùng State cho targetUserId, KHÔNG fallback sang id (vì id có thể là conversationId gây lỗi 500)
+    const initialTargetUserId = paramStr(params.targetUserId) || "";
+    const [targetUserId, setTargetUserId] = useState(initialTargetUserId);
+
     const name = paramStr(params.name);
     const avatar = paramStr(params.avatar);
 
@@ -78,9 +83,18 @@ export default function ChatOptionsScreen() {
             try {
                 const detail =
                     await chatApi.getConversationDetail(conversationId);
-                if (mounted && detail?.remarkName) {
-                    setDisplayName(detail.remarkName);
-                    setRemarkName(detail.remarkName);
+                if (mounted) {
+                    if (detail?.remarkName) {
+                        setDisplayName(detail.remarkName);
+                        setRemarkName(detail.remarkName);
+                    }
+
+                    // FIX 2: Tự động cập nhật targetUserId nếu params bị rỗng
+                    const serverTargetId =
+                        detail?.counterpartId || detail?.targetUserId;
+                    if (!targetUserId && serverTargetId) {
+                        setTargetUserId(serverTargetId);
+                    }
                 }
             } catch (error) {
                 console.error("[ChatOptions] Load detail error:", error);
@@ -141,11 +155,20 @@ export default function ChatOptionsScreen() {
                     : Array.isArray((result as any)?.data)
                       ? (result as any).data
                       : [];
+
                 const blocked = blockedList.some((item: any) => {
+                    // FIX 3: Mở rộng các field để vét cạn ID từ mảng của backend
                     const candidate =
-                        item?.id || item?.targetId || item?.userId || item;
+                        item?.id ||
+                        item?.targetId ||
+                        item?.userId ||
+                        item?.blockedId ||
+                        item?.blockedUserId ||
+                        item?.blockedUser?.id ||
+                        item;
                     return String(candidate) === String(targetUserId);
                 });
+
                 if (mounted) setIsBlocked(blocked);
             } catch (error) {
                 console.error("[account-option] loadBlockState error:", error);
@@ -159,7 +182,39 @@ export default function ChatOptionsScreen() {
         return () => {
             mounted = false;
         };
-    }, [targetUserId]);
+    }, [targetUserId]); // Phụ thuộc vào targetUserId để load lại khi lấy được ID đúng
+
+    useFocusEffect(
+        useCallback(() => {
+            let mounted = true;
+
+            const refreshBlockState = async () => {
+                if (!targetUserId) {
+                    if (mounted) setIsBlocked(false);
+                    return;
+                }
+
+                setLoadingBlockState(true);
+                try {
+                    const blocked = await friendApi.isUserBlocked(targetUserId);
+                    if (mounted) setIsBlocked(blocked);
+                } catch (error) {
+                    console.error(
+                        "[account-option] refreshBlockState error:",
+                        error,
+                    );
+                } finally {
+                    if (mounted) setLoadingBlockState(false);
+                }
+            };
+
+            refreshBlockState();
+
+            return () => {
+                mounted = false;
+            };
+        }, [targetUserId]),
+    );
 
     const handleOpenProfile = () => {
         if (!targetUserId) return;
@@ -188,7 +243,15 @@ export default function ChatOptionsScreen() {
     };
 
     const handleToggleBlock = async () => {
-        if (!targetUserId) return;
+        if (!targetUserId) {
+            Alert.alert("Lỗi", "Đang tải thông tin, vui lòng thử lại...");
+            return;
+        }
+
+        // Cảnh báo an toàn (không hiển thị lên UI, chỉ cho dev)
+        if (targetUserId === conversationId) {
+            console.warn("Lỗi tiềm ẩn: targetUserId trùng conversationId!");
+        }
 
         Alert.alert(
             isBlocked ? "Bỏ chặn người dùng?" : "Chặn người dùng?",
@@ -233,8 +296,8 @@ export default function ChatOptionsScreen() {
                 pathname: "/(tabs)/message/chat/[id]" as any,
                 params: {
                     id: conversationId,
-                    ...(name != null ? { name } : {}),
-                    ...(avatar != null ? { avatar } : {}),
+                    name: displayName,
+                    avatar: avatarUrl,
                 },
             });
             return;
@@ -428,19 +491,17 @@ export default function ChatOptionsScreen() {
                                     ? "Bỏ chặn người dùng"
                                     : "Chặn người dùng"
                             }
+                            onPress={
+                                loadingBlockState || loadingBlockAction
+                                    ? undefined
+                                    : handleToggleBlock
+                            }
                             right={
-                                <TouchableOpacity
-                                    onPress={handleToggleBlock}
-                                    disabled={
-                                        loadingBlockState || loadingBlockAction
-                                    }
+                                <Text
+                                    className={`text-sm font-semibold ${isBlocked ? "text-green-600" : "text-red-500"}`}
                                 >
-                                    <Text
-                                        className={`text-sm font-semibold ${isBlocked ? "text-green-600" : "text-red-500"}`}
-                                    >
-                                        {isBlocked ? "Bỏ chặn" : "Chặn"}
-                                    </Text>
-                                </TouchableOpacity>
+                                    {isBlocked ? "Bỏ chặn" : "Chặn"}
+                                </Text>
                             }
                         />
                         <OptionItem
@@ -531,8 +592,8 @@ function OptionItem({ icon, title, right, onPress }: any) {
     return (
         <TouchableOpacity
             className="flex-row items-center px-4 py-4 border-b border-gray-100"
-            onPress={onPress} // Thêm onPress vào đây
-            disabled={!onPress} // Nếu không truyền onPress thì vô hiệu hóa hiệu ứng bấm
+            onPress={onPress}
+            disabled={!onPress}
         >
             <View className="mr-3">{icon}</View>
             <Text className="flex-1 text-[15px]">{title}</Text>

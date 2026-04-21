@@ -4,7 +4,7 @@ import { useChatAttachments } from "@/src/hooks/useChatAttchment";
 import { useChatRealtime } from "@/src/hooks/useChatRealtime";
 import { getInitials, pickBestDisplayName } from "@/src/utils/displayUser";
 import { Video as AVVideo, ResizeMode } from "expo-av";
-import { useLocalSearchParams, useRouter } from "expo-router";
+import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import {
     Image,
     MoreHorizontal,
@@ -15,6 +15,7 @@ import {
     Send,
     Trash2,
     Video,
+    X,
 } from "lucide-react-native";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
@@ -178,12 +179,73 @@ export default function ChatScreen() {
     const scrollViewRef = useRef<ScrollView>(null);
     const realNameRef = useRef<string>("");
 
+    const [isBlockedByMe, setIsBlockedByMe] = useState(false);
+    const [isBlockedByThem, setIsBlockedByThem] = useState(false);
+
+    useFocusEffect(
+        useCallback(() => {
+            let mounted = true;
+            const loadBlockStatus = async () => {
+                if (!counterpartId) {
+                    if (mounted) setIsBlockedByMe(false);
+                    return;
+                }
+                try {
+                    // 1. Kiểm tra xem TÔI có đang chặn HỌ không
+                    const blocked =
+                        await friendApi.isUserBlocked(counterpartId);
+                    if (mounted) setIsBlockedByMe(blocked);
+
+                    // 2. CHỦ ĐỘNG KIỂM TRA xem TÔI CÓ BỊ HỌ CHẶN KHÔNG
+                    const relation = await friendApi.checkStatus(counterpartId);
+                    const relData = relation?.data || relation;
+
+                    // (Tuỳ vào BE của bạn trả về field gì, thường là status = BLOCKED)
+                    if (
+                        relData?.status === "BLOCKED" ||
+                        relData?.isBlockedByThem === true ||
+                        relData?.blockedBy === counterpartId
+                    ) {
+                        if (mounted) setIsBlockedByThem(true);
+                    } else {
+                        if (mounted) setIsBlockedByThem(false);
+                    }
+                } catch (error: any) {
+                    console.log("[ChatScreen] loadBlockStatus error");
+                    // Nếu BE quăng lỗi 403 khi cố check status -> khả năng cao là bị chặn
+                    if (error?.response?.status === 403) {
+                        if (mounted) setIsBlockedByThem(true);
+                    }
+                }
+            };
+
+            loadBlockStatus();
+
+            return () => {
+                mounted = false;
+            };
+        }, [counterpartId]),
+    );
+
+    const handleUnblock = async () => {
+        if (!counterpartId) return;
+        try {
+            await friendApi.unblockUser(counterpartId);
+            setIsBlockedByMe(false);
+            Alert.alert("Thành công", "Đã bỏ chặn người dùng.");
+            loadConversationDetail(); // Tải lại cuộc trò chuyện để có Tên/Avatar
+        } catch (error: any) {
+            Alert.alert("Lỗi", error?.message || "Không thể bỏ chặn.");
+        }
+    };
+
     const avatarUrl =
         counterpartAvatar ||
         (typeof avatar === "string" &&
         (avatar.startsWith("http://") || avatar.startsWith("https://"))
             ? avatar
             : "");
+
     const displayName = pickBestDisplayName(
         [counterpartName, name],
         "Tro chuyen",
@@ -325,8 +387,14 @@ export default function ChatScreen() {
                     detail?.avatar
                 );
 
+            // FIX: Đảo thứ tự ưu tiên lấy tên:
+            // 1. remarkName (nếu API BE có trả về)
+            // 2. name (truyền từ param của màn hình Option về khi vừa đổi xong)
+            // 3. Tên người dùng / SDT gốc
             let counterpartDisplayName = pickBestDisplayName(
                 [
+                    detail?.remarkName,
+                    name,
                     isGenericDisplayName(rawCounterpartName)
                         ? ""
                         : rawCounterpartName,
@@ -336,7 +404,6 @@ export default function ChatScreen() {
                     detail?.userName,
                     detail?.username,
                     detail?.name,
-                    name,
                 ],
                 "Tro chuyen",
             );
@@ -358,15 +425,17 @@ export default function ChatScreen() {
                     const combinedName =
                         `${profile?.lastName || ""} ${profile?.firstName || ""}`.trim();
 
+                    // FIX Tương tự trong phần lookup
                     counterpartDisplayName = pickBestDisplayName(
                         [
+                            detail?.remarkName,
+                            name,
+                            profile?.displayName,
                             profile?.fullName,
                             combinedName,
-                            profile?.displayName,
                             profile?.name,
                             profile?.userName,
                             profile?.username,
-                            name,
                             isGenericDisplayName(rawCounterpartName)
                                 ? ""
                                 : rawCounterpartName,
@@ -380,9 +449,8 @@ export default function ChatScreen() {
                         profile?.avatar ||
                         "";
                 } catch (error) {
-                    console.error(
-                        "[ChatScreen] counterpart lookup error:",
-                        error,
+                    console.log(
+                        "[ChatScreen] counterpart lookup failed (User might be blocked)",
                     );
                 }
             }
@@ -398,7 +466,7 @@ export default function ChatScreen() {
             setCounterpartId(
                 detail?.counterpartId || detail?.targetUserId || "",
             );
-            setCounterpartName(counterpartDisplayName);
+            setCounterpartName(counterpartDisplayName); // Sẽ trigger re-render biến displayName
             setCounterpartAvatar(counterpartDisplayAvatar);
             setCounterpartLastActiveAt(
                 detail?.counterpartLastActiveAt || detail?.lastActiveAt || "",
@@ -468,7 +536,7 @@ export default function ChatScreen() {
 
     useEffect(() => {
         loadConversationDetail();
-    }, [loadConversationDetail]);
+    }, [loadConversationDetail, name]); // FIX: Re-load khi biến name từ Option trả về có thay đổi
 
     const handleIncomingRealtimeMessage = useCallback(
         (payload: any) => {
@@ -551,6 +619,15 @@ export default function ChatScreen() {
     });
 
     const handleSend = async () => {
+        if (isBlockedByMe) {
+            Alert.alert("Bạn đã chặn người này");
+            return;
+        }
+
+        if (isBlockedByThem) {
+            Alert.alert("Bạn không thể gửi tin nhắn");
+            return;
+        }
         const content = message.trim();
         if (!normalizedConversationId || !content) return;
 
@@ -601,11 +678,31 @@ export default function ChatScreen() {
                 );
             }
         } catch (error: any) {
+            const status = error?.response?.status;
+            const msg = String(
+                error?.response?.data?.message || "",
+            ).toLowerCase();
+
+            // Mở rộng điều kiện: 403 hoặc có chứa chữ block/chặn
+            if (
+                status === 403 ||
+                msg.includes("block") ||
+                msg.includes("chặn")
+            ) {
+                setIsBlockedByThem(true);
+                setMessages((prev) =>
+                    prev.filter((item) => item.id !== optimisticId),
+                );
+                // Không cần alert nữa vì UI tự động nhảy dòng "Đã chặn tin nhắn của bạn"
+                return;
+            }
+
+            // Nếu là lỗi mạng/lỗi khác thông thường
             setMessages((prev) =>
                 prev.filter((item) => item.id !== optimisticId),
             );
             setMessage(content);
-            Alert.alert("Lỗi", "Không thể gửi tin nhắn");
+            Alert.alert("Lỗi", "Không thể gửi tin nhắn. Vui lòng thử lại.");
         }
     };
 
@@ -743,10 +840,9 @@ export default function ChatScreen() {
                                 profile?.avatar ||
                                 "";
                         } catch (error) {
-                            console.warn(
+                            console.log(
                                 "[handleSelectMessage] User lookup failed for",
                                 targetUserId,
-                                error,
                             );
                         }
                     }
@@ -1053,41 +1149,81 @@ export default function ChatScreen() {
                     </Animated.View>
                 </ScrollView>
 
-                {/* Input Bar */}
-                <View className="bg-white px-3 py-2 border-t border-gray-200">
-                    <View className="flex-row items-center">
+                {/* --- HIỂN THỊ CẢNH BÁO KHI BỊ CHẶN (ẢNH 1) --- */}
+                {isBlockedByThem && !isBlockedByMe && (
+                    <View className="items-center pb-2 z-10 -mt-8">
+                        <View className="bg-white border border-gray-200 px-4 py-2 flex-row items-center rounded-full shadow-sm">
+                            <X size={16} color="#6b7280" />
+                            <Text className="text-gray-700 text-[13px] ml-2 font-medium">
+                                {displayName} đã chặn tin nhắn.
+                            </Text>
+                        </View>
+                    </View>
+                )}
+
+                {/* --- RENDER BOTTOM BAR (INPUT HOẶC UNBLOCK) --- */}
+                {isBlockedByMe ? (
+                    // Nếu TÔI chặn người kia
+                    <View className="bg-white px-4 pt-4 pb-8 border-t border-gray-100 items-center">
+                        <Text className="text-gray-800 text-sm mb-4 font-medium">
+                            Bạn đã chặn tin nhắn
+                        </Text>
                         <TouchableOpacity
-                            onPress={handlePickFile}
-                            className="mr-2"
+                            className="bg-[#e9f2ff] py-3 rounded-full w-full items-center"
+                            onPress={handleUnblock}
                         >
-                            <Paperclip size={22} color="#6b7280" />
-                        </TouchableOpacity>
-                        <TouchableOpacity
-                            onPress={() => setShowSearchSheet(true)}
-                            className="mr-2"
-                        >
-                            <Search size={22} color="#6b7280" />
-                        </TouchableOpacity>
-                        <TouchableOpacity
-                            onPress={handlePickMedia}
-                            className="mr-2"
-                        >
-                            <Image size={22} color="#6b7280" />
-                        </TouchableOpacity>
-                        <TextInput
-                            className="flex-1 bg-gray-100 rounded-full px-4 py-3 mt-1 text-[15px]"
-                            placeholder="Nhập tin nhắn"
-                            value={message}
-                            onChangeText={setMessage}
-                        />
-                        <TouchableOpacity
-                            onPress={handleSend}
-                            className="ml-2 bg-blue-400 rounded-full p-2"
-                        >
-                            <Send size={18} color="white" />
+                            <Text className="text-blue-600 font-semibold text-[16px]">
+                                Bỏ chặn
+                            </Text>
                         </TouchableOpacity>
                     </View>
-                </View>
+                ) : isBlockedByThem ? (
+                    // ✅ THÊM: Nếu BỊ CHẶN bởi người kia
+                    <View className="bg-white px-4 pt-4 pb-8 border-t border-gray-100 items-center">
+                        <Text className="text-gray-800 text-sm mb-4 font-medium">
+                            {displayName} đã chặn tin nhắn của bạn
+                        </Text>
+                        <Text className="text-gray-600 text-xs text-center">
+                            Bạn không thể gửi tin nhắn đến họ
+                        </Text>
+                    </View>
+                ) : (
+                    // Normal input bar
+                    <View className="bg-white px-3 py-2 border-t border-gray-200">
+                        <View className="flex-row items-center">
+                            <TouchableOpacity
+                                onPress={handlePickFile}
+                                className="mr-2"
+                            >
+                                <Paperclip size={22} color="#6b7280" />
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                                onPress={() => setShowSearchSheet(true)}
+                                className="mr-2"
+                            >
+                                <Search size={22} color="#6b7280" />
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                                onPress={handlePickMedia}
+                                className="mr-2"
+                            >
+                                <Image size={22} color="#6b7280" />
+                            </TouchableOpacity>
+                            <TextInput
+                                className="flex-1 bg-gray-100 rounded-full px-4 py-3 mt-1 text-[15px]"
+                                placeholder="Nhập tin nhắn"
+                                value={message}
+                                onChangeText={setMessage}
+                            />
+                            <TouchableOpacity
+                                onPress={handleSend}
+                                className="ml-2 bg-blue-400 rounded-full p-2"
+                            >
+                                <Send size={18} color="white" />
+                            </TouchableOpacity>
+                        </View>
+                    </View>
+                )}
             </KeyboardAvoidingView>
 
             {/* Message Options Modal */}

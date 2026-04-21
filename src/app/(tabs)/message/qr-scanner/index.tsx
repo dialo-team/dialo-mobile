@@ -1,3 +1,5 @@
+import { authenticationApi } from "@/src/api/auth/authenticationApi";
+import { friendApi } from "@/src/api/friend/friendApi";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import { useRouter } from "expo-router";
 import { useEffect, useState } from "react";
@@ -139,38 +141,39 @@ function parseScannedQrData(data: string) {
         return { type: "unknown" as const };
     }
 
-    const loginUrlMatch = trimmed.match(/auth\/qr\/challenges\/([^\/?#]+)/i);
-    if (loginUrlMatch?.[1]) {
-        return { type: "login" as const, challengeId: loginUrlMatch[1] };
+    // ✅ 1. Detect LOGIN bằng pattern CHẮC CHẮN
+    const match = trimmed.match(/auth\/qr\/challenges\/([^\/?#]+)/i);
+    if (match?.[1]) {
+        return {
+            type: "login" as const,
+            challengeId: match[1],
+        };
     }
 
     try {
         const url = new URL(trimmed);
+
         const pathMatch = url.pathname.match(
             /auth\/qr\/challenges\/([^\/?#]+)/i,
         );
-        if (pathMatch?.[1]) {
-            return { type: "login" as const, challengeId: pathMatch[1] };
-        }
 
-        const challengeId =
-            url.searchParams.get("challengeId") ||
-            url.searchParams.get("challenge") ||
-            url.searchParams.get("qrToken");
-        if (challengeId) {
-            return { type: "login" as const, challengeId };
+        if (pathMatch?.[1]) {
+            return {
+                type: "login" as const,
+                challengeId: pathMatch[1],
+            };
         }
     } catch {
-        // ignore invalid URL format
+        // ignore
     }
 
-    const uuidRegex =
-        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-    if (uuidRegex.test(trimmed)) {
-        return { type: "login" as const, challengeId: trimmed };
-    }
+    // ❌ KHÔNG còn UUID CHECK nữa
 
-    return { type: "friend" as const, qrToken: trimmed };
+    // 🟢 2. Còn lại coi là FRIEND
+    return {
+        type: "friend" as const,
+        qrToken: trimmed,
+    };
 }
 
 export default function QRScanner() {
@@ -215,25 +218,61 @@ export default function QRScanner() {
                     onBarcodeScanned={
                         scanned
                             ? undefined
-                            : ({ data }: { data: string }) => {
+                            : async ({ data }: { data: string }) => {
                                   setScanned(true);
                                   console.log("QR Data:", data);
+
                                   const parsed = parseScannedQrData(data);
 
-                                  if (parsed.type === "login") {
+                                  // 🟢 1. LUÔN check FRIEND trước
+                                  try {
+                                      const res =
+                                          await friendApi.getUserByQrToken(
+                                              parsed.qrToken || data,
+                                          );
+                                      const userData = res?.data || res;
+
                                       router.push({
-                                          pathname: "/login/loginQr" as any,
+                                          pathname:
+                                              "/contact/friend/new" as any,
                                           params: {
-                                              challengeId: parsed.challengeId,
+                                              id: userData?.id,
+                                              name:
+                                                  userData?.userName ||
+                                                  userData?.username ||
+                                                  userData?.name,
+                                              avatar:
+                                                  userData?.avatarUrl ||
+                                                  userData?.avatar,
+                                              cover:
+                                                  userData?.backgroundUrl ||
+                                                  userData?.background,
+                                              qrToken: parsed.qrToken || data,
                                           },
                                       });
                                       return;
+                                  } catch (err) {
+                                      // ❌ không phải friend
                                   }
 
-                                  router.push({
-                                      pathname: "/contact/friend/new" as any,
-                                      params: { qrToken: data },
-                                  });
+                                  // 🔵 2. CHỈ login khi chắc chắn là challengeId hợp lệ
+                                  if (parsed.type === "login") {
+                                      try {
+                                          await authenticationApi.qrApprove(
+                                              parsed.challengeId,
+                                          );
+                                          alert("Đăng nhập web thành công");
+                                          router.back();
+                                      } catch (err) {
+                                          alert("QR login không hợp lệ");
+                                          setScanned(false);
+                                      }
+                                      return;
+                                  }
+
+                                  // 🔴 3. Không phải gì cả
+                                  alert("QR không hợp lệ");
+                                  setScanned(false);
                               }
                     }
                 />

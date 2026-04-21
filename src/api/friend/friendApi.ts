@@ -1,8 +1,39 @@
 import apiClient from "../apiClient";
 import { UserProfileResponse } from "./types";
 
+const normalizeBlockedUsers = (data: unknown): any[] => {
+    if (Array.isArray(data)) {
+        return data;
+    }
+
+    if (data && typeof data === "object") {
+        const value = data as any;
+
+        if (Array.isArray(value.data)) return value.data;
+        if (Array.isArray(value.blocks)) return value.blocks;
+        if (Array.isArray(value.data?.blocks)) return value.data.blocks;
+    }
+
+    return [];
+};
+
+export const extractBlockedUserId = (item: any): string => {
+    const candidate =
+        item?.targetId ||
+        item?.blockedUserId ||
+        item?.blockedId ||
+        item?.userId ||
+        item?.friendId ||
+        item?.blockedUser?.id ||
+        item?.user?.id ||
+        item?.friend?.id ||
+        item?.id ||
+        (typeof item === "string" ? item : "");
+
+    return candidate ? String(candidate) : "";
+};
+
 export const friendApi = {
-    // 1. Tìm kiếm bằng số điện thoại
     searchByPhone: async (
         phone: string,
     ): Promise<{ data: UserProfileResponse } | UserProfileResponse> => {
@@ -12,12 +43,10 @@ export const friendApi = {
         return response.data;
     },
 
-    // 2. Gửi lời mời kết bạn
     sendFriendRequest: async (
         targetId: string,
-        reason: string = "Kết bạn nhé!",
+        reason: string = "Ket ban nhe!",
     ) => {
-        // Truyền object body chứa trường reason theo đúng Swagger
         const response = await apiClient.post(
             `/api/v1/users/${targetId}/request`,
             { reason },
@@ -25,23 +54,21 @@ export const friendApi = {
         return response.data;
     },
 
-    // 3. Thu hồi (Hủy) lời mời kết bạn
     cancelFriendRequest: async (targetId: string) => {
         const response = await apiClient.delete(
             `/api/v1/users/${targetId}/request`,
         );
         return response.data;
     },
-    // Lấy danh sách bạn bè đã kết bạn (Thêm timestamp để chống cache)
+
     getFriends: async () => {
-        const timestamp = new Date().getTime(); // Lấy thời gian hiện tại
+        const timestamp = new Date().getTime();
         const response = await apiClient.get(
             `/api/v1/me/friends?t=${timestamp}`,
         );
         return response.data;
     },
 
-    // Nên áp dụng luôn cho danh sách chờ để chống cache
     getPendingRequests: async () => {
         const timestamp = new Date().getTime();
         const response = await apiClient.get(
@@ -50,7 +77,6 @@ export const friendApi = {
         return response.data;
     },
 
-    // Đồng ý kết bạn
     acceptRequest: async (targetId: string) => {
         const response = await apiClient.post(
             `/api/v1/users/${targetId}/accept`,
@@ -58,13 +84,13 @@ export const friendApi = {
         return response.data;
     },
 
-    // Từ chối kết bạn
     rejectRequest: async (targetId: string) => {
         const response = await apiClient.post(
             `/api/v1/users/${targetId}/reject`,
         );
         return response.data;
     },
+
     checkStatus: async (targetId: string) => {
         const timestamp = new Date().getTime();
         const response = await apiClient.get(
@@ -78,7 +104,6 @@ export const friendApi = {
         return response.data;
     },
 
-    // THÊM MỚI: API lấy thông tin user từ qrToken
     getUserByQrToken: async (qrToken: string) => {
         const response = await apiClient.get(
             `/api/v1/users/qr/${qrToken}/info`,
@@ -93,19 +118,28 @@ export const friendApi = {
         return response.data;
     },
 
-    // 1. Lấy danh sách lời mời kết bạn ĐÃ GỬI (Mục mới từ Swagger)
     getSentRequests: async () => {
         const response = await apiClient.get(`/api/v1/me/friend-requests/sent`);
         return response.data;
     },
 
-    // 2. Lấy danh sách người dùng đã chặn
     getBlockedUsers: async () => {
-        const response = await apiClient.get(`/api/v1/me/blocks`);
-        return response.data;
+        const timestamp = new Date().getTime();
+        const response = await apiClient.get(
+            `/api/v1/me/blocks?t=${timestamp}`,
+        );
+        return normalizeBlockedUsers(response.data);
     },
 
-    // 3. Chặn người dùng
+    isUserBlocked: async (targetId: string) => {
+        if (!targetId?.trim()) return false;
+
+        const blockedUsers = await friendApi.getBlockedUsers();
+        return blockedUsers.some(
+            (item: any) => extractBlockedUserId(item) === String(targetId),
+        );
+    },
+
     blockUser: async (targetId: string) => {
         const response = await apiClient.post(
             `/api/v1/users/${targetId}/block`,
@@ -113,10 +147,26 @@ export const friendApi = {
         return response.data;
     },
 
-    // 4. Bỏ chặn người dùng
     unblockUser: async (targetId: string) => {
         const response = await apiClient.delete(
             `/api/v1/users/${targetId}/unblock`,
+        );
+        return response.data;
+    },
+
+    updateConversationRemark: async (
+        conversationId: string,
+        remarkName: string,
+        requesterId: string,
+    ) => {
+        const payload = {
+            requesterId: requesterId,
+            remarkName: remarkName,
+        };
+
+        const response = await apiClient.put(
+            `/api/v1/conversations/${conversationId}/remark`,
+            payload,
         );
         return response.data;
     },

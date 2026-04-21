@@ -296,10 +296,19 @@ export const chatApi = {
         };
     },
 
-    updateRemark: async (conversationId: string, remarkName: string) => {
+    updateConversationRemark: async (
+        conversationId: string,
+        remarkName: string,
+    ) => {
+        const requesterId = decodeJwtSub(await getAccessToken());
+        if (!requesterId?.trim()) {
+            throw new Error(
+                "Không xác định được requesterId. Vui lòng đăng nhập lại.",
+            );
+        }
         return request(`/api/v1/conversations/${conversationId}/remark`, {
             method: "PUT",
-            data: { remarkName },
+            data: { requesterId, remarkName },
         });
     },
 

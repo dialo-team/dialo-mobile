@@ -80,6 +80,35 @@ export const authenticationApi = {
         return response.data;
     },
 
+    qrRequest: async () => {
+        const response = await apiClient.post(
+            "/api/v1/auth/qr/challenges/request",
+        );
+        return response.data;
+    },
+
+    qrApprove: async (challengeId: string, accessToken?: string) => {
+        const response = await apiClient.post(
+            `/api/v1/auth/qr/challenges/${challengeId}/approve`,
+            {},
+            {
+                ...(accessToken && {
+                    headers: {
+                        Authorization: `Bearer ${accessToken}`,
+                    },
+                }),
+            },
+        );
+        return response.data;
+    },
+
+    qrExchange: async (challengeId: string) => {
+        const response = await apiClient.post(
+            `/api/v1/auth/qr/challenges/${challengeId}/exchange`,
+        );
+        return response.data;
+    },
+
     // 1. Đăng xuất thông thường (Body chứa refreshToken và sessId)
     signout: async (
         data: SignoutPayload | { refreshToken: string; sessId: string },
