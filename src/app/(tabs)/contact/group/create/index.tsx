@@ -118,43 +118,36 @@ export default function CreateGroup() {
                     if (isGroup) return null;
                     if (!conversation?.counterpartId) return null;
 
-                    console.log("[DEBUG CreateGroup] Raw conversation data:", {
-                        conversationId: conversation?.conversationId,
-                        counterpartId: conversation?.counterpartId,
-                        isGroupByPattern:
-                            conversation?.counterpartId ===
-                            conversation?.conversationId,
-                        counterpartName: conversation?.counterpartName,
-                        counterpartUserName: conversation?.counterpartUserName,
-                        displayName: conversation?.displayName,
-                        userName: conversation?.userName,
-                        name: conversation?.name,
-                        fullName: conversation?.fullName,
-                        remarkName: conversation?.remarkName,
-                        counterpartAvatarUrl: conversation?.counterpartAvatarUrl
-                            ? "✓"
-                            : "✗",
-                    });
-
                     const baseName = pickBestDisplayName(
                         [
                             conversation?.remarkName,
+
+                            // direct
                             conversation?.counterpartName,
                             conversation?.counterpartUserName,
+
+                            // counterpart object
+                            conversation?.counterpart?.displayName,
+                            conversation?.counterpart?.fullName,
+                            conversation?.counterpart?.name,
+                            conversation?.counterpart?.userName,
+                            conversation?.counterpart?.username,
+
+                            // user object fallback
+                            conversation?.user?.displayName,
+                            conversation?.user?.fullName,
+                            conversation?.user?.name,
+                            conversation?.user?.userName,
+                            conversation?.user?.username,
+
+                            // root fallback
                             conversation?.displayName,
-                            conversation?.userName,
-                            conversation?.name,
                             conversation?.fullName,
+                            conversation?.name,
+                            conversation?.userName,
+                            conversation?.username,
                         ],
                         "Người dùng",
-                    );
-
-                    console.log(
-                        "[DEBUG CreateGroup] pickBestDisplayName result:",
-                        {
-                            baseName,
-                            isDefaultFallback: baseName === "Người dùng",
-                        },
                     );
 
                     const baseAvatar =
@@ -168,7 +161,11 @@ export default function CreateGroup() {
                         conversation?.avatar ||
                         "";
 
-                    if (baseName !== "Người dùng" && baseAvatar) {
+                    const isDefaultName =
+                        !baseName ||
+                        baseName.trim().toLowerCase() === "nguoi dung";
+
+                    if (!isDefaultName && baseAvatar) {
                         console.log(
                             "[DEBUG CreateGroup] Using baseName from conversation:",
                             {
@@ -225,9 +222,10 @@ export default function CreateGroup() {
                         return {
                             counterpartId: String(conversation.counterpartId),
                             counterpartName:
-                                baseName !== "Người dùng"
+                                baseName &&
+                                baseName.trim().toLowerCase() !== "nguoi dung"
                                     ? baseName
-                                    : display.name,
+                                    : display.name || baseName || "User",
                             counterpartAvatarUrl: baseAvatar || display.avatar,
                             lastMessageAt: conversation.lastMessageAt,
                         };

@@ -1,26 +1,33 @@
 import { useLocalSearchParams, useRouter } from "expo-router";
 import {
     ChevronLeft,
+    MessageCircle,
     MoreVertical,
     Search,
     UserPlus,
+    X,
 } from "lucide-react-native";
 import React, { useCallback, useEffect, useState } from "react";
 import {
     ActivityIndicator,
     Alert,
     Image,
+    Modal,
     ScrollView,
     Text,
     TouchableOpacity,
+    TouchableWithoutFeedback,
     View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 // Import API và Types
-import { chatAuthUtils } from "@/src/api/chat/chatApi";
+import { chatApi, chatAuthUtils } from "@/src/api/chat/chatApi";
+import { friendApi } from "@/src/api/friend/friendApi";
 import { groupApi } from "@/src/api/group/groupApi";
 import { GroupMember } from "@/src/api/group/types";
+import { userApi } from "@/src/api/user/userApi";
+import { pickBestDisplayName } from "@/src/utils/displayUser";
 
 // Các tab hiển thị
 type TabType = "ALL" | "ADMINS" | "BLOCKED";
@@ -32,6 +39,68 @@ const resolveFileUrl = (fileUrl?: string | null) => {
     return `${CHAT_BASE_URL}${fileUrl.startsWith("/") ? "" : "/"}${fileUrl}`;
 };
 
+// ===== HELPER FUNCTIONS (từ GroupChatScreen) =====
+const extractValidId = (item: any) => {
+    if (!item) return "";
+    if (typeof item === "string") return item.trim();
+    return String(
+        item?.userId ||
+            item?.id ||
+            item?.targetId ||
+            item?.senderId ||
+            item?.user?.id ||
+            "",
+    ).trim();
+};
+
+const extractNameCandidates = (item: any) => {
+    if (!item) return [];
+    return [
+        item?.remarkName,
+        item?.displayName,
+        item?.fullName,
+        item?.userName,
+        item?.name,
+        item?.user?.displayName,
+        item?.user?.fullName,
+        item?.user?.name,
+        item?.friend?.displayName,
+    ];
+};
+
+const extractAvatar = (profile: any) => {
+    if (!profile) return null;
+    return (
+        profile?.avatarUrl ||
+        profile?.avatar ||
+        profile?.profilePictureUrl ||
+        profile?.profilePicture ||
+        profile?.photoUrl ||
+        profile?.imageUrl ||
+        profile?.user?.avatarUrl ||
+        profile?.user?.profilePictureUrl ||
+        null
+    );
+};
+
+const normalizeMembers = (data: any): any[] => {
+    if (!data) return [];
+    if (Array.isArray(data)) return data;
+    if (Array.isArray(data.data)) return data.data;
+    if (Array.isArray(data.members)) return data.members;
+    if (Array.isArray(data.participants)) return data.participants;
+    if (data.data && Array.isArray(data.data.members)) return data.data.members;
+    if (data.data && Array.isArray(data.data.participants))
+        return data.data.participants;
+    return [];
+};
+
+// ===== ENRICHED MEMBER TYPE =====
+type EnrichedMember = GroupMember & {
+    enrichedDisplayName?: string;
+    enrichedAvatarUrl?: string | null;
+};
+
 export default function GroupMembersPage() {
     const router = useRouter();
     const { conversationId } = useLocalSearchParams<{
@@ -39,10 +108,27 @@ export default function GroupMembersPage() {
     }>();
 
     const [currentUserId, setCurrentUserId] = useState<string>("");
-    const [members, setMembers] = useState<GroupMember[]>([]);
+    const [members, setMembers] = useState<EnrichedMember[]>([]);
+    const [enrichedProfiles, setEnrichedProfiles] = useState<
+        Record<string, any>
+    >({});
     const [loading, setLoading] = useState<boolean>(true);
     const [activeTab, setActiveTab] = useState<TabType>("ALL");
     const [actionLoadingMemberId, setActionLoadingMemberId] = useState("");
+    const [selectedMember, setSelectedMember] = useState<EnrichedMember | null>(
+        null,
+    );
+    const [isModalVisible, setIsModalVisible] = useState(false);
+
+    const openMemberModal = (member: EnrichedMember) => {
+        setSelectedMember(member);
+        setIsModalVisible(true);
+    };
+
+    const closeMemberModal = () => {
+        setIsModalVisible(false);
+        setSelectedMember(null);
+    };
 
     // Lấy current user ID
     useEffect(() => {
@@ -56,23 +142,162 @@ export default function GroupMembersPage() {
         })();
     }, []);
 
-    // Load danh sách members
+    const handleRemoveMember = async () => {
+        if (!selectedMember || !conversationId) return;
+
+        Alert.alert(
+            "Xác nhận",
+            `Bạn có chắc chắn muốn xóa ${selectedMember.enrichedDisplayName} khỏi nhóm?`,
+            [
+                { text: "Hủy", style: "cancel" },
+                {
+                    text: "Xóa",
+                    style: "destructive",
+                    onPress: async () => {
+                        try {
+                            setLoading(true);
+                            await groupApi.removeMember(
+                                conversationId,
+                                selectedMember.userId,
+                            );
+                            closeMemberModal();
+                            await loadMembers();
+                        } catch (error) {
+                            Alert.alert("Lỗi", "Không thể xóa thành viên");
+                        } finally {
+                            setLoading(false);
+                        }
+                    },
+                },
+            ],
+        );
+    };
+
+    // Load danh sách members + bổ sung dữ liệu
     const loadMembers = useCallback(async () => {
         if (!conversationId || !currentUserId) return;
 
         try {
             setLoading(true);
-            const response = await groupApi.getGroupMembers(
-                conversationId,
-                currentUserId,
-            );
 
-            // Xử lý normalize data nếu API trả về lồng trong data (đề phòng)
-            let membersData = Array.isArray(response)
-                ? response
-                : (response as any)?.data || [];
+            // === BƯỚC 1 ===
+            const [membersRes, detailRes] = await Promise.all([
+                groupApi.getGroupMembers(conversationId, currentUserId),
+                chatApi.getConversationDetail(conversationId).catch(() => ({})),
+            ]);
 
-            setMembers(membersData);
+            // === BƯỚC 2 ===
+            const nextEnrichedProfiles: Record<string, any> = {};
+
+            const membersData = [
+                ...normalizeMembers(membersRes),
+                ...normalizeMembers(detailRes?.data?.participants),
+                ...normalizeMembers(detailRes?.data?.members),
+            ];
+
+            membersData.forEach((member: any) => {
+                const mId = extractValidId(member);
+                if (mId && mId !== "null" && mId !== "undefined") {
+                    nextEnrichedProfiles[mId] = {
+                        displayName: pickBestDisplayName(
+                            extractNameCandidates(member),
+                            "",
+                        ),
+                        avatarUrl: extractAvatar(member)
+                            ? resolveFileUrl(extractAvatar(member))
+                            : null,
+                    };
+                }
+            });
+
+            // === BƯỚC 3 ===
+            const missingUserIds = new Set<string>();
+            const existingMembers = normalizeMembers(membersRes);
+
+            existingMembers.forEach((member: any) => {
+                const mId = extractValidId(member);
+
+                if (mId && mId !== "null" && mId !== currentUserId) {
+                    // ✅ FIX: chỉ fetch khi thiếu hoàn toàn
+                    if (
+                        !nextEnrichedProfiles[mId]?.displayName &&
+                        !nextEnrichedProfiles[mId]?.avatarUrl
+                    ) {
+                        missingUserIds.add(mId);
+                    }
+                }
+            });
+
+            // === BƯỚC 4: FETCH BỔ SUNG ===
+            for (const userId of Array.from(missingUserIds)) {
+                try {
+                    const userRes = await friendApi.getUserById(userId); // ✅ đúng API
+                    const userData = userRes?.data || userRes;
+
+                    if (userData) {
+                        nextEnrichedProfiles[userId] = {
+                            displayName:
+                                nextEnrichedProfiles[userId]?.displayName ||
+                                pickBestDisplayName(
+                                    extractNameCandidates(userData),
+                                    "",
+                                ),
+
+                            avatarUrl:
+                                nextEnrichedProfiles[userId]?.avatarUrl ||
+                                (extractAvatar(userData)
+                                    ? resolveFileUrl(extractAvatar(userData))
+                                    : null),
+                        };
+                    }
+                } catch (e) {
+                    console.log(`[GroupMembers] skip user ${userId}`);
+                }
+            }
+
+            // === BƯỚC 5: OVERRIDE CURRENT USER ===
+            try {
+                const myProfile = await userApi.getProfile();
+
+                if (myProfile) {
+                    nextEnrichedProfiles[currentUserId] = {
+                        displayName: pickBestDisplayName(
+                            extractNameCandidates(myProfile),
+                            "Bạn",
+                        ),
+                        avatarUrl: extractAvatar(myProfile)
+                            ? resolveFileUrl(extractAvatar(myProfile))
+                            : null,
+                    };
+                }
+            } catch {
+                console.log("Không lấy được profile của mình");
+            }
+
+            // === SET STATE ===
+            setEnrichedProfiles(nextEnrichedProfiles);
+
+            // === BƯỚC 6: MAP ===
+            const enrichedMembers = existingMembers.map((member: any) => {
+                const mId = extractValidId(member);
+                const profile = nextEnrichedProfiles[mId];
+
+                return {
+                    ...member,
+                    enrichedDisplayName:
+                        profile?.displayName ||
+                        member.displayName ||
+                        "Thành viên",
+
+                    enrichedAvatarUrl:
+                        profile?.avatarUrl ||
+                        (member.avatarUrl
+                            ? resolveFileUrl(member.avatarUrl)
+                            : null),
+                };
+            });
+
+            setMembers(enrichedMembers);
         } catch (error) {
             console.error("[GroupMembers] Load members error:", error);
         } finally {
@@ -117,7 +342,7 @@ export default function GroupMembersPage() {
         });
     };
 
-    const handleMemberOptions = (member: GroupMember) => {
+    const handleMemberOptions = (member: EnrichedMember) => {
         if (!canManageMembers || member.userId === currentUserId) {
             return;
         }
@@ -216,7 +441,7 @@ export default function GroupMembersPage() {
         buttons.push({ text: "Huỷ", style: "cancel" });
 
         Alert.alert(
-            `Tùy chọn cho ${member.displayName}`,
+            `Tùy chọn cho ${member.enrichedDisplayName}`,
             "Chọn thao tác",
             buttons as any,
         );
@@ -295,12 +520,17 @@ export default function GroupMembersPage() {
                 <ScrollView showsVerticalScrollIndicator={false}>
                     {filteredMembers.map((member) => {
                         const isMe = member.userId === currentUserId;
-                        const avatarUri = resolveFileUrl(member.avatarUrl);
+                        const displayName =
+                            member.enrichedDisplayName ||
+                            member.displayName ||
+                            "Thành viên";
+                        const avatarUri = member.enrichedAvatarUrl || "";
 
                         return (
-                            <View
+                            <TouchableOpacity
                                 key={member.userId}
-                                className="flex-row items-center px-4 py-3"
+                                className="flex-row items-center px-4 py-3 active:bg-gray-50"
+                                onPress={() => openMemberModal(member)} // Thay đổi ở đây
                             >
                                 {/* Avatar & Role Icon Badge */}
                                 <View className="relative mr-3">
@@ -312,7 +542,7 @@ export default function GroupMembersPage() {
                                     ) : (
                                         <View className="w-12 h-12 rounded-full bg-blue-400 items-center justify-center">
                                             <Text className="text-white text-lg font-bold">
-                                                {member.displayName
+                                                {displayName
                                                     .charAt(0)
                                                     .toUpperCase()}
                                             </Text>
@@ -333,7 +563,7 @@ export default function GroupMembersPage() {
                                 {/* Name & Role */}
                                 <View className="flex-1 justify-center">
                                     <Text className="text-[16px] text-black mb-0.5">
-                                        {member.displayName}
+                                        {displayName}
                                     </Text>
                                     <Text className="text-[13px] text-gray-500">
                                         {renderRoleLabel(member.role, isMe)}
@@ -371,12 +601,98 @@ export default function GroupMembersPage() {
                                         )}
                                     </TouchableOpacity>
                                 )}
-                            </View>
+                            </TouchableOpacity>
                         );
                     })}
                     <View className="h-10" />
                 </ScrollView>
             )}
+
+            <Modal
+                visible={isModalVisible}
+                transparent
+                animationType="slide"
+                onRequestClose={() => setIsModalVisible(false)}
+            >
+                <TouchableWithoutFeedback
+                    onPress={() => setIsModalVisible(false)}
+                >
+                    <View className="flex-1 bg-black/50 justify-end">
+                        <TouchableWithoutFeedback>
+                            <View className="bg-white rounded-t-3xl pb-10">
+                                <View className="flex-row items-center justify-between px-4 py-4 border-b border-gray-100">
+                                    <View className="w-10" />
+                                    <Text className="text-lg font-bold">
+                                        Thông tin thành viên
+                                    </Text>
+                                    <TouchableOpacity
+                                        onPress={() => setIsModalVisible(false)}
+                                    >
+                                        <X color="black" size={24} />
+                                    </TouchableOpacity>
+                                </View>
+
+                                <View className="flex-row items-center px-5 py-6">
+                                    {selectedMember?.enrichedAvatarUrl ? (
+                                        <Image
+                                            source={{
+                                                uri: selectedMember.enrichedAvatarUrl,
+                                            }}
+                                            className="w-16 h-16 rounded-full"
+                                        />
+                                    ) : (
+                                        <View className="w-16 h-16 rounded-full bg-blue-400 items-center justify-center">
+                                            <Text className="text-white text-2xl font-bold">
+                                                {selectedMember?.enrichedDisplayName?.charAt(
+                                                    0,
+                                                )}
+                                            </Text>
+                                        </View>
+                                    )}
+                                    <Text className="ml-4 text-xl font-semibold flex-1">
+                                        {selectedMember?.enrichedDisplayName}
+                                    </Text>
+                                    <TouchableOpacity className="p-2 bg-gray-100 rounded-full">
+                                        <MessageCircle
+                                            color="black"
+                                            size={24}
+                                        />
+                                    </TouchableOpacity>
+                                </View>
+
+                                <TouchableOpacity className="px-5 py-4 border-b border-gray-50">
+                                    <Text className="text-[16px]">
+                                        Xem trang cá nhân
+                                    </Text>
+                                </TouchableOpacity>
+                                <TouchableOpacity className="px-5 py-4 border-b border-gray-50">
+                                    <Text className="text-[16px]">
+                                        Chặn thành viên
+                                    </Text>
+                                </TouchableOpacity>
+
+                                {canManageMembers &&
+                                    selectedMember?.userId !==
+                                        currentUserId && (
+                                        <TouchableOpacity
+                                            className="px-5 py-4"
+                                            onPress={() =>
+                                                selectedMember &&
+                                                handleRemoveMember(
+                                                    selectedMember,
+                                                )
+                                            }
+                                        >
+                                            <Text className="text-[16px] text-red-500">
+                                                Xóa khỏi nhóm
+                                            </Text>
+                                        </TouchableOpacity>
+                                    )}
+                            </View>
+                        </TouchableWithoutFeedback>
+                    </View>
+                </TouchableWithoutFeedback>
+            </Modal>
         </SafeAreaView>
     );
 }

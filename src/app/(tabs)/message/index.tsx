@@ -41,6 +41,7 @@ type Conversation = {
     lastMessageAt?: string;
     lastMessageType?: string;
     unreadCount?: number;
+    dissolved?: boolean;
 };
 
 export default function MessagesScreen() {
@@ -55,6 +56,11 @@ export default function MessagesScreen() {
     const listEntrance = useRef(new Animated.Value(0)).current;
 
     const loadConversations = useCallback(async () => {
+        const data = await chatApi.getConversations();
+        const list = Array.isArray(data) ? data : [];
+
+        // LỌC: Chỉ giữ lại những cuộc trò chuyện KHÔNG bị giải tán
+        const activeList = list.filter((conv: any) => conv.dissolved !== true);
         if (!currentUserId) {
             setConversations([]);
             setError("Bạn chưa đăng nhập hoặc phiên đã hết hạn.");
@@ -65,8 +71,25 @@ export default function MessagesScreen() {
         setError("");
         try {
             console.log("[MessagesScreen] Loading conversations...");
-            const data = await chatApi.getConversations();
-            const list = Array.isArray(data) ? data : [];
+            const response = await chatApi.getConversations();
+            // 1. Lấy mảng dữ liệu gốc
+            const rawList = Array.isArray(response)
+                ? response
+                : (response as any)?.data || [];
+
+            // 2. LỌC BỎ các nhóm đã giải tán
+            // Chúng ta lọc dựa trên cờ dissolved hoặc nội dung tin nhắn hệ thống cuối cùng
+            const activeList = rawList.filter((conv: any) => {
+                // Cách 1: Dựa vào thuộc tính dissolved (Khuyên dùng)
+                const isDissolved = conv.dissolved === true;
+
+                // Cách 2: Backup nếu Backend chưa trả cờ dissolved trong list (Dựa vào log bạn gửi)
+                const isDissolveSystemMessage =
+                    conv.lastMessageSystem === true &&
+                    conv.lastMessage === "Nhóm đã được giải tán";
+
+                return !isDissolved && !isDissolveSystemMessage;
+            });
 
             const extractProfileDisplayInfo = (profile: any) => ({
                 name: pickBestDisplayName(
@@ -92,7 +115,7 @@ export default function MessagesScreen() {
             });
 
             const enriched = await Promise.all(
-                list.map(async (conversation: any) => {
+                activeList.map(async (conversation: any) => {
                     const baseName = pickBestDisplayName(
                         [
                             conversation.counterpartName,
@@ -293,11 +316,15 @@ export default function MessagesScreen() {
 
     const filteredConversations = useMemo(
         () =>
-            conversations.filter((conversation) =>
-                getConversationDisplayName(conversation)
+            conversations.filter((conversation) => {
+                // Kiểm tra giải tán
+                if (conversation.dissolved === true) return false;
+
+                // Kiểm tra tìm kiếm
+                return getConversationDisplayName(conversation)
                     .toLowerCase()
-                    .includes(searchText.toLowerCase().trim()),
-            ),
+                    .includes(searchText.toLowerCase().trim());
+            }),
         [conversations, searchText],
     );
 

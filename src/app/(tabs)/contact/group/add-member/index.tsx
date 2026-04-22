@@ -143,12 +143,30 @@ export default function AddMemberToGroup() {
                     const baseName = pickBestDisplayName(
                         [
                             conversation?.remarkName,
+
+                            // direct
                             conversation?.counterpartName,
                             conversation?.counterpartUserName,
+
+                            // counterpart object
+                            conversation?.counterpart?.displayName,
+                            conversation?.counterpart?.fullName,
+                            conversation?.counterpart?.name,
+                            conversation?.counterpart?.userName,
+                            conversation?.counterpart?.username,
+
+                            // user object fallback
+                            conversation?.user?.displayName,
+                            conversation?.user?.fullName,
+                            conversation?.user?.name,
+                            conversation?.user?.userName,
+                            conversation?.user?.username,
+
+                            // root fallback
                             conversation?.displayName,
-                            conversation?.userName,
-                            conversation?.name,
                             conversation?.fullName,
+                            conversation?.name,
+                            conversation?.userName,
                         ],
                         "Người dùng",
                     );
@@ -179,11 +197,12 @@ export default function AddMemberToGroup() {
                         );
                         const profile = userRes?.data || userRes;
                         const display = buildProfileDisplay(profile);
+                        const isDefaultName = baseName === "Người dùng";
 
                         return {
                             counterpartId: String(conversation.counterpartId),
                             counterpartName:
-                                baseName !== "Người dùng"
+                                !isDefaultName && baseName !== display.name
                                     ? baseName
                                     : display.name,
                             counterpartAvatarUrl: baseAvatar || display.avatar,
@@ -280,6 +299,7 @@ export default function AddMemberToGroup() {
 
     // Gọi API thêm thành viên
     const handleAddMembers = async () => {
+        // 1. Kiểm tra trạng thái cơ bản
         if (selectedUsers.length === 0) {
             Alert.alert("Thông báo", "Vui lòng chọn ít nhất 1 thành viên.");
             return;
@@ -289,33 +309,67 @@ export default function AddMemberToGroup() {
 
         setIsAdding(true);
 
-        // 1. Phải tính toán memberIds trước
-        const memberIds = selectedUsers.map((user) => user.counterpartId);
-
-        // 2. Đặt console.log ở ĐÂY (sau khi đã có memberIds)
-        console.log("=== THÔNG TIN GỬI LÊN BE ===");
-        console.log("conversationId:", conversationId);
-        console.log("currentUserId (X-User-Id):", currentUserId);
-        console.log("memberIds:", memberIds);
-        console.log("============================");
-
         try {
-            // 3. Tiến hành gọi API
+            // 2. Lấy lại danh sách thành viên hiện tại ngay trước khi Add
+            // Mục đích: Tránh việc gửi ID người đã có trong nhóm khiến Backend crash (Lỗi 500)
+            const groupMembersRes = await groupApi.getGroupMembers(
+                conversationId,
+                currentUserId,
+            );
+
+            // Xử lý linh hoạt format trả về của API
+            const existingMembers = Array.isArray(groupMembersRes)
+                ? groupMembersRes
+                : (groupMembersRes as any)?.data || [];
+
+            const existingMemberIds = new Set(
+                existingMembers.map((m: any) => String(m.userId)),
+            );
+
+            // 3. Lọc danh sách memberIds FINAL cực kỳ sạch:
+            // - Loại bỏ ID rỗng
+            // - Loại bỏ chính mình (currentUserId)
+            // - LOẠI BỎ những người đã có trong nhóm (existingMemberIds)
+            const memberIds = selectedUsers
+                .map((user) => user.counterpartId)
+                .filter(
+                    (id) =>
+                        id &&
+                        id !== currentUserId &&
+                        !existingMemberIds.has(id),
+                );
+
+            console.log("memberIds FINAL sau khi lọc sạch:", memberIds);
+
+            // 4. Nếu sau khi lọc không còn ai mới thì không gọi API nữa
+            if (memberIds.length === 0) {
+                Alert.alert(
+                    "Thông báo",
+                    "Người dùng bạn chọn đều đã có mặt trong nhóm.",
+                );
+                setIsAdding(false);
+                return;
+            }
+
             await groupApi.addMembers(conversationId, currentUserId, memberIds);
 
             Alert.alert("Thành công", "Đã thêm thành viên vào nhóm!");
+
+            // Reset danh sách chọn và quay lại màn hình trước
+            setSelectedUsers([]);
             router.back();
         } catch (error: any) {
-            // 4. Log chi tiết data từ Backend gửi về (nếu có lỗi 500 thì sẽ lòi ra ở đây)
+            // Log chi tiết payload để đối chiếu nếu vẫn gặp lỗi 500
             console.error(
                 "[AddMember] Chi tiết lỗi:",
                 error?.response?.status,
                 JSON.stringify(error?.response?.data, null, 2),
             );
-            Alert.alert(
-                "Lỗi",
-                error?.response?.data?.message || "Không thể thêm thành viên.",
-            );
+
+            const errorMsg =
+                error?.response?.data?.message ||
+                "Không thể thêm thành viên vào nhóm.";
+            Alert.alert("Lỗi hệ thống", errorMsg);
         } finally {
             setIsAdding(false);
         }

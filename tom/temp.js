@@ -1,6 +1,6 @@
 const axios = require("axios");
 
-const BASE_URL = "http://14.225.254.174:9000";
+const BASE_URL = "http://14.225.254.174:8085";
 
 const USERS = {
     USER_1: {

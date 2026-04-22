@@ -1,14 +1,11 @@
 import { chatApi, chatAuthUtils } from "@/src/api/chat/chatApi";
+import { friendApi } from "@/src/api/friend/friendApi";
 import { groupApi } from "@/src/api/group/groupApi";
-import {
-    ConversationDetail,
-    GroupMember,
-    Message,
-} from "@/src/api/group/types";
+import { Message } from "@/src/api/group/types";
 import ChatInputBar from "@/src/components/ChatInputBar";
 import { useChatAttachments } from "@/src/hooks/useChatAttchment";
 import { useChatRealtime } from "@/src/hooks/useChatRealtime";
-import { getInitials } from "@/src/utils/displayUser";
+import { getInitials, pickBestDisplayName } from "@/src/utils/displayUser";
 import { Video as AVVideo, ResizeMode } from "expo-av";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import {
@@ -74,20 +71,67 @@ const dedupeMessages = (items: UiMessage[]) => {
     });
 };
 
-const normalizeMembers = (data: any): GroupMember[] => {
-    if (Array.isArray(data)) {
-        return data as GroupMember[];
-    }
-    if (data?.data && Array.isArray(data.data)) {
-        return data.data as GroupMember[];
-    }
-    if (data?.members && Array.isArray(data.members)) {
-        return data.members as GroupMember[];
-    }
-    return [];
+// 1. Thêm các helpers bóc tách dữ liệu Siêu Cấp
+type UserProfileDict = Record<
+    string,
+    { displayName: string; avatarUrl: string | null }
+>;
+
+const extractValidId = (item: any) => {
+    if (!item) return "";
+    if (typeof item === "string") return item.trim();
+    return String(
+        item?.userId ||
+            item?.id ||
+            item?.targetId ||
+            item?.senderId ||
+            item?.user?.id ||
+            "",
+    ).trim();
 };
 
-// ĐÃ XÓA hàm buildMemberProfile dư thừa, xử lý trực tiếp GroupMember ở dưới
+const extractNameCandidates = (item: any) => {
+    if (!item) return [];
+    return [
+        item?.remarkName,
+        item?.displayName,
+        item?.fullName,
+        item?.userName,
+        item?.name,
+        item?.user?.displayName,
+        item?.user?.fullName,
+        item?.user?.name,
+        item?.friend?.displayName,
+    ];
+};
+
+const extractAvatar = (profile: any) => {
+    if (!profile) return null;
+    return (
+        profile?.avatarUrl ||
+        profile?.avatar ||
+        profile?.profilePictureUrl ||
+        profile?.profilePicture ||
+        profile?.photoUrl ||
+        profile?.imageUrl ||
+        profile?.user?.avatarUrl ||
+        profile?.user?.profilePictureUrl ||
+        null
+    );
+};
+
+// Vét cạn mọi mảng chứa thông tin User từ BE
+const normalizeMembers = (data: any): any[] => {
+    if (!data) return [];
+    if (Array.isArray(data)) return data;
+    if (Array.isArray(data.data)) return data.data;
+    if (Array.isArray(data.members)) return data.members;
+    if (Array.isArray(data.participants)) return data.participants;
+    if (data.data && Array.isArray(data.data.members)) return data.data.members;
+    if (data.data && Array.isArray(data.data.participants))
+        return data.data.participants;
+    return [];
+};
 
 export default function GroupChatScreen() {
     const router = useRouter();
@@ -107,12 +151,10 @@ export default function GroupChatScreen() {
     const [groupName, setGroupName] = useState(initialName);
     const [groupAvatar, setGroupAvatar] = useState(initialAvatar);
 
-    // Đổi Record thành GroupMember chuẩn
-    const [memberProfiles, setMemberProfiles] = useState<
-        Record<string, GroupMember>
-    >({});
+    const [memberProfiles, setMemberProfiles] = useState<Record<string, any>>(
+        {},
+    );
 
-    const [isFocused, setIsFocused] = useState(false);
     const [showEmojiMenu, setShowEmojiMenu] = useState(false);
     const [selectedMessage, setSelectedMessage] = useState<UiMessage | null>(
         null,
@@ -122,18 +164,19 @@ export default function GroupChatScreen() {
     const [showHeader, setShowHeader] = useState(true);
 
     const scrollViewRef = useRef<ScrollView>(null);
+    const [isDissolved, setIsDissolved] = useState(false);
 
     const mapApiMessageToUi = useCallback(
         (
-            item: Message,
+            item: Message | any,
             cId: string,
-            profiles: Record<string, GroupMember>, // Nhận thẳng GroupMember
+            profiles: Record<string, any>,
         ): UiMessage => {
-            const sId = String(item?.senderId || "").trim();
-            const isMe = sId === String(cId).trim();
+            const sId = extractValidId({ senderId: item?.senderId });
+            const isMe =
+                sId !== "" && sId !== "null" && sId === String(cId).trim();
             const fileUrl = item?.attachment?.fileUrl;
 
-            // Lấy profile từ map nếu có senderId
             const profile = sId ? profiles[sId] : null;
 
             return {
@@ -151,12 +194,19 @@ export default function GroupChatScreen() {
                 videoUri:
                     item?.type === "VIDEO" ? resolveFileUrl(fileUrl) : null,
                 senderId: sId,
-                senderName: isMe
-                    ? "Bạn"
-                    : profile?.displayName || item?.senderName || "Thành viên", // Dùng displayName của GroupMember
+                // Ưu tiên: Tên từ Dictionary -> Tên từ Message gốc -> "Thành viên"
+                senderName: item?.system
+                    ? "Hệ thống"
+                    : isMe
+                      ? "Bạn"
+                      : profile?.displayName ||
+                        item?.senderName ||
+                        "Thành viên",
                 senderAvatarUrl: isMe
                     ? ""
-                    : profile?.avatarUrl || item?.senderAvatarUrl || "", // Dùng avatarUrl của GroupMember
+                    : profile?.avatarUrl ||
+                      resolveFileUrl(item?.senderAvatarUrl) ||
+                      "",
                 isUnsent:
                     item?.system === true ||
                     ["REVOKED", "SYSTEM"].includes(
@@ -175,47 +225,113 @@ export default function GroupChatScreen() {
         try {
             const [detailRes, membersRes] = await Promise.all([
                 chatApi.getConversationDetail(conversationId),
-                groupApi.getGroupMembers(conversationId, currentUserId),
+                groupApi
+                    .getGroupMembers(conversationId, currentUserId)
+                    .catch((err) => {
+                        console.log(
+                            "[GroupChat] Lỗi getGroupMembers, vẫn tiếp tục:",
+                            err?.message,
+                        );
+                        return [];
+                    }),
             ]);
 
-            const detail = (detailRes?.data || detailRes) as ConversationDetail;
+            const detail = (detailRes?.data || detailRes) as any;
 
-            // === STEP 1: Process members ===
-            const membersData = normalizeMembers(membersRes);
-            const nextMemberProfiles: Record<string, GroupMember> = {}; // Dùng type GroupMember
+            setIsDissolved(detail?.dissolved === true);
 
-            // Gán thẳng thông tin API vào Dictionary và format link ảnh
-            membersData.forEach((member: GroupMember) => {
-                if (member.userId) {
-                    nextMemberProfiles[member.userId] = {
-                        ...member,
-                        avatarUrl: member.avatarUrl
-                            ? resolveFileUrl(member.avatarUrl)
+            const nextMemberProfiles: Record<string, any> = {};
+
+            // === BƯỚC 1: Quét Members từ CẢ 2 NGUỒN (groupApi + conversationDetail) ===
+            const membersData = [
+                ...normalizeMembers(membersRes),
+                ...normalizeMembers(detail?.participants),
+                ...normalizeMembers(detail?.members),
+            ];
+
+            membersData.forEach((member: any) => {
+                const mId = extractValidId(member);
+                if (mId && mId !== "null" && mId !== "undefined") {
+                    // Lưu lại tên với fallback là "" (rỗng) để ko đè mất tên của message gốc
+                    nextMemberProfiles[mId] = {
+                        displayName: pickBestDisplayName(
+                            extractNameCandidates(member),
+                            "",
+                        ),
+                        avatarUrl: extractAvatar(member)
+                            ? resolveFileUrl(extractAvatar(member))
                             : null,
                     };
                 }
             });
 
+            const messagesList = Array.isArray(detail?.messages)
+                ? detail.messages
+                : [];
+
+            // === BƯỚC 2: Quét tin nhắn gom ID người cũ (chưa có trong Dictionary) ===
+            const missingUserIds = new Set<string>();
+            messagesList.forEach((msg: any) => {
+                const sId = extractValidId({ senderId: msg.senderId });
+                if (
+                    sId &&
+                    sId !== "null" &&
+                    sId !== currentUserId &&
+                    !msg.system &&
+                    !nextMemberProfiles[sId]
+                ) {
+                    missingUserIds.add(sId);
+                }
+            });
+
+            // === BƯỚC 3: GỌI API BÙ TUẦN TỰ (Không dùng Promise.all để tránh sập BE) ===
+            if (missingUserIds.size > 0) {
+                console.log(
+                    `[GroupChat] Cần fetch bổ sung ${missingUserIds.size} người...`,
+                );
+                for (const userId of Array.from(missingUserIds)) {
+                    try {
+                        const userRes = await friendApi.getUserById(userId);
+                        const userData = userRes?.data || userRes;
+                        if (userData) {
+                            nextMemberProfiles[userId] = {
+                                displayName: pickBestDisplayName(
+                                    extractNameCandidates(userData),
+                                    "",
+                                ),
+                                avatarUrl: extractAvatar(userData)
+                                    ? resolveFileUrl(extractAvatar(userData))
+                                    : null,
+                            };
+                        }
+                    } catch (e) {
+                        console.log(
+                            `[GroupChat] Bỏ qua user ${userId} do lỗi API`,
+                        );
+                        // Lỗi thì để trống, mapApiMessageToUi sẽ tự xài item.senderName có sẵn
+                        nextMemberProfiles[userId] = {
+                            displayName: "",
+                            avatarUrl: null,
+                        };
+                    }
+                }
+            }
+
             setMemberProfiles(nextMemberProfiles);
 
-            // === STEP 2: Update group header ===
+            // === BƯỚC 4: RENDER GIAO DIỆN ===
             const nextName = detail?.counterpartName || initialName || "Nhóm";
             setGroupName(nextName);
             setGroupAvatar(detail?.counterpartAvatarUrl || initialAvatar || "");
 
-            // === STEP 3: Map messages ===
-            const mapped = Array.isArray(detail?.messages)
-                ? detail.messages.map((item: Message) =>
-                      mapApiMessageToUi(
-                          item,
-                          currentUserId,
-                          nextMemberProfiles,
-                      ),
-                  )
-                : [];
+            const mapped = messagesList.map((item: Message) =>
+                mapApiMessageToUi(item, currentUserId, nextMemberProfiles),
+            );
 
             setMessages(dedupeMessages(mapped));
             await chatApi.markRead(conversationId);
+
+            setMessages(dedupeMessages(mapped));
         } catch (error) {
             console.log("[GroupChat] load error", error);
         }
@@ -344,12 +460,6 @@ export default function GroupChatScreen() {
             setMessage(content);
             Alert.alert("Lỗi", "Không thể gửi tin nhắn.");
         }
-    };
-
-    const handleEmojiSelect = (emoji: string) => {
-        setMessage((prev) => `${prev}${emoji}`);
-        setShowEmojiMenu(false);
-        setIsFocused(true);
     };
 
     const handleUnsendMessage = async () => {
@@ -546,22 +656,32 @@ export default function GroupChatScreen() {
                     <View className="h-6" />
                 </ScrollView>
 
-                <ChatInputBar
-                    message={message}
-                    onMessageChange={setMessage}
-                    onSend={handleSend}
-                    onAttachFile={handlePickFile}
-                    onPickMedia={handlePickMedia}
-                    onEmojiPress={() => setShowEmojiMenu(!showEmojiMenu)}
-                    showEmojiMenu={showEmojiMenu}
-                    onEmojiSelect={(emoji) => {
-                        setMessage((prev) => `${prev}${emoji}`);
-                        setShowEmojiMenu(false);
-                    }}
-                    isGroupChat={true}
-                    placeholder="Tin nhắn"
-                    customEmojis={["👍", "❤️", "😂"]}
-                />
+                {/* PHẦN XỬ LÝ CHẶN CHAT */}
+                {isDissolved ? (
+                    <View className="bg-gray-200 py-3 px-4 items-center justify-center border-t border-gray-300">
+                        <Text className="text-gray-600 italic text-[14px]">
+                            Nhóm này đã giải tán. Bạn không thể gửi tin nhắn
+                            mới.
+                        </Text>
+                    </View>
+                ) : (
+                    <ChatInputBar
+                        message={message}
+                        onMessageChange={setMessage}
+                        onSend={handleSend}
+                        onAttachFile={handlePickFile}
+                        onPickMedia={handlePickMedia}
+                        onEmojiPress={() => setShowEmojiMenu(!showEmojiMenu)}
+                        showEmojiMenu={showEmojiMenu}
+                        onEmojiSelect={(emoji) => {
+                            setMessage((prev) => `${prev}${emoji}`);
+                            setShowEmojiMenu(false);
+                        }}
+                        isGroupChat={true}
+                        placeholder="Tin nhắn"
+                        customEmojis={["👍", "❤️", "😂"]}
+                    />
+                )}
             </KeyboardAvoidingView>
 
             {/* Message Options Modal */}

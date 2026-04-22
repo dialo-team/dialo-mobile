@@ -25,19 +25,27 @@ export const groupApi = {
         return response.data;
     },
 
+    // Sửa lại trong groupApi.ts
     addMembers: async (
         conversationId: string,
         userId: string,
         memberIds: string[],
     ): Promise<GroupConversation> => {
+        // 1. Chắc chắn Payload là Object có key memberIds
+        const payload = { memberIds };
+
+        // 2. Chỉ gửi những Header mà demo yêu cầu
+        const config = {
+            headers: {
+                "X-User-Id": userId, // ID của OWNER
+                // TUYỆT ĐỐI KHÔNG thêm "conversationId" vào header ở đây
+            },
+        };
+
         const response = await apiClient.post(
             `/api/v1/conversations/${conversationId}/members`,
-            { memberIds },
-            {
-                headers: {
-                    "X-User-Id": userId,
-                },
-            },
+            payload,
+            config,
         );
         return response.data;
     },
