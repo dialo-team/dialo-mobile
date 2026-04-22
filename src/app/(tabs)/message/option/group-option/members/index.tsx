@@ -142,7 +142,7 @@ export default function GroupMembersPage() {
         })();
     }, []);
 
-    const handleRemoveMember = async () => {
+    const handleRemoveMember = async (selectedMember: EnrichedMember) => {
         if (!selectedMember || !conversationId) return;
 
         Alert.alert(

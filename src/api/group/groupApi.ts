@@ -1,7 +1,13 @@
+import axios from "axios";
 import apiClient from "../apiClient";
+import { getAccessToken } from "../auth/authStorage";
 import { GroupConversation, GroupMember, GroupRole } from "./types";
 
+// Định nghĩa URL cho Chat Service (Cổng 8085)
+const CHAT_SERVICE_URL = "http://14.225.254.174:8085/api/v1/conversations";
+
 export const groupApi = {
+    // Các hàm dùng chung apiClient (Cổng 9000) nếu vẫn hoạt động tốt
     createGroup: async (name: string, memberIds: string[]) => {
         const response = await apiClient.post("/api/v1/conversations/groups", {
             name,
@@ -17,96 +23,75 @@ export const groupApi = {
         const response = await apiClient.get(
             `/api/v1/conversations/${conversationId}/members`,
             {
+                headers: { "X-User-Id": userId },
+            },
+        );
+        return response.data;
+    },
+
+    // --- CÁC HÀM CẬP NHẬT (Dùng Port 8085 để tránh lỗi 500) ---
+
+    updateGroupName: async (
+        conversationId: string,
+        userId: string,
+        groupName: string,
+    ) => {
+        const token = await getAccessToken();
+        const response = await axios.put(
+            `${CHAT_SERVICE_URL}/${conversationId}/group-name`,
+            { groupName },
+            {
                 headers: {
+                    Authorization: `Bearer ${token}`,
                     "X-User-Id": userId,
+                    "Content-Type": "application/json",
                 },
             },
         );
         return response.data;
     },
 
-    // Sửa lại trong groupApi.ts
+    updateGroupAvatar: async (
+        conversationId: string,
+        userId: string,
+        groupAvatarUrl: string,
+    ): Promise<GroupConversation> => {
+        const token = await getAccessToken();
+        const response = await axios.put(
+            `${CHAT_SERVICE_URL}/${conversationId}/group-avatar`,
+            { groupAvatarUrl }, // Key theo đúng tài liệu API
+            {
+                headers: {
+                    Authorization: `Bearer ${token}`,
+                    "X-User-Id": userId,
+                    "Content-Type": "application/json",
+                },
+            },
+        );
+        return response.data;
+    },
+
+    // --- CÁC HÀM QUẢN LÝ THÀNH VIÊN ---
+
     addMembers: async (
         conversationId: string,
         userId: string,
         memberIds: string[],
     ): Promise<GroupConversation> => {
-        // 1. Chắc chắn Payload là Object có key memberIds
-        const payload = { memberIds };
+        const token = await getAccessToken();
 
-        // 2. Chỉ gửi những Header mà demo yêu cầu
-        const config = {
-            headers: {
-                "X-User-Id": userId, // ID của OWNER
-                // TUYỆT ĐỐI KHÔNG thêm "conversationId" vào header ở đây
+        const response = await axios.post(
+            `${CHAT_SERVICE_URL}/${conversationId}/members`,
+            { memberIds }, // Payload đúng chuẩn Demo
+            {
+                headers: {
+                    Authorization: `Bearer ${token}`,
+                    "X-User-Id": userId,
+                    "Content-Type": "application/json",
+                },
             },
-        };
-
-        const response = await apiClient.post(
-            `/api/v1/conversations/${conversationId}/members`,
-            payload,
-            config,
         );
         return response.data;
-    },
-
-    updateGroupName: async (
-        conversationId: string,
-        userId: string,
-        groupName: string,
-    ): Promise<GroupConversation> => {
-        const url = `/api/v1/conversations/${conversationId}/group-name`;
-        const config = {
-            headers: {
-                "X-User-Id": userId,
-            },
-        };
-
-        const attempts: {
-            data?: any;
-            params?: Record<string, string>;
-        }[] = [
-            { data: { groupName } },
-            { data: { name: groupName } },
-            { data: { conversationName: groupName } },
-            { data: { newName: groupName } },
-            { data: {}, params: { groupName } },
-            { data: {}, params: { name: groupName } },
-            { data: groupName },
-        ];
-
-        try {
-            const response = await apiClient.put(url, { groupName }, config);
-            return response.data;
-        } catch (error: any) {
-            const status = error?.response?.status;
-            let lastError: any = error;
-
-            // Backend rename đang không ổn định về request key.
-            // Thử fallback sang các cases khác nếu lỗi 4xx
-            if (status && status < 500) {
-                for (const attempt of attempts) {
-                    try {
-                        const response = await apiClient.put(
-                            url,
-                            attempt.data, // Sửa lại đúng syntax của Axios: url, data, config
-                            {
-                                ...config,
-                                params: attempt.params,
-                            },
-                        );
-                        return response.data;
-                    } catch (err: any) {
-                        lastError = err;
-                        // Nếu vẫn là lỗi 400 thì tiếp tục vòng lặp, lỗi khác thì throw luôn
-                        if (err?.response?.status !== 400) {
-                            throw err;
-                        }
-                    }
-                }
-            }
-            throw lastError;
-        }
     },
 
     removeMember: async (
@@ -119,7 +104,6 @@ export const groupApi = {
         return response.data;
     },
 
-    // Sử dụng thẳng type GroupRole cho tham số
     assignRole: async (
         conversationId: string,
         memberId: string,
@@ -143,23 +127,6 @@ export const groupApi = {
     dissolveGroup: async (conversationId: string): Promise<any> => {
         const response = await apiClient.delete(
             `/api/v1/conversations/${conversationId}/dissolve`,
-        );
-        return response.data;
-    },
-
-    updateGroupAvatar: async (
-        conversationId: string,
-        userId: string,
-        groupAvatarUrl: string,
-    ): Promise<GroupConversation> => {
-        const response = await apiClient.put(
-            `/api/v1/conversations/${conversationId}/group-avatar`,
-            { groupAvatarUrl },
-            {
-                headers: {
-                    "X-User-Id": userId,
-                },
-            },
         );
         return response.data;
     },
