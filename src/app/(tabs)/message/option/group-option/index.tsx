@@ -320,6 +320,41 @@ export default function GroupChatOptionsScreen() {
         }
     };
 
+    const handleDissolveGroup = () => {
+        if (!conversationId || !currentUserId || loadingLeave) return;
+
+        Alert.alert(
+            "Giải tán nhóm?",
+            "Nhóm sẽ bị xóa vĩnh viễn và không thể khôi phục.",
+            [
+                { text: "Huỷ", style: "cancel" },
+                {
+                    text: "Giải tán",
+                    style: "destructive",
+                    onPress: async () => {
+                        try {
+                            setLoadingLeave(true);
+                            await groupApi.dissolveGroup(conversationId);
+                            Alert.alert("Thành công", "Đã giải tán nhóm.");
+                            router.replace("/(tabs)/message" as any);
+                        } catch (error) {
+                            console.log(
+                                "[GroupOption] dissolveGroup error",
+                                error,
+                            );
+                            Alert.alert(
+                                "Lỗi",
+                                "Không thể giải tán nhóm lúc này.",
+                            );
+                        } finally {
+                            setLoadingLeave(false);
+                        }
+                    },
+                },
+            ],
+        );
+    };
+
     const initials = useMemo(() => getInitials(groupName, "G"), [groupName]);
 
     return (
@@ -516,6 +551,17 @@ export default function GroupChatOptionsScreen() {
                     </View>
 
                     <View className="bg-white mt-2">
+                        <TouchableOpacity
+                            className="px-4 py-4 items-center border-b border-gray-100"
+                            onPress={handleDissolveGroup}
+                            disabled={loadingLeave || !conversationId}
+                        >
+                            <Text className="text-red-600 text-[15px] font-medium">
+                                {loadingLeave
+                                    ? "Đang xử lý..."
+                                    : "Giải tán nhóm"}
+                            </Text>
+                        </TouchableOpacity>
                         <TouchableOpacity
                             className="px-4 py-4 items-center"
                             onPress={handleLeaveGroup}

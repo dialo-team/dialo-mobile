@@ -8,6 +8,7 @@ import {
 import React, { useCallback, useEffect, useState } from "react";
 import {
     ActivityIndicator,
+    Alert,
     Image,
     ScrollView,
     Text,
@@ -41,6 +42,7 @@ export default function GroupMembersPage() {
     const [members, setMembers] = useState<GroupMember[]>([]);
     const [loading, setLoading] = useState<boolean>(true);
     const [activeTab, setActiveTab] = useState<TabType>("ALL");
+    const [actionLoadingMemberId, setActionLoadingMemberId] = useState("");
 
     // Lấy current user ID
     useEffect(() => {
@@ -82,6 +84,11 @@ export default function GroupMembersPage() {
         loadMembers();
     }, [loadMembers]);
 
+    const currentUserMember = members.find(
+        (member) => member.userId === currentUserId,
+    );
+    const canManageMembers = currentUserMember?.role === "OWNER";
+
     // Logic lọc danh sách dựa trên Tab hiện tại
     const filteredMembers = members.filter((m) => {
         if (activeTab === "ADMINS") {
@@ -101,9 +108,118 @@ export default function GroupMembersPage() {
     };
 
     // Sự kiện bấm vào nút 3 chấm để mở tùy chọn (Xóa/Gán quyền)
+    const goToAddMembers = () => {
+        if (!conversationId) return;
+
+        router.push({
+            pathname: "/contact/group/add-member",
+            params: { conversationId },
+        });
+    };
+
     const handleMemberOptions = (member: GroupMember) => {
-        // TODO: Mở Modal/ActionSheet để thực hiện groupApi.removeMember hoặc groupApi.assignRole
-        console.log("Mở tùy chọn cho member:", member.userId);
+        if (!canManageMembers || member.userId === currentUserId) {
+            return;
+        }
+
+        const buttons: { text: string; style?: any; onPress?: () => void }[] =
+            [];
+
+        if (member.role !== "OWNER") {
+            buttons.push({
+                text: "Chuyển thành trưởng nhóm",
+                onPress: async () => {
+                    setActionLoadingMemberId(member.userId);
+                    try {
+                        await groupApi.assignRole(
+                            conversationId,
+                            member.userId,
+                            "OWNER",
+                        );
+                        await loadMembers();
+                    } catch (error) {
+                        console.error(
+                            "[GroupMembers] assign OWNER error:",
+                            error,
+                        );
+                    } finally {
+                        setActionLoadingMemberId("");
+                    }
+                },
+            });
+        }
+
+        if (member.role !== "ADMIN") {
+            buttons.push({
+                text: "Gán quyền ADMIN",
+                onPress: async () => {
+                    setActionLoadingMemberId(member.userId);
+                    try {
+                        await groupApi.assignRole(
+                            conversationId,
+                            member.userId,
+                            "ADMIN",
+                        );
+                        await loadMembers();
+                    } catch (error) {
+                        console.error(
+                            "[GroupMembers] assign ADMIN error:",
+                            error,
+                        );
+                    } finally {
+                        setActionLoadingMemberId("");
+                    }
+                },
+            });
+        }
+
+        if (member.role !== "MEMBER") {
+            buttons.push({
+                text: "Hạ xuống MEMBER",
+                onPress: async () => {
+                    setActionLoadingMemberId(member.userId);
+                    try {
+                        await groupApi.assignRole(
+                            conversationId,
+                            member.userId,
+                            "MEMBER",
+                        );
+                        await loadMembers();
+                    } catch (error) {
+                        console.error(
+                            "[GroupMembers] assign MEMBER error:",
+                            error,
+                        );
+                    } finally {
+                        setActionLoadingMemberId("");
+                    }
+                },
+            });
+        }
+
+        buttons.push({
+            text: "Xóa khỏi nhóm",
+            style: "destructive",
+            onPress: async () => {
+                setActionLoadingMemberId(member.userId);
+                try {
+                    await groupApi.removeMember(conversationId, member.userId);
+                    await loadMembers();
+                } catch (error) {
+                    console.error("[GroupMembers] remove member error:", error);
+                } finally {
+                    setActionLoadingMemberId("");
+                }
+            },
+        });
+
+        buttons.push({ text: "Huỷ", style: "cancel" });
+
+        Alert.alert(
+            `Tùy chọn cho ${member.displayName}`,
+            "Chọn thao tác",
+            buttons as any,
+        );
     };
 
     return (
@@ -122,7 +238,7 @@ export default function GroupMembersPage() {
                     </Text>
                 </View>
                 <View className="flex-row items-center gap-4">
-                    <TouchableOpacity>
+                    <TouchableOpacity onPress={goToAddMembers}>
                         <UserPlus color="white" size={24} />
                     </TouchableOpacity>
                     <TouchableOpacity>
@@ -150,8 +266,11 @@ export default function GroupMembersPage() {
                 />
             </View>
 
-            {/* Mục Duyệt thành viên (Static Demo) */}
-            <TouchableOpacity className="flex-row items-center px-4 py-4 border-b border-gray-100">
+            {/* Mục Duyệt thành viên */}
+            <TouchableOpacity
+                className="flex-row items-center px-4 py-4 border-b border-gray-100"
+                onPress={goToAddMembers}
+            >
                 <View className="w-10 h-10 rounded-full bg-gray-100 items-center justify-center mr-3 border border-gray-300">
                     <UserPlus color="#4b5563" size={20} />
                 </View>
@@ -228,11 +347,28 @@ export default function GroupMembersPage() {
                                         onPress={() =>
                                             handleMemberOptions(member)
                                         }
+                                        disabled={
+                                            !canManageMembers ||
+                                            actionLoadingMemberId ===
+                                                member.userId
+                                        }
                                     >
-                                        <MoreVertical
-                                            color="#9ca3af"
-                                            size={20}
-                                        />
+                                        {actionLoadingMemberId ===
+                                        member.userId ? (
+                                            <ActivityIndicator
+                                                size="small"
+                                                color="#9ca3af"
+                                            />
+                                        ) : (
+                                            <MoreVertical
+                                                color={
+                                                    canManageMembers
+                                                        ? "#9ca3af"
+                                                        : "#d1d5db"
+                                                }
+                                                size={20}
+                                            />
+                                        )}
                                     </TouchableOpacity>
                                 )}
                             </View>

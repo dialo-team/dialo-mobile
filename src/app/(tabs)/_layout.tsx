@@ -1,6 +1,5 @@
 import { Tabs, usePathname } from "expo-router";
-import { MessageCircle, UserRound, Users } from "lucide-react-native";
-import { View } from "react-native";
+import { Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 export default function TabsLayout() {
@@ -32,25 +31,36 @@ export default function TabsLayout() {
             }}
         >
             <Tabs.Screen
-                name="message"
+                name="index"
                 options={{
                     href: "/message",
                     tabBarLabel: "Tin nhan",
                     tabBarIcon: ({ color }) => (
                         <View className="items-center">
-                            <MessageCircle size={22} color={color} />
+                            <Text style={{ fontSize: 24, color }}>💬</Text>
                         </View>
                     ),
                 }}
             />
             <Tabs.Screen
-                name="contact"
+                name="contacts"
                 options={{
                     href: "/contact",
                     tabBarLabel: "Danh ba",
                     tabBarIcon: ({ color }) => (
                         <View className="items-center">
-                            <Users size={22} color={color} />
+                            <Text style={{ fontSize: 24, color }}>📱</Text>
+                        </View>
+                    ),
+                }}
+            />
+            <Tabs.Screen
+                name="discover"
+                options={{
+                    tabBarLabel: "Khám phá",
+                    tabBarIcon: ({ color }) => (
+                        <View className="items-center">
+                            <Text style={{ fontSize: 24, color }}>⊞</Text>
                         </View>
                     ),
                 }}
@@ -62,7 +72,7 @@ export default function TabsLayout() {
                     tabBarLabel: "Ca nhan",
                     tabBarIcon: ({ color }) => (
                         <View className="items-center">
-                            <UserRound size={22} color={color} />
+                            <Text style={{ fontSize: 24, color }}>👤</Text>
                         </View>
                     ),
                 }}

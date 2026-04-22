@@ -32,7 +32,7 @@ export const groupApi = {
     ): Promise<GroupConversation> => {
         const response = await apiClient.post(
             `/api/v1/conversations/${conversationId}/members`,
-            { memberIds: memberIds },
+            { memberIds },
             {
                 headers: {
                     "X-User-Id": userId,

@@ -343,7 +343,15 @@ export default function CreateGroup() {
 
     const handleCreateGroup = async () => {
         // 1. Kiểm tra điều kiện trước khi gọi API
-        if (selectedUsers.length === 0 || isCreating) return;
+        if (selectedUsers.length < 3 || isCreating) {
+            if (selectedUsers.length > 0 && selectedUsers.length < 3) {
+                Alert.alert(
+                    "Thiếu thành viên",
+                    "Vui lòng chọn ít nhất 3 người để tạo nhóm.",
+                );
+            }
+            return;
+        }
 
         const defaultName = selectedUsers
             .map((user) => user.counterpartName)
@@ -572,9 +580,13 @@ export default function CreateGroup() {
                         </ScrollView>
 
                         <TouchableOpacity
-                            className="w-12 h-12 bg-blue-600 rounded-full items-center justify-center shadow-sm"
+                            className={`w-12 h-12 rounded-full items-center justify-center shadow-sm ${
+                                selectedUsers.length >= 3
+                                    ? "bg-blue-600"
+                                    : "bg-gray-400"
+                            }`}
                             onPress={handleCreateGroup}
-                            disabled={isCreating}
+                            disabled={isCreating || selectedUsers.length < 3}
                         >
                             {isCreating ? (
                                 <ActivityIndicator size="small" color="white" />
