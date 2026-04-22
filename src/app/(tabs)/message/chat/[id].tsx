@@ -1,5 +1,6 @@
 import { chatApi, chatAuthUtils } from "@/src/api/chat/chatApi";
 import { friendApi } from "@/src/api/friend/friendApi";
+import ChatInputBar from "@/src/components/ChatInputBar";
 import { useChatAttachments } from "@/src/hooks/useChatAttchment";
 import { useChatRealtime } from "@/src/hooks/useChatRealtime";
 import { getInitials, pickBestDisplayName } from "@/src/utils/displayUser";
@@ -11,8 +12,6 @@ import {
     MoveLeft,
     Paperclip,
     Phone,
-    Search,
-    Send,
     Trash2,
     Video,
     X,
@@ -181,6 +180,7 @@ export default function ChatScreen() {
 
     const [isBlockedByMe, setIsBlockedByMe] = useState(false);
     const [isBlockedByThem, setIsBlockedByThem] = useState(false);
+    const [showEmojiMenu, setShowEmojiMenu] = useState(false);
 
     useFocusEffect(
         useCallback(() => {
@@ -1159,7 +1159,6 @@ export default function ChatScreen() {
                     </View>
                 )}
 
-                {/* --- RENDER BOTTOM BAR (INPUT HOẶC UNBLOCK) --- */}
                 {isBlockedByMe ? (
                     // Nếu TÔI chặn người kia
                     <View className="bg-white px-4 pt-4 pb-8 border-t border-gray-100 items-center">
@@ -1187,40 +1186,19 @@ export default function ChatScreen() {
                     </View>
                 ) : (
                     // Normal input bar
-                    <View className="bg-white px-3 py-2 border-t border-gray-200">
-                        <View className="flex-row items-center">
-                            <TouchableOpacity
-                                onPress={handlePickFile}
-                                className="mr-2"
-                            >
-                                <Paperclip size={22} color="#6b7280" />
-                            </TouchableOpacity>
-                            <TouchableOpacity
-                                onPress={() => setShowSearchSheet(true)}
-                                className="mr-2"
-                            >
-                                <Search size={22} color="#6b7280" />
-                            </TouchableOpacity>
-                            <TouchableOpacity
-                                onPress={handlePickMedia}
-                                className="mr-2"
-                            >
-                                <Image size={22} color="#6b7280" />
-                            </TouchableOpacity>
-                            <TextInput
-                                className="flex-1 bg-gray-100 rounded-full px-4 py-3 mt-1 text-[15px]"
-                                placeholder="Nhập tin nhắn"
-                                value={message}
-                                onChangeText={setMessage}
-                            />
-                            <TouchableOpacity
-                                onPress={handleSend}
-                                className="ml-2 bg-blue-400 rounded-full p-2"
-                            >
-                                <Send size={18} color="white" />
-                            </TouchableOpacity>
-                        </View>
-                    </View>
+                    <ChatInputBar
+                        message={message}
+                        onMessageChange={setMessage}
+                        onSend={handleSend}
+                        onAttachFile={handlePickFile}
+                        onPickMedia={handlePickMedia}
+                        isBlockedByMe={isBlockedByMe}
+                        isBlockedByThem={isBlockedByThem}
+                        onUnblock={handleUnblock}
+                        displayName={displayName}
+                        isGroupChat={false}
+                        showEmojiButton={false}
+                    />
                 )}
             </KeyboardAvoidingView>
 

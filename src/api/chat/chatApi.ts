@@ -119,7 +119,7 @@ const unwrapData = <T>(value: any): T => {
     return value as T;
 };
 
-const isGroupConversation = (value: any) => {
+export const isGroupConversation = (value: any) => {
     const type = String(
         value?.conversationType ||
             value?.type ||
@@ -165,7 +165,7 @@ function collectNestedStringValues(
     return results;
 }
 
-const normalizeConversationIdentity = <T extends Record<string, any>>(
+export const normalizeConversationIdentity = <T extends Record<string, any>>(
     value: T,
 ): T => {
     const group = isGroupConversation(value);
@@ -385,8 +385,6 @@ export const chatApi = {
         return request<ChatUserProfile>(`/api/v1/users/${userId}`);
     },
 
-    // message-controller
-    // message-controller
     sendMessage: async (payload: SendMessagePayload) => {
         const token = await getAccessToken();
         const senderId = payload.senderId || decodeJwtSub(token);

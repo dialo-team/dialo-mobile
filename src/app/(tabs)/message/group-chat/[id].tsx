@@ -1,18 +1,20 @@
 import { chatApi, chatAuthUtils } from "@/src/api/chat/chatApi";
 import { groupApi } from "@/src/api/group/groupApi";
+import {
+    ConversationDetail,
+    GroupMember,
+    Message,
+} from "@/src/api/group/types";
+import ChatInputBar from "@/src/components/ChatInputBar";
 import { useChatAttachments } from "@/src/hooks/useChatAttchment";
 import { useChatRealtime } from "@/src/hooks/useChatRealtime";
 import { getInitials } from "@/src/utils/displayUser";
 import { Video as AVVideo, ResizeMode } from "expo-av";
-import { useLocalSearchParams, useRouter } from "expo-router";
+import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import {
-    Ellipsis,
-    Image,
     MoreHorizontal,
     MoveLeft,
     Paperclip,
-    Send,
-    Smile,
     Trash2,
     Undo,
     UserPlus,
@@ -26,7 +28,6 @@ import {
     Image as RNImage,
     ScrollView,
     Text,
-    TextInput,
     TouchableOpacity,
     TouchableWithoutFeedback,
     View,
@@ -35,6 +36,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 const CHAT_BASE_URL = "http://14.225.254.174:8085";
 
+// Đã loại bỏ | any ở raw để siết chặt type
 type UiMessage = {
     id: string;
     text: string;
@@ -47,13 +49,7 @@ type UiMessage = {
     senderAvatarUrl?: string;
     isUnsent?: boolean;
     pending?: boolean;
-    raw?: any;
-};
-
-type GroupMemberProfile = {
-    id: string;
-    name: string;
-    avatar: string;
+    raw?: Message;
 };
 
 const paramToString = (value: string | string[] | undefined) => {
@@ -78,37 +74,20 @@ const dedupeMessages = (items: UiMessage[]) => {
     });
 };
 
-/**
- * Normalize members từ API response
- * API trả về: [{ userId, displayName, avatarUrl, role }]
- */
-const normalizeMembers = (data: any): any[] => {
+const normalizeMembers = (data: any): GroupMember[] => {
     if (Array.isArray(data)) {
-        return data;
+        return data as GroupMember[];
     }
     if (data?.data && Array.isArray(data.data)) {
-        return data.data;
+        return data.data as GroupMember[];
     }
     if (data?.members && Array.isArray(data.members)) {
-        return data.members;
+        return data.members as GroupMember[];
     }
     return [];
 };
 
-/**
- * Build member profile từ API member object
- * { userId, displayName, avatarUrl, role }
- */
-const buildMemberProfile = (member: any): GroupMemberProfile | null => {
-    const id = String(member?.userId || "").trim();
-    if (!id) return null;
-
-    return {
-        id,
-        name: member?.displayName || "Thành viên",
-        avatar: member?.avatarUrl || "",
-    };
-};
+// ĐÃ XÓA hàm buildMemberProfile dư thừa, xử lý trực tiếp GroupMember ở dưới
 
 export default function GroupChatScreen() {
     const router = useRouter();
@@ -127,9 +106,12 @@ export default function GroupChatScreen() {
     const [currentUserId, setCurrentUserId] = useState("");
     const [groupName, setGroupName] = useState(initialName);
     const [groupAvatar, setGroupAvatar] = useState(initialAvatar);
+
+    // Đổi Record thành GroupMember chuẩn
     const [memberProfiles, setMemberProfiles] = useState<
-        Record<string, GroupMemberProfile>
+        Record<string, GroupMember>
     >({});
+
     const [isFocused, setIsFocused] = useState(false);
     const [showEmojiMenu, setShowEmojiMenu] = useState(false);
     const [selectedMessage, setSelectedMessage] = useState<UiMessage | null>(
@@ -141,15 +123,11 @@ export default function GroupChatScreen() {
 
     const scrollViewRef = useRef<ScrollView>(null);
 
-    /**
-     * Map API message to UI message
-     * Sử dụng member profiles để lấy tên + avatar
-     */
     const mapApiMessageToUi = useCallback(
         (
-            item: any,
+            item: Message,
             cId: string,
-            profiles: Record<string, GroupMemberProfile>,
+            profiles: Record<string, GroupMember>, // Nhận thẳng GroupMember
         ): UiMessage => {
             const sId = String(item?.senderId || "").trim();
             const isMe = sId === String(cId).trim();
@@ -159,7 +137,7 @@ export default function GroupChatScreen() {
             const profile = sId ? profiles[sId] : null;
 
             return {
-                id: String(item?.id || `msg-${Date.now()}`),
+                id: String(item?.id || item?.messageId || `msg-${Date.now()}`),
                 text: item?.content || "",
                 position: isMe ? "right" : "left",
                 time: item?.createdAt
@@ -175,10 +153,10 @@ export default function GroupChatScreen() {
                 senderId: sId,
                 senderName: isMe
                     ? "Bạn"
-                    : profile?.name || item?.senderName || "Thành viên",
+                    : profile?.displayName || item?.senderName || "Thành viên", // Dùng displayName của GroupMember
                 senderAvatarUrl: isMe
                     ? ""
-                    : profile?.avatar || item?.senderAvatarUrl || "",
+                    : profile?.avatarUrl || item?.senderAvatarUrl || "", // Dùng avatarUrl của GroupMember
                 isUnsent:
                     item?.system === true ||
                     ["REVOKED", "SYSTEM"].includes(
@@ -191,29 +169,30 @@ export default function GroupChatScreen() {
         [],
     );
 
-    /**
-     * Load group conversation detail + members
-     */
     const loadGroupConversation = useCallback(async () => {
         if (!conversationId || !currentUserId) return;
 
         try {
-            // Gọi cả 2 API song song
             const [detailRes, membersRes] = await Promise.all([
                 chatApi.getConversationDetail(conversationId),
-                groupApi.getGroupMembers(conversationId),
+                groupApi.getGroupMembers(conversationId, currentUserId),
             ]);
 
-            const detail = detailRes?.data || detailRes;
+            const detail = (detailRes?.data || detailRes) as ConversationDetail;
 
             // === STEP 1: Process members ===
             const membersData = normalizeMembers(membersRes);
-            const nextMemberProfiles: Record<string, GroupMemberProfile> = {};
+            const nextMemberProfiles: Record<string, GroupMember> = {}; // Dùng type GroupMember
 
-            membersData.forEach((member: any) => {
-                const profile = buildMemberProfile(member);
-                if (profile) {
-                    nextMemberProfiles[profile.id] = profile;
+            // Gán thẳng thông tin API vào Dictionary và format link ảnh
+            membersData.forEach((member: GroupMember) => {
+                if (member.userId) {
+                    nextMemberProfiles[member.userId] = {
+                        ...member,
+                        avatarUrl: member.avatarUrl
+                            ? resolveFileUrl(member.avatarUrl)
+                            : null,
+                    };
                 }
             });
 
@@ -226,7 +205,7 @@ export default function GroupChatScreen() {
 
             // === STEP 3: Map messages ===
             const mapped = Array.isArray(detail?.messages)
-                ? detail.messages.map((item: any) =>
+                ? detail.messages.map((item: Message) =>
                       mapApiMessageToUi(
                           item,
                           currentUserId,
@@ -253,7 +232,6 @@ export default function GroupChatScreen() {
         loadGroupConversation,
     );
 
-    // Get current user ID
     useEffect(() => {
         (async () => {
             try {
@@ -265,14 +243,20 @@ export default function GroupChatScreen() {
         })();
     }, []);
 
-    // Load conversation when ready
     useEffect(() => {
         if (conversationId && currentUserId) {
             loadGroupConversation();
         }
     }, [conversationId, currentUserId, loadGroupConversation]);
 
-    // Auto scroll to bottom when messages change
+    useFocusEffect(
+        useCallback(() => {
+            if (conversationId && currentUserId) {
+                loadGroupConversation();
+            }
+        }, [conversationId, currentUserId, loadGroupConversation]),
+    );
+
     useEffect(() => {
         if (!messages.length) return;
         const timer = setTimeout(() => {
@@ -281,7 +265,6 @@ export default function GroupChatScreen() {
         return () => clearTimeout(timer);
     }, [messages]);
 
-    // Realtime message updates
     useChatRealtime({
         currentUserId,
         conversationId,
@@ -299,7 +282,6 @@ export default function GroupChatScreen() {
         },
     });
 
-    // Handle send message
     const handleSend = async () => {
         const content = message.trim();
         if (!content || !conversationId) return;
@@ -322,7 +304,11 @@ export default function GroupChatScreen() {
                 content,
                 senderId: currentUserId,
                 type: "TEXT",
-            },
+                conversationId: conversationId,
+                system: false,
+                createdAt: new Date().toISOString(),
+                updatedAt: new Date().toISOString(),
+            } as Message,
         };
 
         setMessages((prev) => dedupeMessages([...prev, optimistic]));
@@ -337,7 +323,7 @@ export default function GroupChatScreen() {
             });
             if (sent && typeof sent === "object" && "id" in sent) {
                 const mapped = mapApiMessageToUi(
-                    sent,
+                    sent as Message,
                     currentUserId,
                     memberProfiles,
                 );
@@ -390,6 +376,9 @@ export default function GroupChatScreen() {
 
     const groupInitials = getInitials(groupName || "Nhom", "G");
 
+    // =====================================
+    // VÙNG GIAO DIỆN - KHÔNG SỬA ĐỔI
+    // =====================================
     return (
         <SafeAreaView className="flex-1 bg-[#e9edf2]">
             <KeyboardAvoidingView
@@ -546,7 +535,7 @@ export default function GroupChatScreen() {
                                             className={`text-gray-500 text-[11px] mt-1 ${isMe ? "text-right" : ""}`}
                                         >
                                             {msg.pending
-                                                ? "Dang gui..."
+                                                ? "Đang gửi..."
                                                 : msg.time}
                                         </Text>
                                     )}
@@ -557,63 +546,22 @@ export default function GroupChatScreen() {
                     <View className="h-6" />
                 </ScrollView>
 
-                <View className="bg-white border-t border-gray-200 px-3 py-2 flex-row items-center">
-                    <View className="relative z-50">
-                        {showEmojiMenu && (
-                            <View
-                                className="absolute bottom-12 -left-2 bg-white rounded-full shadow-lg border border-gray-200 flex-row px-3 py-2 items-center"
-                                style={{ elevation: 5 }}
-                            >
-                                {["👍", "❤️", "😂"].map((emoji) => (
-                                    <TouchableOpacity
-                                        key={emoji}
-                                        onPress={() => handleEmojiSelect(emoji)}
-                                        className="mx-2"
-                                    >
-                                        <Text className="text-2xl">
-                                            {emoji}
-                                        </Text>
-                                    </TouchableOpacity>
-                                ))}
-                            </View>
-                        )}
-                        <TouchableOpacity
-                            className="mr-2"
-                            onPress={() => setShowEmojiMenu((prev) => !prev)}
-                        >
-                            <Smile size={26} color="#666" />
-                        </TouchableOpacity>
-                    </View>
-
-                    <TouchableOpacity className="mr-2" onPress={handlePickFile}>
-                        <Ellipsis size={24} color="#666" />
-                    </TouchableOpacity>
-
-                    <TextInput
-                        placeholder="Tin nhắn"
-                        value={message}
-                        onChangeText={setMessage}
-                        onFocus={() => {
-                            setIsFocused(true);
-                            setShowEmojiMenu(false);
-                        }}
-                        onBlur={() => setIsFocused(false)}
-                        className="flex-1 bg-gray-100 px-4 py-2 rounded-full text-[15px]"
-                    />
-
-                    <TouchableOpacity
-                        className="ml-2"
-                        onPress={handlePickMedia}
-                    >
-                        <Image size={26} color="#666" />
-                    </TouchableOpacity>
-                    <TouchableOpacity className="ml-2" onPress={handleSend}>
-                        <Send
-                            size={26}
-                            color={message.trim() ? "#2563eb" : "#666"}
-                        />
-                    </TouchableOpacity>
-                </View>
+                <ChatInputBar
+                    message={message}
+                    onMessageChange={setMessage}
+                    onSend={handleSend}
+                    onAttachFile={handlePickFile}
+                    onPickMedia={handlePickMedia}
+                    onEmojiPress={() => setShowEmojiMenu(!showEmojiMenu)}
+                    showEmojiMenu={showEmojiMenu}
+                    onEmojiSelect={(emoji) => {
+                        setMessage((prev) => `${prev}${emoji}`);
+                        setShowEmojiMenu(false);
+                    }}
+                    isGroupChat={true}
+                    placeholder="Tin nhắn"
+                    customEmojis={["👍", "❤️", "😂"]}
+                />
             </KeyboardAvoidingView>
 
             {/* Message Options Modal */}

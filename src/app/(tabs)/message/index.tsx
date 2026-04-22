@@ -2,7 +2,7 @@ import { chatApi, chatAuthUtils } from "@/src/api/chat/chatApi";
 import { friendApi } from "@/src/api/friend/friendApi";
 import { useChatRealtime } from "@/src/hooks/useChatRealtime";
 import { getInitials, pickBestDisplayName } from "@/src/utils/displayUser";
-import { useRouter } from "expo-router";
+import { useFocusEffect, useRouter } from "expo-router";
 import {
     Plus,
     ScanQrCode,
@@ -213,6 +213,14 @@ export default function MessagesScreen() {
         if (!currentUserId) return;
         loadConversations();
     }, [currentUserId, loadConversations]);
+
+    useFocusEffect(
+        useCallback(() => {
+            if (currentUserId) {
+                loadConversations();
+            }
+        }, [currentUserId, loadConversations]),
+    );
 
     useEffect(() => {
         return () => {
