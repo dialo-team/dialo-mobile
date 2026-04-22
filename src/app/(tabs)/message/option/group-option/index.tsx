@@ -16,6 +16,7 @@ import {
     Trash,
     UserPlus,
     Users,
+    X,
 } from "lucide-react-native";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -74,6 +75,12 @@ export default function GroupChatOptionsScreen() {
 
     const [updatingAvatar, setUpdatingAvatar] = useState(false);
 
+    // --- STATE MỚI CHO CHỨC NĂNG RỜI NHÓM ---
+    const [membersList, setMembersList] = useState<any[]>([]);
+    const [currentUserRole, setCurrentUserRole] = useState<string>("");
+    const [isTransferModalVisible, setIsTransferModalVisible] = useState(false);
+    const [transferringId, setTransferringId] = useState<string | null>(null);
+
     useEffect(() => {
         Animated.timing(entranceAnim, {
             toValue: 1,
@@ -124,9 +131,18 @@ export default function GroupChatOptionsScreen() {
 
             const members = normalizeMembers(membersRes);
 
+            // Tìm quyền của user hiện tại
+            const me = members.find(
+                (m) => String(m.userId) === String(currentUserId),
+            );
+            if (me) {
+                setCurrentUserRole(me.role);
+            }
+
             setGroupName(nextName);
             setGroupAvatar(nextAvatar);
             setMemberCount(members.length);
+            setMembersList(members); // Lưu lại list để dùng cho Modal chuyển quyền
             setJoiningLink(
                 detail?.groupLink || detail?.inviteLink || detail?.link || "",
             );
@@ -141,9 +157,17 @@ export default function GroupChatOptionsScreen() {
         }, [loadGroupData]),
     );
 
+    // --- LOGIC RỜI NHÓM & CHUYỂN QUYỀN MỚI ---
     const handleLeaveGroup = () => {
         if (!conversationId || loadingLeave) return;
 
+        // Nếu là Trưởng nhóm và có người khác trong nhóm -> Bật Modal chuyển quyền
+        if (currentUserRole === "OWNER" && membersList.length > 1) {
+            setIsTransferModalVisible(true);
+            return;
+        }
+
+        // Luồng rời nhóm bình thường
         Alert.alert("Rời nhóm?", "Bạn chắc chắn rời nhóm?", [
             { text: "Huỷ", style: "cancel" },
             {
@@ -156,30 +180,7 @@ export default function GroupChatOptionsScreen() {
                         router.replace("/(tabs)/message" as any);
                     } catch (error: any) {
                         console.log("[GroupOption] leaveGroup error", error);
-
-                        const isServerError =
-                            error?.response?.status === 500 ||
-                            error?.status === 500;
-                        if (isServerError) {
-                            Alert.alert(
-                                "Không thể rời nhóm",
-                                "Bạn đang là trưởng nhóm. Theo quy định, vui lòng chuyển quyền trưởng nhóm cho một thành viên khác trước khi rời đi.",
-                                [
-                                    { text: "Hủy", style: "cancel" },
-                                    {
-                                        text: "Đến danh sách thành viên",
-                                        onPress: () =>
-                                            router.push({
-                                                pathname:
-                                                    "/message/option/group-option/members",
-                                                params: { conversationId },
-                                            }),
-                                    },
-                                ],
-                            );
-                        } else {
-                            Alert.alert("Lỗi", "Không thể rời nhóm lúc này.");
-                        }
+                        Alert.alert("Lỗi", "Không thể rời nhóm lúc này.");
                     } finally {
                         setLoadingLeave(false);
                     }
@@ -187,6 +188,49 @@ export default function GroupChatOptionsScreen() {
             },
         ]);
     };
+
+    const handleTransferAndLeave = (selectedMember: any) => {
+        Alert.alert(
+            "Chuyển quyền và rời nhóm",
+            `Bạn sẽ chuyển quyền Trưởng nhóm cho ${selectedMember.displayName || "người này"} và rời nhóm ngay lập tức?`,
+            [
+                { text: "Hủy", style: "cancel" },
+                {
+                    text: "Đồng ý",
+                    style: "destructive",
+                    onPress: async () => {
+                        setTransferringId(selectedMember.userId);
+                        try {
+                            // Gọi API 1: Phân quyền
+                            await groupApi.assignRole(
+                                conversationId as string,
+                                selectedMember.userId,
+                                "OWNER" as any,
+                            );
+
+                            // Gọi API 2: Rời nhóm
+                            await groupApi.leaveGroup(conversationId as string);
+
+                            setIsTransferModalVisible(false);
+                            router.replace("/(tabs)/message" as any);
+                        } catch (error: any) {
+                            console.log(
+                                "[GroupOption] Transfer & Leave error:",
+                                error,
+                            );
+                            Alert.alert(
+                                "Lỗi",
+                                "Không thể thực hiện chuyển quyền hoặc rời nhóm.",
+                            );
+                        } finally {
+                            setTransferringId(null);
+                        }
+                    },
+                },
+            ],
+        );
+    };
+    // ----------------------------------------
 
     const handleUpdateGroupName = async () => {
         const newName = tempGroupName.trim();
@@ -232,18 +276,17 @@ export default function GroupChatOptionsScreen() {
 
         try {
             const result = await ImagePicker.launchImageLibraryAsync({
-                mediaTypes: "images", // Dùng chữ thường để tránh cảnh báo của Expo
+                mediaTypes: "images",
                 allowsEditing: true,
                 aspect: [1, 1],
-                quality: 0.3, // Nén ảnh xuống 30% để chuỗi Base64 không bị quá nặng gây sập server
-                base64: true, // KÍCH HOẠT CHẾ ĐỘ XUẤT BASE64
+                quality: 0.3,
+                base64: true,
             });
 
             if (!result.canceled && result.assets[0]) {
                 setUpdatingAvatar(true);
                 const asset = result.assets[0];
 
-                // Kiểm tra xem có lấy được base64 không
                 if (!asset.base64) {
                     Alert.alert(
                         "Lỗi",
@@ -252,21 +295,17 @@ export default function GroupChatOptionsScreen() {
                     return;
                 }
 
-                // 1. Tạo chuỗi Data URL Base64 theo chuẩn
                 const mimeType =
                     asset.mimeType ||
                     (asset.uri.endsWith(".png") ? "image/png" : "image/jpeg");
                 const base64String = `data:${mimeType};base64,${asset.base64}`;
 
-                // 2. Gửi chuỗi Base64 này thẳng lên API updateGroupAvatar thay vì gửi đường dẫn https
-                // Chú ý: Ở file groupApi.ts, hàm này phải nhận 'groupAvatarUrl' là chuỗi (string)
                 await groupApi.updateGroupAvatar(
                     conversationId,
                     currentUserId,
                     base64String,
                 );
 
-                // 3. Cập nhật UI tạm bằng đường dẫn local để giao diện mượt mà
                 setGroupAvatar(asset.uri);
                 Alert.alert("Thành công", "Đã cập nhật ảnh nhóm.");
             }
@@ -540,6 +579,85 @@ export default function GroupChatOptionsScreen() {
                                 )}
                             </TouchableOpacity>
                         </View>
+                    </View>
+                </View>
+            </Modal>
+
+            {/* MODAL CHỌN TRƯỞNG NHÓM MỚI (CHỈ OWNER MỚI THẤY) */}
+            <Modal
+                visible={isTransferModalVisible}
+                animationType="slide"
+                transparent
+            >
+                <View className="flex-1 bg-black/50 justify-end">
+                    <View className="bg-white rounded-t-2xl p-5 max-h-[80%]">
+                        <View className="flex-row justify-between items-center mb-4">
+                            <Text className="text-lg font-bold text-black">
+                                Chọn trưởng nhóm mới
+                            </Text>
+                            <TouchableOpacity
+                                onPress={() => setIsTransferModalVisible(false)}
+                            >
+                                <X size={24} color="black" />
+                            </TouchableOpacity>
+                        </View>
+                        <Text className="text-gray-500 mb-4 text-sm">
+                            Bạn đang là Trưởng nhóm. Vui lòng chuyển quyền cho
+                            một thành viên khác trước khi rời đi.
+                        </Text>
+
+                        <ScrollView showsVerticalScrollIndicator={false}>
+                            {membersList
+                                .filter(
+                                    (m) =>
+                                        String(m.userId) !==
+                                        String(currentUserId),
+                                )
+                                .map((member) => (
+                                    <TouchableOpacity
+                                        key={member.userId}
+                                        className="flex-row items-center py-3 border-b border-gray-100"
+                                        onPress={() =>
+                                            handleTransferAndLeave(member)
+                                        }
+                                        disabled={transferringId !== null}
+                                    >
+                                        {member.avatarUrl ? (
+                                            <Image
+                                                source={{
+                                                    uri: member.avatarUrl,
+                                                }}
+                                                className="w-12 h-12 rounded-full mr-3 bg-gray-200"
+                                            />
+                                        ) : (
+                                            <View className="w-12 h-12 rounded-full bg-blue-400 items-center justify-center mr-3">
+                                                <Text className="text-white font-bold text-lg">
+                                                    {member.displayName
+                                                        ?.charAt(0)
+                                                        ?.toUpperCase() || "U"}
+                                                </Text>
+                                            </View>
+                                        )}
+                                        <View className="flex-1 justify-center">
+                                            <Text className="text-base font-medium text-black">
+                                                {member.displayName}
+                                            </Text>
+                                            {member.role === "ADMIN" && (
+                                                <Text className="text-[13px] text-blue-500 mt-0.5">
+                                                    Phó nhóm
+                                                </Text>
+                                            )}
+                                        </View>
+
+                                        {transferringId === member.userId && (
+                                            <ActivityIndicator
+                                                size="small"
+                                                color="#3b82f6"
+                                            />
+                                        )}
+                                    </TouchableOpacity>
+                                ))}
+                        </ScrollView>
                     </View>
                 </View>
             </Modal>

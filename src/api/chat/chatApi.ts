@@ -68,7 +68,7 @@ chatClient.interceptors.request.use(
 
             return config;
         } catch (error) {
-            console.error("[chatClient] request interceptor error:", error);
+            console.log("[chatClient] request interceptor error:", error);
             return config;
         }
     },
@@ -83,9 +83,9 @@ chatClient.interceptors.response.use(
 
         // Detect and handle CORS errors
         if (error?.message === "Network Error" && !error?.response) {
-            console.error("[chatClient] CORS or Network Error detected");
-            console.error("[chatClient] Attempted URL:", error?.config?.url);
-            console.error(
+            console.warn("[chatClient] CORS or Network Error detected");
+            console.warn("[chatClient] Attempted URL:", error?.config?.url);
+            console.warn(
                 "[chatClient] Origin:",
                 typeof window !== "undefined" ? window.location.origin : "N/A",
             );
@@ -103,7 +103,7 @@ chatClient.interceptors.response.use(
             }
         }
 
-        console.error("[chatClient] response error:", {
+        console.log("[chatClient] response error:", {
             status,
             message,
             url: error?.config?.url,
@@ -127,13 +127,53 @@ export const isGroupConversation = (value: any) => {
             "",
     ).toLowerCase();
 
-    return (
-        type === "group" ||
-        !!value?.groupName ||
-        !!value?.groupAvatarUrl ||
-        Array.isArray(value?.participants) ||
-        !!value?.memberRoles
-    );
+    // Cách detect group từ API response:
+    // 1. Nếu có explicit type === 'group'
+    // 2. Hoặc nếu counterpartId === conversationId (group pattern)
+    // 3. Hoặc có các field group-specific
+
+    const hasExplicitGroupType = type === "group";
+    const hasGroupName = !!value?.groupName;
+    const hasGroupAvatar = !!value?.groupAvatarUrl;
+    const hasParticipants = Array.isArray(value?.participants);
+    const hasMemberRoles = !!value?.memberRoles;
+
+    // KEY PATTERN: counterpartId === conversationId là group
+    const isGroupByIdPattern =
+        value?.counterpartId &&
+        value?.conversationId &&
+        value?.counterpartId === value?.conversationId;
+
+    const result =
+        hasExplicitGroupType ||
+        hasGroupName ||
+        hasGroupAvatar ||
+        hasParticipants ||
+        hasMemberRoles ||
+        isGroupByIdPattern;
+
+    if (!result) {
+        console.log("[DEBUG isGroupConversation] Not detected as group:", {
+            conversationType: value?.conversationType,
+            type: value?.type,
+            groupName: value?.groupName,
+            counterpartId: value?.counterpartId,
+            conversationId: value?.conversationId,
+            isGroupByIdPattern,
+            counterpartName: value?.counterpartName,
+        });
+    } else {
+        console.log("[DEBUG isGroupConversation] DETECTED AS GROUP:", {
+            counterpartName: value?.counterpartName,
+            reason: hasExplicitGroupType
+                ? "explicit type"
+                : isGroupByIdPattern
+                  ? "id pattern"
+                  : "other field",
+        });
+    }
+
+    return result;
 };
 
 function collectNestedStringValues(
@@ -216,11 +256,11 @@ export const normalizeConversationIdentity = <T extends Record<string, any>>(
             ? "group"
             : value?.conversationType || value?.type || "direct",
         isGroup: group,
-        groupName: value?.groupName || (group ? counterpartName : ""),
+        groupName: value?.groupName || (group ? value?.counterpartName : ""),
         groupAvatarUrl: value?.groupAvatarUrl || "",
         counterpartId,
         counterpartName: group
-            ? value?.groupName || counterpartName
+            ? value?.counterpartName || counterpartName
             : counterpartName,
         counterpartAvatarUrl: group
             ? value?.groupAvatarUrl || counterpartAvatarUrl
@@ -261,7 +301,7 @@ const request = async <T>(
             `Request failed with status code ${status}`;
 
         // Enhanced error logging for debugging
-        console.error(`[chatApi] ${path} error:`, {
+        console.log(`[chatApi] ${path} error:`, {
             message,
             status,
             data,

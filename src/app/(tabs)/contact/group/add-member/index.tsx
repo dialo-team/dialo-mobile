@@ -288,15 +288,34 @@ export default function AddMemberToGroup() {
         if (isAdding || !currentUserId || !conversationId) return;
 
         setIsAdding(true);
+
+        // 1. Phải tính toán memberIds trước
+        const memberIds = selectedUsers.map((user) => user.counterpartId);
+
+        // 2. Đặt console.log ở ĐÂY (sau khi đã có memberIds)
+        console.log("=== THÔNG TIN GỬI LÊN BE ===");
+        console.log("conversationId:", conversationId);
+        console.log("currentUserId (X-User-Id):", currentUserId);
+        console.log("memberIds:", memberIds);
+        console.log("============================");
+
         try {
-            const memberIds = selectedUsers.map((user) => user.counterpartId);
+            // 3. Tiến hành gọi API
             await groupApi.addMembers(conversationId, currentUserId, memberIds);
 
             Alert.alert("Thành công", "Đã thêm thành viên vào nhóm!");
-            router.back(); // Thêm thành công thì quay lại trang tùy chọn nhóm
+            router.back();
         } catch (error: any) {
-            console.error("[AddMember] Error adding members:", error);
-            Alert.alert("Lỗi", error?.message || "Không thể thêm thành viên.");
+            // 4. Log chi tiết data từ Backend gửi về (nếu có lỗi 500 thì sẽ lòi ra ở đây)
+            console.error(
+                "[AddMember] Chi tiết lỗi:",
+                error?.response?.status,
+                JSON.stringify(error?.response?.data, null, 2),
+            );
+            Alert.alert(
+                "Lỗi",
+                error?.response?.data?.message || "Không thể thêm thành viên.",
+            );
         } finally {
             setIsAdding(false);
         }

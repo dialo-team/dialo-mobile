@@ -103,10 +103,25 @@ export default function ContactsScreen() {
                     const normalizedGroups = (
                         Array.isArray(conversationsRes) ? conversationsRes : []
                     )
-                        .map((conversation) =>
-                            normalizeConversationIdentity(conversation),
-                        )
-                        .filter((conversation) => conversation.isGroup)
+                        .map((conversation) => {
+                            const normalized =
+                                normalizeConversationIdentity(conversation);
+                            console.log("[DEBUG] Conversation normalized:", {
+                                counterpartName: conversation.counterpartName,
+                                isGroup: normalized.isGroup,
+                                groupName: normalized.groupName,
+                            });
+                            return normalized;
+                        })
+                        .filter((conversation) => {
+                            const isGroupFinal = conversation.isGroup;
+                            console.log(
+                                "[DEBUG] Filter isGroup:",
+                                isGroupFinal,
+                                conversation.counterpartName,
+                            );
+                            return isGroupFinal;
+                        })
                         .map((conversation) => ({
                             ...conversation,
                             counterpartName: pickBestDisplayName(
@@ -481,8 +496,14 @@ export default function ContactsScreen() {
                                 {/* THÊM MỚI: Thanh tiêu đề số lượng nhóm */}
                                 <View className="flex-row items-center justify-between px-4 py-2 border-y border-gray-100 bg-gray-50/50">
                                     <Text className="text-black font-medium text-[13px]">
-                                        Nhóm đang tham gia (
-                                        {filteredGroups.length})
+                                        Nhóm đang tham gia ({groups.length})
+                                        {searchText && (
+                                            <Text className="text-gray-500">
+                                                {" "}
+                                                · Tìm thấy (
+                                                {filteredGroups.length})
+                                            </Text>
+                                        )}
                                     </Text>
                                     <View className="flex-row items-center">
                                         <Text className="text-gray-500 text-[13px]">

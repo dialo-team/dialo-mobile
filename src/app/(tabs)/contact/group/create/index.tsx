@@ -101,6 +101,7 @@ export default function CreateGroup() {
 
             const recentMapped = await Promise.all(
                 conversationList.map(async (conversation: any) => {
+                    // Detect group: counterpartId === conversationId (group pattern from API)
                     const isGroup =
                         conversation?.isGroup === true ||
                         String(
@@ -108,10 +109,32 @@ export default function CreateGroup() {
                                 conversation?.type ||
                                 "",
                         ).toLowerCase() === "group" ||
-                        !!conversation?.groupName;
+                        !!conversation?.groupName ||
+                        (conversation?.counterpartId &&
+                            conversation?.conversationId &&
+                            conversation?.counterpartId ===
+                                conversation?.conversationId);
 
                     if (isGroup) return null;
                     if (!conversation?.counterpartId) return null;
+
+                    console.log("[DEBUG CreateGroup] Raw conversation data:", {
+                        conversationId: conversation?.conversationId,
+                        counterpartId: conversation?.counterpartId,
+                        isGroupByPattern:
+                            conversation?.counterpartId ===
+                            conversation?.conversationId,
+                        counterpartName: conversation?.counterpartName,
+                        counterpartUserName: conversation?.counterpartUserName,
+                        displayName: conversation?.displayName,
+                        userName: conversation?.userName,
+                        name: conversation?.name,
+                        fullName: conversation?.fullName,
+                        remarkName: conversation?.remarkName,
+                        counterpartAvatarUrl: conversation?.counterpartAvatarUrl
+                            ? "✓"
+                            : "✗",
+                    });
 
                     const baseName = pickBestDisplayName(
                         [
@@ -126,6 +149,14 @@ export default function CreateGroup() {
                         "Người dùng",
                     );
 
+                    console.log(
+                        "[DEBUG CreateGroup] pickBestDisplayName result:",
+                        {
+                            baseName,
+                            isDefaultFallback: baseName === "Người dùng",
+                        },
+                    );
+
                     const baseAvatar =
                         conversation?.counterpartAvatarUrl ||
                         conversation?.counterpartAvatar ||
@@ -138,6 +169,13 @@ export default function CreateGroup() {
                         "";
 
                     if (baseName !== "Người dùng" && baseAvatar) {
+                        console.log(
+                            "[DEBUG CreateGroup] Using baseName from conversation:",
+                            {
+                                baseName,
+                                counterpartId: conversation.counterpartId,
+                            },
+                        );
                         return {
                             counterpartId: String(conversation.counterpartId),
                             counterpartName: baseName,
@@ -147,11 +185,42 @@ export default function CreateGroup() {
                     }
 
                     try {
+                        console.log(
+                            "[DEBUG CreateGroup] Fallback to getUserById:",
+                            {
+                                counterpartId: conversation.counterpartId,
+                                reason:
+                                    baseName === "Người dùng"
+                                        ? "no name"
+                                        : "no avatar",
+                            },
+                        );
+
                         const userRes = await friendApi.getUserById(
                             conversation.counterpartId,
                         );
                         const profile = userRes?.data || userRes;
+
+                        console.log(
+                            "[DEBUG CreateGroup] getUserById response:",
+                            {
+                                profile: profile ? Object.keys(profile) : null,
+                                displayName: profile?.displayName,
+                                fullName: profile?.fullName,
+                                userName: profile?.userName,
+                                name: profile?.name,
+                            },
+                        );
+
                         const display = buildProfileDisplay(profile);
+
+                        console.log(
+                            "[DEBUG CreateGroup] buildProfileDisplay result:",
+                            {
+                                name: display.name,
+                                avatar: display.avatar ? "✓" : "✗",
+                            },
+                        );
 
                         return {
                             counterpartId: String(conversation.counterpartId),
@@ -162,7 +231,15 @@ export default function CreateGroup() {
                             counterpartAvatarUrl: baseAvatar || display.avatar,
                             lastMessageAt: conversation.lastMessageAt,
                         };
-                    } catch {
+                    } catch (error) {
+                        console.log(
+                            "[DEBUG CreateGroup] Error in getUserById, falling back:",
+                            {
+                                counterpartId: conversation.counterpartId,
+                                error: String(error),
+                                baseName,
+                            },
+                        );
                         return {
                             counterpartId: String(conversation.counterpartId),
                             counterpartName: baseName,
@@ -175,6 +252,15 @@ export default function CreateGroup() {
 
             const recent = recentMapped.filter(Boolean) as SelectableUser[];
             const recentIds = new Set(recent.map((item) => item.counterpartId));
+
+            console.log(
+                "[DEBUG CreateGroup] Final recent users:",
+                recent.map((r) => ({
+                    id: r.counterpartId,
+                    name: r.counterpartName,
+                    avatar: r.counterpartAvatarUrl ? "✓" : "✗",
+                })),
+            );
 
             const contacts = (Array.isArray(contactsRes) ? contactsRes : [])
                 .map((item: any) => {
@@ -200,6 +286,15 @@ export default function CreateGroup() {
 
             const dedupedContacts = contacts.filter(
                 (item) => !recentIds.has(item.counterpartId),
+            );
+
+            console.log(
+                "[DEBUG CreateGroup] Final contacts (deduped):",
+                dedupedContacts.map((c) => ({
+                    id: c.counterpartId,
+                    name: c.counterpartName,
+                    avatar: c.counterpartAvatarUrl ? "✓" : "✗",
+                })),
             );
 
             setRecentUsers(recent);
