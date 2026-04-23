@@ -9,6 +9,11 @@ export type FriendStatus =
 
 // 2. Dữ liệu Người dùng / Profile (Đã bám sát log BE của bạn)
 export interface UserProfileResponse {
+    counterpartAvatarUrl: any;
+    groupName: any;
+    isGroup: any;
+    counterpartName: any;
+    groupAvatarUrl: any;
     id: string;
     userName?: string;
     name?: string; // Dự phòng
@@ -32,4 +37,20 @@ export interface FriendRequestItem {
     // Bạn định nghĩa sẵn ở đây để khi BE update API là Frontend ăn khớp luôn.
     userName?: string;
     avatar?: string;
+}
+
+type BlockedItem = {
+    id: string;
+    name: string;
+    avatar?: string;
+};
+
+// Interface khớp hoàn toàn với LOG của bạn
+interface ApiBlockedResponse {
+    blockId: string;
+    blockedUserId: string;
+    blockedUserName: string;
+    blockedAvatar: string | null;
+    reason: string | null;
+    createdAt: string;
 }

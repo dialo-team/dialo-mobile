@@ -49,115 +49,111 @@ export default function ContactsScreen() {
     useFocusEffect(
         useCallback(() => {
             let isMounted = true;
-
             const fetchData = async () => {
                 try {
                     setIsLoading(true);
+                    const timestamp = new Date().getTime();
 
                     const [
                         friendsResRaw,
                         pendingRes,
-                        blockedRes,
+                        blockedUsersList,
                         conversationsRes,
                     ] = await Promise.all([
                         connectionsApi.getFriendsList(),
                         friendApi.getPendingRequests(),
-                        connectionsApi.getBlockedList(),
+                        friendApi.getBlockedUsers(),
                         chatApi.getConversations(),
                     ]);
 
                     if (!isMounted) return;
 
+                    // --- PHẦN QUAN TRỌNG: Mapping Bạn bè không để mất data ---
                     const rawArray = Array.isArray(friendsResRaw)
                         ? friendsResRaw
                         : [];
+                    const mappedFriends = rawArray
+                        .map((item: any) => {
+                            // Backend có thể trả về thông tin nằm trong object 'friend', 'user' hoặc nằm ngoài cùng
+                            const u = item.friend || item.user || item;
 
-                    const mappedFriends = rawArray.map((item: any) => {
-                        const u = item.friend || item.user || item;
+                            return {
+                                id: String(
+                                    u.id ||
+                                        u.userId ||
+                                        item.friendId ||
+                                        item.id ||
+                                        "",
+                                ),
+                                name: pickBestDisplayName(
+                                    [
+                                        item.remarkName, // Ưu tiên tên gợi nhớ bạn đặt
+                                        u.displayName,
+                                        u.fullName,
+                                        u.userName,
+                                        item.friendUserName, // Trường từ log cũ của bạn
+                                        u.name,
+                                    ],
+                                    "Người dùng",
+                                ),
+                                avatar:
+                                    u.avatar ||
+                                    u.avatarUrl ||
+                                    item.friendAvatar ||
+                                    u.profilePicture ||
+                                    "",
+                            };
+                        })
+                        .filter((f) => f.id !== ""); // Chỉ lọc những người ko có ID, tuyệt đối ko lọc mất tên
 
-                        return {
-                            id:
-                                u.id ||
-                                u.userId ||
-                                item.friendId ||
-                                item.id ||
-                                Math.random().toString(),
-                            name: pickBestDisplayName(
-                                [
-                                    u.displayName,
-                                    u.fullName,
-                                    u.userName,
-                                    item.friendUserName,
-                                    u.name,
-                                ],
-                                "Người dùng",
-                            ),
-                            avatar:
-                                u.avatar ||
-                                u.avatarUrl ||
-                                item.friendAvatar ||
-                                "",
-                        };
-                    });
-
+                    // --- Mapping Nhóm (giữ nguyên logic chuẩn) ---
                     const normalizedGroups = (
                         Array.isArray(conversationsRes) ? conversationsRes : []
                     )
-                        .map((conversation) => {
-                            const normalized =
-                                normalizeConversationIdentity(conversation);
-                            console.log("[DEBUG] Conversation normalized:", {
-                                counterpartName: conversation.counterpartName,
-                                isGroup: normalized.isGroup,
-                                groupName: normalized.groupName,
-                            });
-                            return normalized;
-                        })
-                        .filter((conversation) => {
-                            const isGroupFinal = conversation.isGroup;
-                            console.log(
-                                "[DEBUG] Filter isGroup:",
-                                isGroupFinal,
-                                conversation.counterpartName,
-                            );
-                            return isGroupFinal;
-                        })
-                        .map((conversation) => ({
-                            ...conversation,
+                        .map((conversation) =>
+                            normalizeConversationIdentity(conversation),
+                        )
+                        .filter((conv) => conv.isGroup)
+                        .map((group) => ({
+                            ...group,
                             counterpartName: pickBestDisplayName(
                                 [
-                                    conversation.groupName,
-                                    conversation.counterpartName,
-                                    conversation.name,
+                                    group.groupName,
+                                    group.counterpartName,
+                                    group.name,
                                 ],
                                 "Nhóm",
                             ),
                             counterpartAvatarUrl:
-                                conversation.groupAvatarUrl ||
-                                conversation.counterpartAvatarUrl ||
+                                group.groupAvatarUrl ||
+                                group.counterpartAvatarUrl ||
                                 "",
                         }));
 
+                    // --- Cập nhật State ---
                     setContacts(mappedFriends);
                     setGroups(normalizedGroups);
 
                     const pData = pendingRes?.data || pendingRes || [];
                     setPendingCount(Array.isArray(pData) ? pData.length : 0);
                     setBlockedCount(
-                        Array.isArray(blockedRes) ? blockedRes.length : 0,
+                        Array.isArray(blockedUsersList)
+                            ? blockedUsersList.length
+                            : 0,
                     );
                 } catch (error) {
-                    console.error("Lỗi fetch danh bạ:", error);
+                    console.error("[ContactsScreen] Lỗi fetchData:", error);
                 } finally {
                     if (isMounted) setIsLoading(false);
                 }
             };
 
             fetchData();
+
             return () => {
-                isMounted = false;
+                isMounted = false; // Chống leak memory khi user chuyển sang tab khác nhanh
             };
-        }, []),
+        }, []), // Dependency rỗng để chỉ chạy khi màn hình được Focus
     );
 
     const groupContacts = (contactList: Contact[]) => {

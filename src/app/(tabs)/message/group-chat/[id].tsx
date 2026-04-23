@@ -47,6 +47,9 @@ type UiMessage = {
     isUnsent?: boolean;
     pending?: boolean;
     raw?: Message;
+    isFile?: boolean;
+    fileName?: string;
+    fileUrl?: string;
 };
 
 const paramToString = (value: string | string[] | undefined) => {
@@ -175,8 +178,8 @@ export default function GroupChatScreen() {
             const sId = extractValidId({ senderId: item?.senderId });
             const isMe =
                 sId !== "" && sId !== "null" && sId === String(cId).trim();
-            const fileUrl = item?.attachment?.fileUrl;
-
+            const hasAttachment =
+                !!item?.attachment?.fileUrl || !!item?.attachment?.fileName;
             const profile = sId ? profiles[sId] : null;
 
             return {
@@ -214,6 +217,11 @@ export default function GroupChatScreen() {
                     ),
                 pending: false,
                 raw: item,
+                isFile:
+                    hasAttachment && !["IMAGE", "VIDEO"].includes(item?.type),
+                fileName:
+                    item?.attachment?.fileName || item?.content || "Tài liệu",
+                fileUrl: resolveFileUrl(item?.attachment?.fileUrl),
             };
         },
         [],
@@ -343,10 +351,8 @@ export default function GroupChatScreen() {
         mapApiMessageToUi,
     ]);
 
-    const { handlePickMedia, handlePickFile } = useChatAttachments(
-        conversationId,
-        loadGroupConversation,
-    );
+    const { handlePickMedia, handlePickFile, handleOpenFile } =
+        useChatAttachments(conversationId, loadGroupConversation);
 
     useEffect(() => {
         (async () => {
@@ -522,7 +528,14 @@ export default function GroupChatScreen() {
                     </View>
 
                     <View className="flex-row items-center ml-9">
-                        <TouchableOpacity>
+                        <TouchableOpacity
+                            onPress={() => {
+                                router.push({
+                                    pathname: "/contact/group/add-member",
+                                    params: { conversationId },
+                                });
+                            }}
+                        >
                             <UserPlus size={22} color="white" />
                         </TouchableOpacity>
                         <TouchableOpacity style={{ marginLeft: 10 }}>
@@ -582,8 +595,14 @@ export default function GroupChatScreen() {
                                 <TouchableOpacity
                                     activeOpacity={0.85}
                                     onPress={() => {
-                                        if (msg.imageUri || msg.videoUri)
+                                        if (msg.imageUri || msg.videoUri) {
                                             setViewingMediaMessage(msg);
+                                        } else if (msg.isFile && msg.fileUrl) {
+                                            handleOpenFile(
+                                                msg.fileUrl,
+                                                msg.fileName,
+                                            );
+                                        }
                                     }}
                                     onLongPress={() =>
                                         !msg.isUnsent &&

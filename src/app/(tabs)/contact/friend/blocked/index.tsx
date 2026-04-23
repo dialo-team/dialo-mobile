@@ -1,5 +1,4 @@
-import { connectionsApi } from "@/src/api/friend/connectionsApi";
-import { friendApi } from "@/src/api/friend/friendApi";
+import { extractBlockedUserId, friendApi } from "@/src/api/friend/friendApi";
 import { useFocusEffect, useRouter } from "expo-router";
 import { MoveLeft, UserX } from "lucide-react-native";
 import React, { useCallback, useState } from "react";
@@ -31,26 +30,37 @@ export default function BlockedUsersScreen() {
     const loadBlockedUsers = useCallback(async () => {
         setLoading(true);
         try {
-            const data = await connectionsApi.getBlockedList();
-            const mapped = (Array.isArray(data) ? data : []).map(
-                (item: any) => ({
-                    id: item?.id || item?.friendId || "",
+            const data = await friendApi.getBlockedUsers();
+
+            console.log(
+                "[DEBUG] Raw Blocked Data:",
+                JSON.stringify(data[0], null, 2),
+            );
+
+            const mapped = data.map((item: any) => {
+                // Lấy ID dùng hàm helper đã có
+                const id = extractBlockedUserId(item);
+                return {
+                    id: id,
                     name:
-                        item?.name ||
-                        item?.userName ||
-                        item?.friendUserName ||
+                        item.blockedUserName ||
+                        item.name ||
+                        item.userName ||
                         "Người dùng",
                     avatar:
-                        item?.avatar ||
-                        item?.avatarUrl ||
-                        item?.friendAvatar ||
+                        item.blockedAvatar ||
+                        item.avatarUrl ||
+                        item.avatar ||
                         "",
-                }),
-            );
-            setBlockedUsers(mapped.filter((item) => !!item.id));
-        } catch {
-            Alert.alert("Lỗi", "Không thể tải danh sách đã chặn.");
-            setBlockedUsers([]);
+                };
+            });
+
+            const finalData = mapped.filter((item) => item.id !== "");
+            console.log("[DEBUG] Final Mapped Data for UI:", finalData);
+
+            setBlockedUsers(finalData);
+        } catch (error) {
+            console.error("Load blocked list error:", error);
         } finally {
             setLoading(false);
         }
@@ -124,9 +134,6 @@ export default function BlockedUsersScreen() {
                             <View className="flex-1 ml-3">
                                 <Text className="text-base font-medium text-black">
                                     {item.name}
-                                </Text>
-                                <Text className="text-xs text-gray-500 mt-1">
-                                    ID: {item.id}
                                 </Text>
                             </View>
 

@@ -182,40 +182,73 @@ export default function ChatScreen() {
     const [isBlockedByThem, setIsBlockedByThem] = useState(false);
     const [showEmojiMenu, setShowEmojiMenu] = useState(false);
 
+    // ✅ FIX 1: Helper function để load block status (có thể gọi từ nhiều nơi)
+    const loadBlockStatusForUser = useCallback(
+        async (
+            userId: string,
+        ): Promise<{
+            blockedByMe: boolean;
+            blockedByThem: boolean;
+        }> => {
+            if (!userId) {
+                return { blockedByMe: false, blockedByThem: false };
+            }
+
+            let blockedByMe = false;
+            let blockedByThem = false;
+
+            try {
+                // 1. Kiểm tra xem TÔI có đang chặn HỌ không
+                blockedByMe = await friendApi.isUserBlocked(userId);
+
+                // 2. CHỦ ĐỘNG KIỂM TRA xem TÔI CÓ BỊ HỌ CHẶN KHÔNG
+                const relation = await friendApi.checkStatus(userId);
+                const relData = relation?.data || relation;
+
+                if (
+                    relData?.status === "BLOCKED" ||
+                    relData?.isBlockedByThem === true ||
+                    relData?.blockedBy === userId
+                ) {
+                    blockedByThem = true;
+                } else {
+                    blockedByThem = false;
+                }
+            } catch (error: any) {
+                console.log(
+                    "[ChatScreen] loadBlockStatusForUser error:",
+                    error,
+                );
+                // Nếu BE quăng lỗi 403 khi cố check status -> khả năng cao là bị chặn
+                if (error?.response?.status === 403) {
+                    blockedByThem = true;
+                }
+            }
+
+            return { blockedByMe, blockedByThem };
+        },
+        [],
+    );
+
     useFocusEffect(
         useCallback(() => {
             let mounted = true;
+
             const loadBlockStatus = async () => {
                 if (!counterpartId) {
-                    if (mounted) setIsBlockedByMe(false);
+                    if (mounted) {
+                        setIsBlockedByMe(false);
+                        setIsBlockedByThem(false);
+                    }
                     return;
                 }
-                try {
-                    // 1. Kiểm tra xem TÔI có đang chặn HỌ không
-                    const blocked =
-                        await friendApi.isUserBlocked(counterpartId);
-                    if (mounted) setIsBlockedByMe(blocked);
 
-                    // 2. CHỦ ĐỘNG KIỂM TRA xem TÔI CÓ BỊ HỌ CHẶN KHÔNG
-                    const relation = await friendApi.checkStatus(counterpartId);
-                    const relData = relation?.data || relation;
+                const { blockedByMe, blockedByThem } =
+                    await loadBlockStatusForUser(counterpartId);
 
-                    // (Tuỳ vào BE của bạn trả về field gì, thường là status = BLOCKED)
-                    if (
-                        relData?.status === "BLOCKED" ||
-                        relData?.isBlockedByThem === true ||
-                        relData?.blockedBy === counterpartId
-                    ) {
-                        if (mounted) setIsBlockedByThem(true);
-                    } else {
-                        if (mounted) setIsBlockedByThem(false);
-                    }
-                } catch (error: any) {
-                    console.log("[ChatScreen] loadBlockStatus error");
-                    // Nếu BE quăng lỗi 403 khi cố check status -> khả năng cao là bị chặn
-                    if (error?.response?.status === 403) {
-                        if (mounted) setIsBlockedByThem(true);
-                    }
+                if (mounted) {
+                    setIsBlockedByMe(blockedByMe);
+                    setIsBlockedByThem(blockedByThem);
                 }
             };
 
@@ -224,8 +257,25 @@ export default function ChatScreen() {
             return () => {
                 mounted = false;
             };
-        }, [counterpartId]),
+        }, [counterpartId, loadBlockStatusForUser]),
     );
+
+    // ✅ FIX 2: Re-filter messages khi isBlockedByMe thay đổi
+    useEffect(() => {
+        if (counterpartId && isBlockedByMe) {
+            setMessages((prev) =>
+                prev.filter((msg: any) => {
+                    const msgCounterpartId =
+                        msg?.raw?.senderId || msg?.senderId;
+                    // Lọc bỏ message từ user bị chặn
+                    if (msgCounterpartId === counterpartId) {
+                        return false;
+                    }
+                    return true;
+                }),
+            );
+        }
+    }, [isBlockedByMe, counterpartId]);
 
     const handleUnblock = async () => {
         if (!counterpartId) return;
@@ -370,7 +420,10 @@ export default function ChatScreen() {
 
         setLoading(true);
 
-        const updateConversationState = async (detail: any) => {
+        const updateConversationState = async (
+            detail: any,
+            blockStatus: { blockedByMe: boolean; blockedByThem: boolean },
+        ) => {
             const rawCounterpartName = detail?.counterpartName || "";
 
             const isPhoneNumber = /^\+?\d{8,15}$/.test(
@@ -457,11 +510,28 @@ export default function ChatScreen() {
 
             realNameRef.current = counterpartDisplayName;
 
+            // ✅ FIX 3: Sử dụng blockStatus từ parameter (đã được load trước)
             const mapped = dedupeMessages(
                 Array.isArray(detail?.messages)
-                    ? detail.messages.map(mapApiMessageToUi)
+                    ? detail.messages
+                          .filter((msg: any) => {
+                              // ✅ NẾU TÔI ĐÃ CHẶN USER → BỎ MESSAGE CỦA HỌ
+                              if (
+                                  blockStatus.blockedByMe &&
+                                  msg.senderId === counterpartId
+                              ) {
+                                  console.log(
+                                      "[ChatScreen] Filtering out message from blocked user:",
+                                      msg.id,
+                                  );
+                                  return false;
+                              }
+                              return true;
+                          })
+                          .map(mapApiMessageToUi)
                     : [],
             );
+
             setMessages(mapped);
             setCounterpartId(
                 detail?.counterpartId || detail?.targetUserId || "",
@@ -483,6 +553,10 @@ export default function ChatScreen() {
                     detail?.isOnline,
                 ),
             );
+
+            // ✅ FIX 4: Cập nhật block status từ kết quả
+            setIsBlockedByMe(blockStatus.blockedByMe);
+            setIsBlockedByThem(blockStatus.blockedByThem);
         };
 
         try {
@@ -491,7 +565,18 @@ export default function ChatScreen() {
                 setResolvedConversationId(conversationKey);
             }
 
-            updateConversationState(detail);
+            // ✅ FIX 5: LOAD BLOCK STATUS TRƯỚC KHI LOAD MESSAGES
+            const counterpartId =
+                detail?.counterpartId || detail?.targetUserId || "";
+            const blockStatus = await loadBlockStatusForUser(counterpartId);
+
+            // Cập nhật state với block status
+            if (counterpartId) {
+                setIsBlockedByMe(blockStatus.blockedByMe);
+                setIsBlockedByThem(blockStatus.blockedByThem);
+            }
+
+            updateConversationState(detail, blockStatus);
             chatApi.markRead(conversationKey);
         } catch (error: any) {
             if (targetUserId && conversationKey === targetUserId) {
@@ -502,7 +587,10 @@ export default function ChatScreen() {
                         setResolvedConversationId(resolvedId);
                         const detail =
                             await chatApi.getConversationDetail(resolvedId);
-                        await updateConversationState(detail);
+                        // ✅ FIX 6: Load block status cũng trong catch block
+                        const blockStatus =
+                            await loadBlockStatusForUser(targetUserId);
+                        await updateConversationState(detail, blockStatus);
                         await chatApi.markRead(resolvedId);
                         return;
                     }
@@ -521,7 +609,13 @@ export default function ChatScreen() {
         } finally {
             setLoading(false);
         }
-    }, [mapApiMessageToUi, name, normalizedConversationId, targetUserId]);
+    }, [
+        mapApiMessageToUi,
+        name,
+        normalizedConversationId,
+        targetUserId,
+        loadBlockStatusForUser,
+    ]);
 
     const { handlePickMedia, handlePickFile, handleOpenFile } =
         useChatAttachments(normalizedConversationId, loadConversationDetail);
@@ -598,19 +692,24 @@ export default function ChatScreen() {
             }
 
             if (incoming?.id) {
+                // ✅ NẾU TÔI ĐÃ CHẶN NGƯỜI GỬI → BỎ MESSAGE
+                if (isBlockedByMe && incoming.senderId === counterpartId) {
+                    console.log("[ChatScreen] Drop message from blocked user");
+                    return;
+                }
+
                 mergeIncomingMessage(incoming);
 
                 if (normalizedConversationId) {
-                    chatApi.markRead(normalizedConversationId).catch((err) => {
-                        console.log("[ChatScreen] Mark read error:", err);
-                    });
+                    chatApi.markRead(normalizedConversationId).catch(() => {});
                 }
                 return;
             }
-
             loadConversationDetail();
         },
         [
+            counterpartId,
+            isBlockedByMe,
             loadConversationDetail,
             mergeIncomingMessage,
             normalizedConversationId,
@@ -688,6 +787,7 @@ export default function ChatScreen() {
                 error?.response?.data?.message || "",
             ).toLowerCase();
 
+            // ✅ FIX 7: Cải thiện error handling khi bị chặn
             // Mở rộng điều kiện: 403 hoặc có chứa chữ block/chặn
             if (
                 status === 403 ||
@@ -698,7 +798,11 @@ export default function ChatScreen() {
                 setMessages((prev) =>
                     prev.filter((item) => item.id !== optimisticId),
                 );
-                // Không cần alert nữa vì UI tự động nhảy dòng "Đã chặn tin nhắn của bạn"
+                // ✅ Thêm alert để B biết mình bị chặn
+                Alert.alert(
+                    "Không thể gửi",
+                    "Bạn không thể gửi tin nhắn vì đã bị chặn hoặc người này đã chặn bạn.",
+                );
                 return;
             }
 

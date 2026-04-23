@@ -52,156 +52,129 @@ export default function MessagesScreen() {
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState("");
     const [currentUserId, setCurrentUserId] = useState("");
+    const [blockedUserIds, setBlockedUserIds] = useState<Set<string>>(
+        new Set(),
+    );
     const refreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const listEntrance = useRef(new Animated.Value(0)).current;
 
-    const loadConversations = useCallback(async () => {
-        const data = await chatApi.getConversations();
-        const list = Array.isArray(data) ? data : [];
+    const loadConversations = useCallback(
+        async (currentBlockedIds?: Set<string>) => {
+            if (!currentUserId) return;
+            setLoading(true);
 
-        // LỌC: Chỉ giữ lại những cuộc trò chuyện KHÔNG bị giải tán
-        const activeList = list.filter((conv: any) => conv.dissolved !== true);
-        if (!currentUserId) {
-            setConversations([]);
-            setError("Bạn chưa đăng nhập hoặc phiên đã hết hạn.");
-            return;
-        }
+            try {
+                const response = await chatApi.getConversations();
+                const rawList = Array.isArray(response)
+                    ? response
+                    : (response as any)?.data || [];
 
-        setLoading(true);
-        setError("");
-        try {
-            console.log("[MessagesScreen] Loading conversations...");
-            const response = await chatApi.getConversations();
-            // 1. Lấy mảng dữ liệu gốc
-            const rawList = Array.isArray(response)
-                ? response
-                : (response as any)?.data || [];
+                const activeList = rawList.filter((conv: any) => {
+                    const isDissolved = conv.dissolved === true;
+                    const isDissolveSystemMessage =
+                        conv.lastMessageSystem === true &&
+                        conv.lastMessage === "Nhóm đã được giải tán";
+                    return !isDissolved && !isDissolveSystemMessage;
+                });
 
-            // 2. LỌC BỎ các nhóm đã giải tán
-            // Chúng ta lọc dựa trên cờ dissolved hoặc nội dung tin nhắn hệ thống cuối cùng
-            const activeList = rawList.filter((conv: any) => {
-                // Cách 1: Dựa vào thuộc tính dissolved (Khuyên dùng)
-                const isDissolved = conv.dissolved === true;
-
-                // Cách 2: Backup nếu Backend chưa trả cờ dissolved trong list (Dựa vào log bạn gửi)
-                const isDissolveSystemMessage =
-                    conv.lastMessageSystem === true &&
-                    conv.lastMessage === "Nhóm đã được giải tán";
-
-                return !isDissolved && !isDissolveSystemMessage;
-            });
-
-            const extractProfileDisplayInfo = (profile: any) => ({
-                name: pickBestDisplayName(
-                    [
-                        profile?.userName,
-                        profile?.username,
-                        profile?.name,
-                        profile?.displayName,
-                        profile?.nickName,
-                        profile?.nickname,
-                        profile?.fullName,
-                    ],
-                    "Nguoi dung",
-                ),
-                avatar:
-                    profile?.avatarUrl ||
-                    profile?.avatar ||
-                    profile?.profilePictureUrl ||
-                    profile?.profilePicture ||
-                    profile?.photoUrl ||
-                    profile?.imageUrl ||
-                    "",
-            });
-
-            const enriched = await Promise.all(
-                activeList.map(async (conversation: any) => {
-                    const baseName = pickBestDisplayName(
+                const extractProfileDisplayInfo = (profile: any) => ({
+                    name: pickBestDisplayName(
                         [
-                            conversation.counterpartName,
-                            conversation.remarkName,
-                            conversation.counterpartUserName,
-                            conversation.displayName,
-                            conversation.userName,
-                            conversation.name,
-                            conversation.fullName,
+                            profile?.userName,
+                            profile?.username,
+                            profile?.name,
+                            profile?.displayName,
+                            profile?.nickName,
+                            profile?.nickname,
+                            profile?.fullName,
                         ],
-                        "Nguoi dung",
-                    );
+                        "Người dùng",
+                    ),
+                    avatar:
+                        profile?.avatarUrl ||
+                        profile?.avatar ||
+                        profile?.profilePictureUrl ||
+                        "",
+                });
 
-                    const baseAvatar =
-                        conversation.counterpartAvatarUrl ||
-                        conversation.counterpartAvatar ||
-                        conversation.profilePictureUrl ||
-                        conversation.profilePicture ||
-                        conversation.photoUrl ||
-                        conversation.imageUrl ||
-                        conversation.avatarUrl ||
-                        conversation.avatar ||
-                        "";
-
-                    const needsLookup =
-                        !baseName || baseName === "Nguoi dung" || !baseAvatar;
-
-                    if (!needsLookup || !conversation.counterpartId) {
-                        return {
-                            ...conversation,
-                            counterpartName: baseName,
-                            counterpartAvatarUrl: baseAvatar,
-                        };
-                    }
-
-                    try {
-                        const userRes = await friendApi.getUserById(
-                            conversation.counterpartId,
+                const enriched = await Promise.all(
+                    activeList.map(async (conversation: any) => {
+                        const baseName = pickBestDisplayName(
+                            [
+                                conversation.counterpartName,
+                                conversation.remarkName,
+                                conversation.counterpartUserName,
+                                conversation.displayName,
+                            ],
+                            "Người dùng",
                         );
-                        const profile = userRes?.data || userRes;
-                        const profileDisplay =
-                            extractProfileDisplayInfo(profile);
 
-                        return {
-                            ...conversation,
-                            counterpartName:
-                                baseName !== "Nguoi dung"
-                                    ? baseName
-                                    : profileDisplay.name,
-                            counterpartAvatarUrl:
-                                baseAvatar || profileDisplay.avatar,
-                        };
-                    } catch {
-                        return {
-                            ...conversation,
-                            counterpartName: baseName,
-                            counterpartAvatarUrl: baseAvatar,
-                        };
-                    }
-                }),
-            );
+                        const baseAvatar =
+                            conversation.counterpartAvatarUrl ||
+                            conversation.avatarUrl ||
+                            "";
 
-            console.log(
-                "[MessagesScreen] Loaded conversations:",
-                enriched?.length,
-            );
-            setConversations(enriched);
-        } catch (e: any) {
-            let errorMsg =
-                e?.message || "Không thể tải danh sách cuộc trò chuyện";
-            if (
-                typeof errorMsg === "string" &&
-                errorMsg.toLowerCase().includes("cors")
-            ) {
-                errorMsg =
-                    "Web đang bị chặn CORS từ backend. Hãy bật CORS trên server hoặc test bằng Expo Go trên thiết bị thật.";
+                        if (baseName !== "Người dùng" && baseAvatar) {
+                            return {
+                                ...conversation,
+                                counterpartName: baseName,
+                                counterpartAvatarUrl: baseAvatar,
+                            };
+                        }
+
+                        try {
+                            if (!conversation.counterpartId)
+                                return conversation;
+                            const userRes = await friendApi.getUserById(
+                                conversation.counterpartId,
+                            );
+                            const profile = userRes?.data || userRes;
+                            const profileDisplay =
+                                extractProfileDisplayInfo(profile);
+
+                            return {
+                                ...conversation,
+                                counterpartName:
+                                    baseName !== "Người dùng"
+                                        ? baseName
+                                        : profileDisplay.name,
+                                counterpartAvatarUrl:
+                                    baseAvatar || profileDisplay.avatar,
+                            };
+                        } catch {
+                            return {
+                                ...conversation,
+                                counterpartName: baseName,
+                                counterpartAvatarUrl: baseAvatar,
+                            };
+                        }
+                    }),
+                );
+
+                // Sử dụng danh sách chặn truyền vào hoặc state hiện tại
+                const activeBlockedIds = currentBlockedIds || blockedUserIds;
+
+                const unblocked = enriched.filter((conv: any) => {
+                    const counterpartId = String(
+                        conv?.counterpartId || conv?.targetUserId || "",
+                    );
+                    return !activeBlockedIds.has(counterpartId);
+                });
+
+                setConversations(unblocked);
+            } catch (e: any) {
+                console.error(
+                    "[MessagesScreen] loadConversations error:",
+                    e?.message,
+                );
+                setError("Không thể tải danh sách cuộc trò chuyện");
+            } finally {
+                setLoading(false);
             }
-            console.error(
-                "[MessagesScreen] loadConversations error:",
-                errorMsg,
-            );
-            setError(errorMsg);
-        } finally {
-            setLoading(false);
-        }
-    }, [currentUserId]);
+            // eslint-disable-next-line react-hooks/exhaustive-deps
+        },
+        [currentUserId],
+    ); // 👈 CHỈ phụ thuộc vào currentUserId
 
     const debounceRefreshConversations = useCallback(() => {
         if (refreshTimerRef.current) {
@@ -211,7 +184,7 @@ export default function MessagesScreen() {
         refreshTimerRef.current = setTimeout(() => {
             console.log("[MessagesScreen] Executing debounced refresh");
             loadConversations();
-        }, 800);
+        }, 1000);
     }, [loadConversations]);
 
     useEffect(() => {
@@ -232,16 +205,52 @@ export default function MessagesScreen() {
         })();
     }, []);
 
-    useEffect(() => {
-        if (!currentUserId) return;
-        loadConversations();
-    }, [currentUserId, loadConversations]);
-
     useFocusEffect(
         useCallback(() => {
-            if (currentUserId) {
-                loadConversations();
-            }
+            let isMounted = true;
+
+            const initScreenData = async () => {
+                if (!currentUserId) return;
+
+                try {
+                    // 1. Lấy danh sách chặn mới nhất (Dùng biến cục bộ)
+                    const blockedList = await friendApi.getBlockedUsers();
+                    const freshBlockedIds = new Set<string>();
+                    (Array.isArray(blockedList) ? blockedList : []).forEach(
+                        (item: any) => {
+                            const id =
+                                item?.blockedUserId ||
+                                item?.targetId ||
+                                item?.id;
+                            if (id) freshBlockedIds.add(String(id));
+                        },
+                    );
+
+                    if (!isMounted) return;
+
+                    // 2. Cập nhật state để dùng cho các logic khác
+                    setBlockedUserIds(freshBlockedIds);
+
+                    // 3. Gọi loadConversations và truyền trực tiếp IDs vừa lấy được
+                    await loadConversations(freshBlockedIds);
+                } catch (err) {
+                    console.error("Lỗi khởi tạo MessagesScreen:", err);
+                }
+            };
+
+            initScreenData();
+
+            // Animation khởi tạo
+            Animated.timing(listEntrance, {
+                toValue: 1,
+                duration: 350,
+                easing: Easing.out(Easing.cubic),
+                useNativeDriver: true,
+            }).start();
+
+            return () => {
+                isMounted = false;
+            };
         }, [currentUserId, loadConversations]),
     );
 

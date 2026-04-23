@@ -105,7 +105,7 @@ export default function ChatOptionsScreen() {
         return () => {
             mounted = false;
         };
-    }, [conversationId]);
+    }, [conversationId, targetUserId]);
 
     const handleSaveRemark = async () => {
         if (!conversationId || !remarkName.trim()) return;
@@ -243,8 +243,11 @@ export default function ChatOptionsScreen() {
     };
 
     const handleToggleBlock = async () => {
-        if (!targetUserId) {
-            Alert.alert("Lỗi", "Đang tải thông tin, vui lòng thử lại...");
+        if (!targetUserId || targetUserId === conversationId) {
+            Alert.alert(
+                "Lỗi",
+                "Chưa xác định được người dùng. Vui lòng mở lại cuộc trò chuyện.",
+            );
             return;
         }
 
@@ -269,10 +272,33 @@ export default function ChatOptionsScreen() {
                             if (isBlocked) {
                                 await friendApi.unblockUser(targetUserId);
                                 setIsBlocked(false);
+                                Alert.alert(
+                                    "Thành công",
+                                    "Đã bỏ chặn người dùng",
+                                );
                             } else {
                                 await friendApi.blockUser(targetUserId);
                                 setIsBlocked(true);
+                                Alert.alert(
+                                    "Thành công",
+                                    "Đã chặn người dùng. Tin nhắn của họ sẽ không được hiển thị.",
+                                );
                             }
+                            // ✅ FIX 8: Reload ChatScreen sau khi block/unblock
+                            // Quay lại ChatScreen để reload dữ liệu
+                            setTimeout(() => {
+                                if (conversationId) {
+                                    router.replace({
+                                        pathname:
+                                            "/(tabs)/message/chat/[id]" as any,
+                                        params: {
+                                            id: conversationId,
+                                            name: displayName,
+                                            avatar: avatarUrl,
+                                        },
+                                    });
+                                }
+                            }, 500);
                         } catch (error: any) {
                             Alert.alert(
                                 "Lỗi",

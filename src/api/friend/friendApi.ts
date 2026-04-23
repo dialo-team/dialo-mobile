@@ -1,5 +1,44 @@
 import apiClient from "../apiClient";
+import { getAccessToken } from "../auth/authStorage";
 import { UserProfileResponse } from "./types";
+
+import axios from "axios";
+
+const CHAT_SERVICE_URL = "http://14.225.254.174:8084";
+
+const chatServiceClient = axios.create({
+    baseURL: CHAT_SERVICE_URL,
+    headers: {
+        "Content-Type": "application/json",
+    },
+});
+
+// ✅ decode userId từ JWT (giống chatApi)
+const decodeJwtSub = (token?: string | null) => {
+    if (!token) return "";
+    try {
+        const payload = token.split(".")[1];
+        const json = JSON.parse(atob(payload));
+        return json?.sub || "";
+    } catch {
+        return "";
+    }
+};
+
+chatServiceClient.interceptors.request.use(async (config) => {
+    const token = await getAccessToken();
+    const userId = decodeJwtSub(token);
+
+    if (token) {
+        config.headers.Authorization = `Bearer ${token}`;
+    }
+
+    if (userId) {
+        config.headers["X-User-Id"] = userId; // ✅ DÒNG QUYẾT ĐỊNH
+    }
+
+    return config;
+});
 
 const normalizeBlockedUsers = (data: unknown): any[] => {
     if (Array.isArray(data)) {
@@ -141,17 +180,14 @@ export const friendApi = {
     },
 
     blockUser: async (targetId: string) => {
-        const response = await apiClient.post(
-            `/api/v1/users/${targetId}/block`,
-        );
-        return response.data;
+        return (await chatServiceClient.post(`/api/v1/users/${targetId}/block`))
+            .data;
     },
 
     unblockUser: async (targetId: string) => {
-        const response = await apiClient.delete(
-            `/api/v1/users/${targetId}/unblock`,
-        );
-        return response.data;
+        return (
+            await chatServiceClient.delete(`/api/v1/users/${targetId}/unblock`)
+        ).data;
     },
 
     updateConversationRemark: async (

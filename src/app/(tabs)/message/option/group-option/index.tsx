@@ -373,7 +373,6 @@ export default function GroupChatOptionsScreen() {
 
     const handleUpdateAvatar = async () => {
         if (!conversationId || !currentUserId) return;
-
         try {
             const result = await ImagePicker.launchImageLibraryAsync({
                 mediaTypes: "images",
@@ -382,7 +381,6 @@ export default function GroupChatOptionsScreen() {
                 quality: 0.3,
                 base64: true,
             });
-
             if (!result.canceled && result.assets[0]) {
                 setUpdatingAvatar(true);
                 const asset = result.assets[0];
@@ -394,7 +392,6 @@ export default function GroupChatOptionsScreen() {
                     );
                     return;
                 }
-
                 const mimeType =
                     asset.mimeType ||
                     (asset.uri.endsWith(".png") ? "image/png" : "image/jpeg");
