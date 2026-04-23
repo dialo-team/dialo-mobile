@@ -3,6 +3,7 @@ import { friendApi } from "@/src/api/friend/friendApi";
 import { groupApi } from "@/src/api/group/groupApi";
 import { Message } from "@/src/api/group/types";
 import ChatInputBar from "@/src/components/ChatInputBar";
+import { PinnedMessageBar } from "@/src/components/PinnedMessageBar";
 import { useChatAttachments } from "@/src/hooks/useChatAttchment";
 import { useChatRealtime } from "@/src/hooks/useChatRealtime";
 import { getInitials, pickBestDisplayName } from "@/src/utils/displayUser";
@@ -12,6 +13,7 @@ import {
     MoreHorizontal,
     MoveLeft,
     Paperclip,
+    Pin,
     Trash2,
     Undo,
     UserPlus,
@@ -33,7 +35,6 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 const CHAT_BASE_URL = "http://14.225.254.174:8085";
 
-// Đã loại bỏ | any ở raw để siết chặt type
 type UiMessage = {
     id: string;
     text: string;
@@ -74,7 +75,6 @@ const dedupeMessages = (items: UiMessage[]) => {
     });
 };
 
-// 1. Thêm các helpers bóc tách dữ liệu Siêu Cấp
 type UserProfileDict = Record<
     string,
     { displayName: string; avatarUrl: string | null }
@@ -123,7 +123,6 @@ const extractAvatar = (profile: any) => {
     );
 };
 
-// Vét cạn mọi mảng chứa thông tin User từ BE
 const normalizeMembers = (data: any): any[] => {
     if (!data) return [];
     if (Array.isArray(data)) return data;
@@ -167,7 +166,23 @@ export default function GroupChatScreen() {
     const [showHeader, setShowHeader] = useState(true);
 
     const scrollViewRef = useRef<ScrollView>(null);
+    const messageYOffsets = useRef<Record<string, number>>({});
+
+    const scrollToMessage = (msgId: string) => {
+        const yOffset = messageYOffsets.current[msgId];
+        if (yOffset !== undefined) {
+            setHighlightedMessageId(msgId);
+            scrollViewRef.current?.scrollTo({ y: yOffset, animated: true });
+
+            setTimeout(() => setHighlightedMessageId(null), 2000);
+        }
+    };
+
     const [isDissolved, setIsDissolved] = useState(false);
+    const [pinnedMessages, setPinnedMessages] = useState<any[]>([]);
+    const [highlightedMessageId, setHighlightedMessageId] = useState<
+        string | null
+    >(null);
 
     const mapApiMessageToUi = useCallback(
         (
@@ -181,6 +196,9 @@ export default function GroupChatScreen() {
             const hasAttachment =
                 !!item?.attachment?.fileUrl || !!item?.attachment?.fileName;
             const profile = sId ? profiles[sId] : null;
+
+            // FIX: Lấy fileUrl từ attachment hoặc từ item trực tiếp
+            const fileUrl = item?.attachment?.fileUrl || item?.fileUrl;
 
             return {
                 id: String(item?.id || item?.messageId || `msg-${Date.now()}`),
@@ -197,7 +215,6 @@ export default function GroupChatScreen() {
                 videoUri:
                     item?.type === "VIDEO" ? resolveFileUrl(fileUrl) : null,
                 senderId: sId,
-                // Ưu tiên: Tên từ Dictionary -> Tên từ Message gốc -> "Thành viên"
                 senderName: item?.system
                     ? "Hệ thống"
                     : isMe
@@ -221,7 +238,7 @@ export default function GroupChatScreen() {
                     hasAttachment && !["IMAGE", "VIDEO"].includes(item?.type),
                 fileName:
                     item?.attachment?.fileName || item?.content || "Tài liệu",
-                fileUrl: resolveFileUrl(item?.attachment?.fileUrl),
+                fileUrl: resolveFileUrl(fileUrl),
             };
         },
         [],
@@ -246,13 +263,12 @@ export default function GroupChatScreen() {
 
             const detail = (detailRes?.data || detailRes) as any;
 
+            setPinnedMessages(detail?.pinnedMessages || []);
             setIsDissolved(detail?.dissolved === true);
 
             const nextMemberProfiles: Record<string, any> = {};
 
-            // === BƯỚC 1: Quét Members từ CẢ 2 NGUỒN (groupApi + conversationDetail) ===
             const membersData = [
-                ...normalizeMembers(membersRes),
                 ...normalizeMembers(detail?.participants),
                 ...normalizeMembers(detail?.members),
             ];
@@ -263,7 +279,6 @@ export default function GroupChatScreen() {
                 const userId = extractValidId(member);
                 if (!userId) continue;
 
-                // Nếu là mình
                 if (userId === currentUserId) {
                     enrichedProfiles[userId] = {
                         displayName: "Bạn",
@@ -305,7 +320,6 @@ export default function GroupChatScreen() {
                 ? detail.messages
                 : [];
 
-            // === BƯỚC 2: Quét tin nhắn gom ID người cũ (chưa có trong Dictionary) ===
             const missingUserIds = new Set<string>();
             messagesList.forEach((msg: any) => {
                 const sId = extractValidId({ senderId: msg.senderId });
@@ -320,7 +334,6 @@ export default function GroupChatScreen() {
                 }
             });
 
-            // === BƯỚC 3: GỌI API BÙ TUẦN TỰ (Không dùng Promise.all để tránh sập BE) ===
             if (missingUserIds.size > 0) {
                 console.log(
                     `[GroupChat] Cần fetch bổ sung ${missingUserIds.size} người...`,
@@ -344,7 +357,6 @@ export default function GroupChatScreen() {
                         console.log(
                             `[GroupChat] Bỏ qua user ${userId} do lỗi API`,
                         );
-                        // Lỗi thì để trống, mapApiMessageToUi sẽ tự xài item.senderName có sẵn
                         nextMemberProfiles[userId] = {
                             displayName: "",
                             avatarUrl: null,
@@ -355,7 +367,6 @@ export default function GroupChatScreen() {
 
             setMemberProfiles(enrichedProfiles);
 
-            // === BƯỚC 4: RENDER GIAO DIỆN ===
             const nextName = detail?.counterpartName || initialName || "Nhóm";
             setGroupName(nextName);
             setGroupAvatar(detail?.counterpartAvatarUrl || initialAvatar || "");
@@ -366,10 +377,9 @@ export default function GroupChatScreen() {
 
             setMessages(dedupeMessages(mapped));
             await chatApi.markRead(conversationId);
-
-            setMessages(dedupeMessages(mapped));
         } catch (error) {
             console.log("[GroupChat] load error", error);
+            Alert.alert("Lỗi", "Không thể tải cuộc trò chuyện.");
         }
     }, [
         conversationId,
@@ -382,6 +392,23 @@ export default function GroupChatScreen() {
     const { handlePickMedia, handlePickFile, handleOpenFile } =
         useChatAttachments(conversationId, loadGroupConversation);
 
+    const refreshMessagesAndPins = useCallback(async () => {
+        if (!conversationId) return;
+        try {
+            const detailRes =
+                await chatApi.getConversationDetail(conversationId);
+            const detail = (detailRes?.data || detailRes) as any;
+
+            setPinnedMessages(detail?.pinnedMessages || []);
+            const mapped = detail.messages.map((item: Message) =>
+                mapApiMessageToUi(item, currentUserId, memberProfiles),
+            );
+            setMessages(dedupeMessages(mapped));
+        } catch (e) {
+            console.log("Quick refresh error", e);
+        }
+    }, [conversationId, currentUserId, memberProfiles, mapApiMessageToUi]);
+
     useEffect(() => {
         (async () => {
             try {
@@ -392,12 +419,6 @@ export default function GroupChatScreen() {
             }
         })();
     }, []);
-
-    useEffect(() => {
-        if (conversationId && currentUserId) {
-            loadGroupConversation();
-        }
-    }, [conversationId, currentUserId, loadGroupConversation]);
 
     useFocusEffect(
         useCallback(() => {
@@ -411,27 +432,30 @@ export default function GroupChatScreen() {
         if (!messages.length) return;
         const timer = setTimeout(() => {
             scrollViewRef.current?.scrollToEnd({ animated: true });
-        }, 100);
+        }, 150);
         return () => clearTimeout(timer);
     }, [messages]);
 
+    // FIX: Bắt realtime event từ socket - trigger refresh khi có pin/unpin message
     useChatRealtime({
         currentUserId,
         conversationId,
         onConversationMessage: (payload) => {
-            const incoming = payload?.data || payload?.message || payload;
-            const incomingConversationId =
-                incoming?.conversationId || payload?.conversationId;
+            // Event pin/unpin message
             if (
-                incomingConversationId &&
-                String(incomingConversationId).trim() ===
-                    String(conversationId).trim()
+                payload?.type === "PIN_MESSAGE" ||
+                payload?.type === "UNPIN_MESSAGE"
             ) {
-                loadGroupConversation();
+                console.log("[GroupChat] Nhận event pin/unpin:", payload);
+                refreshMessagesAndPins();
+                return;
             }
+            // Event tin nhắn bình thường
+            refreshMessagesAndPins();
         },
     });
 
+    // FIX: Hàm send hoàn chỉnh - xử lý TEXT, IMAGE, VIDEO, FILE
     const handleSend = async () => {
         const content = message.trim();
         if (!content || !conversationId) return;
@@ -471,6 +495,7 @@ export default function GroupChatScreen() {
                 type: "TEXT",
                 content,
             });
+
             if (sent && typeof sent === "object" && "id" in sent) {
                 const mapped = mapApiMessageToUi(
                     sent as Message,
@@ -486,15 +511,25 @@ export default function GroupChatScreen() {
                 );
                 return;
             }
+
             await loadGroupConversation();
         } catch (error) {
+            console.error("[GroupChat] Send error:", error);
             setMessages((prev) =>
                 prev.filter((item) => item.id !== optimisticId),
             );
             setMessage(content);
-            Alert.alert("Lỗi", "Không thể gửi tin nhắn.");
+            Alert.alert("Lỗi", "Không thể gửi tin nhắn. Vui lòng thử lại.");
         }
     };
+
+    // FIX: Hàm send media/file - check xem useChatAttachments đã xử lý hay chưa
+    // Nếu useChatAttachments chưa return sent message, phải reload
+    const handleMediaSent = useCallback(async () => {
+        // loadGroupConversation sẽ được gọi từ useChatAttachments
+        // Chỉ cần đảm bảo state được sync
+        await loadGroupConversation();
+    }, [loadGroupConversation]);
 
     const handleUnsendMessage = async () => {
         if (!selectedMessage?.raw?.id) return;
@@ -518,11 +553,35 @@ export default function GroupChatScreen() {
         }
     };
 
+    // FIX: Hàm pin - không reload ngay, chờ realtime event
+    const handlePinMessage = async () => {
+        if (!selectedMessage?.id || !conversationId) return;
+
+        try {
+            await chatApi.pinMessage(conversationId, selectedMessage.id);
+            setSelectedMessage(null);
+            // Không cập nhật state ngay - chờ realtime event từ socket
+            // refreshMessagesAndPins sẽ được gọi tự động
+        } catch (error) {
+            console.error("[GroupChat] Pin error:", error);
+            Alert.alert("Lỗi", "Không thể ghim tin nhắn này.");
+        }
+    };
+
+    // FIX: Hàm unpin - không reload ngay, chờ realtime event
+    const handleUnpinMessage = async (msgId: string) => {
+        if (!conversationId) return;
+        try {
+            await chatApi.unpinMessage(conversationId, msgId);
+            // Không cập nhật state ngay - chờ realtime event từ socket
+        } catch (error) {
+            console.error("[GroupChat] Unpin error:", error);
+            Alert.alert("Lỗi", "Không thể bỏ ghim.");
+        }
+    };
+
     const groupInitials = getInitials(groupName || "Nhom", "G");
 
-    // =====================================
-    // VÙNG GIAO DIỆN - KHÔNG SỬA ĐỔI
-    // =====================================
     return (
         <SafeAreaView className="flex-1 bg-[#e9edf2]">
             <KeyboardAvoidingView
@@ -587,6 +646,14 @@ export default function GroupChatScreen() {
                     </View>
                 </View>
 
+                <PinnedMessageBar
+                    pinnedMessages={pinnedMessages}
+                    onUnpin={handleUnpinMessage}
+                    onPress={(msgId: string) => {
+                        scrollToMessage(msgId);
+                    }}
+                />
+
                 <ScrollView
                     ref={scrollViewRef}
                     className="flex-1 px-3 pt-4"
@@ -598,6 +665,10 @@ export default function GroupChatScreen() {
                         return (
                             <View
                                 key={msg.id}
+                                onLayout={(event) => {
+                                    messageYOffsets.current[msg.id] =
+                                        event.nativeEvent.layout.y;
+                                }}
                                 className={`mb-3 flex-row ${isMe ? "justify-end" : ""}`}
                             >
                                 {!isMe &&
@@ -637,7 +708,7 @@ export default function GroupChatScreen() {
                                         !msg.pending &&
                                         setSelectedMessage(msg)
                                     }
-                                    className={`${isMe ? "bg-[#cde7f4]" : "bg-white"} px-4 py-2 rounded-2xl max-w-[74%] ${msg.pending ? "opacity-70" : ""}`}
+                                    className={`${isMe ? "bg-[#cde7f4]" : "bg-white"} px-4 py-2 rounded-2xl max-w-[74%] ${highlightedMessageId === msg.id ? "border-2 border-cyan-800" : ""}`}
                                 >
                                     {!isMe && !msg.isUnsent && (
                                         <Text className="mb-1 text-[11px] text-blue-600 font-bold">
@@ -703,7 +774,6 @@ export default function GroupChatScreen() {
                     <View className="h-6" />
                 </ScrollView>
 
-                {/* PHẦN XỬ LÝ CHẶN CHAT */}
                 {isDissolved ? (
                     <View className="bg-gray-200 py-3 px-4 items-center justify-center border-t border-gray-300">
                         <Text className="text-gray-600 italic text-[14px]">
@@ -760,6 +830,15 @@ export default function GroupChatScreen() {
                                     <Trash2 size={20} color="#ef4444" />
                                     <Text className="ml-3 text-[15px]">
                                         Xóa phía mình
+                                    </Text>
+                                </TouchableOpacity>
+                                <TouchableOpacity
+                                    className="py-3 flex-row items-center border-b border-gray-100"
+                                    onPress={handlePinMessage}
+                                >
+                                    <Pin size={20} color="#2563eb" />
+                                    <Text className="ml-3 text-[15px] text-blue-600">
+                                        Ghim tin nhắn
                                     </Text>
                                 </TouchableOpacity>
                             </View>

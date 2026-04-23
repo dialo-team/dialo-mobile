@@ -171,9 +171,9 @@ export function useChatRealtime({
                       }
                     : {},
 
-                reconnectDelay: 3000,
-                heartbeatIncoming: 4000,
-                heartbeatOutgoing: 4000,
+                reconnectDelay: 1000,
+                heartbeatIncoming: 2000,
+                heartbeatOutgoing: 2000,
                 debug: (msg) => {
                     console.log("[STOMP]", msg);
                 },

@@ -153,16 +153,6 @@ export const isGroupConversation = (value: any) => {
         isGroupByIdPattern;
 
     if (!result) {
-        // console.log("[DEBUG isGroupConversation] Not detected as group:", {
-        //     conversationType: value?.conversationType,
-        //     type: value?.type,
-        //     groupName: value?.groupName,
-        //     counterpartId: value?.counterpartId,
-        //     conversationId: value?.conversationId,
-        //     isGroupByIdPattern,
-        //     counterpartName: value?.counterpartName,
-        // });
-    } else {
         console.log("[DEBUG isGroupConversation] DETECTED AS GROUP:", {
             counterpartName: value?.counterpartName,
             reason: hasExplicitGroupType
@@ -501,6 +491,24 @@ export const chatApi = {
         return request(`/api/v1/messages/${messageId}`, {
             method: "DELETE",
         });
+    },
+
+    pinMessage: async (conversationId: string, messageId: string) => {
+        return request(
+            `/api/v1/conversations/${conversationId}/pin/${messageId}`,
+            {
+                method: "POST",
+            },
+        );
+    },
+
+    unpinMessage: async (conversationId: string, messageId: string) => {
+        return request(
+            `/api/v1/conversations/${conversationId}/pin/${messageId}`,
+            {
+                method: "DELETE",
+            },
+        );
     },
 };
 
