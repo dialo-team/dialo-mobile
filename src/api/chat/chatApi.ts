@@ -9,7 +9,8 @@ import {
     SendMessagePayload,
 } from "./types";
 
-const CHAT_BASE_URL = "http://14.225.254.174:8085";
+// Use API gateway (9000) for web CORS compatibility.
+const CHAT_BASE_URL = "http://14.225.254.174:9000";
 
 const chatClient = axios.create({
     baseURL: CHAT_BASE_URL,
@@ -458,38 +459,177 @@ export const chatApi = {
     async sendFileMessage(
         conversationId: string,
         fileData: { uri: string; name: string; type: string },
+        messageType?: "IMAGE" | "VIDEO" | "FILE" | "VOICE" | "GIF",
     ) {
-        const formData = new FormData();
-
-        // 1. Tạo object file cho FormData
-        // Lưu ý: Key 'file' phải khớp với định nghĩa @RequestParam("file") của Backend
-        const fileObj = {
-            uri: fileData.uri,
-            name: fileData.name,
-            type: fileData.type,
-        } as any;
-
-        formData.append("file", fileObj);
-        formData.append("conversationId", conversationId);
-
         const senderId = await chatAuthUtils.getCurrentUserId();
-        if (senderId) {
-            formData.append("senderId", senderId);
+        const token = await getAccessToken();
+        const createFilePart = async () => {
+            const isWeb = typeof window !== "undefined";
+            if (!isWeb) {
+                return {
+                    uri: fileData.uri,
+                    name: fileData.name,
+                    type: fileData.type,
+                } as any;
+            }
+
+            try {
+                const resp = await fetch(fileData.uri);
+                const blob = await resp.blob();
+                const fileType =
+                    fileData.type || blob.type || "application/octet-stream";
+                return new File([blob], fileData.name, { type: fileType });
+            } catch {
+                return {
+                    uri: fileData.uri,
+                    name: fileData.name,
+                    type: fileData.type || "application/octet-stream",
+                } as any;
+            }
+        };
+
+        const buildForm = async (mode: "full" | "noSender" | "minimal") => {
+            const formData = new FormData();
+            const filePart = await createFilePart();
+            formData.append("file", filePart as any);
+            formData.append("conversationId", conversationId);
+
+            if (mode !== "minimal" && senderId) {
+                formData.append("senderId", senderId);
+            }
+            if (mode === "full" && messageType) {
+                formData.append("type", messageType);
+            }
+            return formData;
+        };
+
+        const tryModes: ("full" | "noSender" | "minimal")[] = [
+            "full",
+            "noSender",
+            "minimal",
+        ];
+
+        let lastError: any;
+        for (const mode of tryModes) {
+            try {
+                const formData = await buildForm(mode);
+                return await chatClient.post(
+                    "/api/v1/messages/file",
+                    formData,
+                    {
+                        headers: {
+                            Authorization: `Bearer ${token}`,
+                        },
+                    },
+                );
+            } catch (error: any) {
+                lastError = error;
+                console.warn("[chatApi] sendFileMessage failed", {
+                    mode,
+                    status: error?.response?.status,
+                    data: error?.response?.data,
+                });
+            }
         }
 
-        const token = await getAccessToken();
-
-        return chatClient.post("/api/v1/messages/file", formData, {
-            headers: {
-                Authorization: `Bearer ${token}`,
-                "Content-Type": "multipart/form-data",
-            },
-        });
+        throw lastError;
     },
 
     deleteMessage: async (messageId: string) => {
         return request(`/api/v1/messages/${messageId}`, {
             method: "DELETE",
+        });
+    },
+
+    editMessage: async (messageId: string, content: string) => {
+        return request(`/api/v1/messages/${messageId}`, {
+            method: "PUT",
+            data: { content },
+        });
+    },
+
+    reactToMessage: async (messageId: string, reaction: string) => {
+        const normalized = String(reaction || "").trim();
+        const emojiToType: Record<string, string> = {
+            "👍": "LIKE",
+            "❤️": "LOVE",
+            "😂": "HAHA",
+            "😮": "WOW",
+            "😢": "SAD",
+            "😡": "ANGRY",
+        };
+        const mappedType = emojiToType[normalized] || normalized.toUpperCase();
+
+        const candidatePayloads = [
+            { reaction: normalized },
+            { emoji: normalized },
+            { type: mappedType },
+            { reaction: mappedType },
+            { reactionType: mappedType },
+            { emojiCode: mappedType },
+        ];
+
+        let lastError: any;
+        for (const payload of candidatePayloads) {
+            try {
+                return await request(`/api/v1/messages/${messageId}/react`, {
+                    method: "POST",
+                    data: payload,
+                });
+            } catch (error: any) {
+                const status = error?.response?.status;
+                lastError = error;
+                // Retry only when backend says bad request payload.
+                if (status !== 400) {
+                    throw error;
+                }
+            }
+        }
+
+        throw lastError;
+    },
+
+    searchConversationMembers: async (
+        conversationId: string,
+        keyword: string,
+    ) => {
+        return request(
+            `/api/v1/conversations/${conversationId}/members/search`,
+            {
+                method: "GET",
+                params: { keyword },
+            },
+        );
+    },
+
+    createPoll: async (
+        conversationId: string,
+        question: string,
+        options: string[],
+    ) => {
+        return request(`/api/v1/messages/poll`, {
+            method: "POST",
+            data: { conversationId, question, options },
+        });
+    },
+
+    votePoll: async (messageId: string, optionIds: string[]) => {
+        return request(`/api/v1/messages/${messageId}/poll/votes`, {
+            method: "PUT",
+            data: { optionIds },
+        });
+    },
+
+    addPollOption: async (messageId: string, optionText: string) => {
+        return request(`/api/v1/messages/${messageId}/poll/options`, {
+            method: "POST",
+            data: { optionText },
+        });
+    },
+
+    closePoll: async (messageId: string) => {
+        return request(`/api/v1/messages/${messageId}/poll/close`, {
+            method: "POST",
         });
     },
 

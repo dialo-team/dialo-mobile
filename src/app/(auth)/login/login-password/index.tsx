@@ -75,15 +75,10 @@ export default function LoginWithPasswordScreen() {
             const rawPhone = String(phone);
             const normalizedPhone = normalizePhoneLikeSignup(rawPhone);
 
-            console.log("Phone gửi lên API Login:", normalizedPhone);
-            console.log("Password gửi lên API Login:", password);
-
             const response = await authenticationApi.signinVerify({
                 phone: normalizedPhone,
                 password: password,
             });
-
-            console.log("✅ Response server:", response);
 
             const responseRoot = response?.data ?? response;
             if (

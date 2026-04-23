@@ -1,4 +1,4 @@
-import { chatAuthUtils } from "@/src/api/chat/chatApi"; // THÊM IMPORT NÀY ĐỂ LẤY TOKEN
+import { getAccessToken } from "@/src/api/auth/authStorage";
 import { Client, IMessage, StompSubscription } from "@stomp/stompjs";
 import { useCallback, useEffect, useRef, useState } from "react";
 import SockJS from "sockjs-client";
@@ -112,31 +112,16 @@ export function useChatRealtime({
         );
     }, []);
 
-    // FIX 1: Đổi connect thành async để có thể await token
     const connect = useCallback(async () => {
         if (!currentUserId) {
-            console.warn(
-                "[useChatRealtime] No currentUserId, skipping connect",
-            );
+            setConnected(false);
             return;
         }
 
         disconnect();
 
         try {
-            // FIX 2: Lấy Token. Bạn tự điều chỉnh tên hàm `getAccessToken()` cho đúng với utils bên bạn nhé (có thể là getToken() tuỳ lúc bạn viết)
-            let token = "";
-            if (
-                chatAuthUtils &&
-                typeof (chatAuthUtils as any).getAccessToken === "function"
-            ) {
-                token = await (chatAuthUtils as any).getAccessToken();
-            } else if (
-                chatAuthUtils &&
-                typeof (chatAuthUtils as any).getToken === "function"
-            ) {
-                token = await (chatAuthUtils as any).getToken();
-            }
+            const token = (await getAccessToken()) || "";
 
             const wsUrl = `${CHAT_WS_BASE_URL}/ws-chat`;
 
@@ -164,7 +149,6 @@ export function useChatRealtime({
                     }
                 },
 
-                // FIX 3: Gửi kèm Token vào connectHeaders (Chuẩn xác thực của STOMP SpringBoot)
                 connectHeaders: token
                     ? {
                           Authorization: `Bearer ${token}`,
@@ -254,11 +238,16 @@ export function useChatRealtime({
     }, [conversationId, currentUserId, disconnect, subscribeConversation]);
 
     useEffect(() => {
+        if (!currentUserId) {
+            disconnect();
+            return;
+        }
+
         connect();
         return () => {
             disconnect();
         };
-    }, [connect, disconnect]);
+    }, [connect, currentUserId, disconnect]);
 
     useEffect(() => {
         if (connected) {

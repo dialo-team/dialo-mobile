@@ -71,6 +71,66 @@ export const groupApi = {
         return response.data;
     },
 
+    updateGroupDescription: async (
+        conversationId: string,
+        userId: string,
+        groupDescription: string,
+    ) => {
+        const token = await getAccessToken();
+        const response = await axios.put(
+            `${CHAT_SERVICE_URL}/${conversationId}/group-description`,
+            { groupDescription },
+            {
+                headers: {
+                    Authorization: `Bearer ${token}`,
+                    "X-User-Id": userId,
+                    "Content-Type": "application/json",
+                },
+            },
+        );
+        return response.data;
+    },
+
+    updateMemberNickname: async (
+        conversationId: string,
+        memberId: string,
+        userId: string,
+        nickname: string,
+    ) => {
+        const token = await getAccessToken();
+        const response = await axios.put(
+            `${CHAT_SERVICE_URL}/${conversationId}/members/${memberId}/nickname`,
+            { nickname },
+            {
+                headers: {
+                    Authorization: `Bearer ${token}`,
+                    "X-User-Id": userId,
+                    "Content-Type": "application/json",
+                },
+            },
+        );
+        return response.data;
+    },
+
+    searchMembersByName: async (
+        conversationId: string,
+        userId: string,
+        keyword: string,
+    ) => {
+        const token = await getAccessToken();
+        const response = await axios.get(
+            `${CHAT_SERVICE_URL}/${conversationId}/members/search`,
+            {
+                params: { keyword },
+                headers: {
+                    Authorization: `Bearer ${token}`,
+                    "X-User-Id": userId,
+                },
+            },
+        );
+        return response.data;
+    },
+
     // --- CÁC HÀM QUẢN LÝ THÀNH VIÊN ---
 
     addMembers: async (

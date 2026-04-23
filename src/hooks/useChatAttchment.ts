@@ -13,6 +13,15 @@ export const useChatAttachments = (
     conversationId: string,
     onSuccess: () => void,
 ) => {
+    const detectMessageType = (mimeType?: string) => {
+        const normalized = String(mimeType || "").toLowerCase();
+        if (normalized === "image/gif") return "GIF";
+        if (normalized.startsWith("audio/")) return "VOICE";
+        if (normalized.startsWith("video/")) return "VIDEO";
+        if (normalized.startsWith("image/")) return "IMAGE";
+        return "FILE";
+    };
+
     const handlePickMedia = async () => {
         if (!conversationId) return;
 
@@ -47,16 +56,32 @@ export const useChatAttachments = (
         }
 
         try {
-            await chatApi.sendFileMessage(conversationId, {
-                uri: asset.uri,
-                name:
-                    asset.fileName ||
-                    `upload-${Date.now()}${isVideo ? ".mp4" : ".jpg"}`,
-                type: asset.mimeType || (isVideo ? "video/mp4" : "image/jpeg"),
-            });
+            const messageType = detectMessageType(asset.mimeType);
+            await chatApi.sendFileMessage(
+                conversationId,
+                {
+                    uri: asset.uri,
+                    name:
+                        asset.fileName ||
+                        `upload-${Date.now()}${isVideo ? ".mp4" : ".jpg"}`,
+                    type:
+                        asset.mimeType ||
+                        (isVideo ? "video/mp4" : "image/jpeg"),
+                },
+                messageType as any,
+            );
             onSuccess();
         } catch (error: any) {
-            console.error("Send media error:", error); // ✅ dùng error
+            console.error("Send media error:", {
+                message: error?.message,
+                status: error?.response?.status,
+                data: error?.response?.data,
+                dataString:
+                    typeof error?.response?.data === "string"
+                        ? error?.response?.data
+                        : JSON.stringify(error?.response?.data || {}),
+                url: error?.config?.url,
+            });
             Alert.alert("Lỗi", "Không thể gửi media.");
         }
     };
@@ -78,16 +103,71 @@ export const useChatAttachments = (
                 return;
             }
 
-            await chatApi.sendFileMessage(conversationId, {
-                uri: asset.uri,
-                name: asset.name || `file-${Date.now()}`,
-                type: asset.mimeType || "application/octet-stream",
-            });
+            await chatApi.sendFileMessage(
+                conversationId,
+                {
+                    uri: asset.uri,
+                    name: asset.name || `file-${Date.now()}`,
+                    type: asset.mimeType || "application/octet-stream",
+                },
+                detectMessageType(asset.mimeType) as any,
+            );
 
             onSuccess();
         } catch (error: any) {
-            console.error("Send file error:", error);
+            console.error("Send file error:", {
+                message: error?.message,
+                status: error?.response?.status,
+                data: error?.response?.data,
+                dataString:
+                    typeof error?.response?.data === "string"
+                        ? error?.response?.data
+                        : JSON.stringify(error?.response?.data || {}),
+                url: error?.config?.url,
+            });
             Alert.alert("Lỗi", "Không thể gửi tài liệu.");
+        }
+    };
+
+    const handlePickVoice = async () => {
+        if (!conversationId) return;
+
+        try {
+            const result = await DocumentPicker.getDocumentAsync({
+                type: ["audio/*"],
+            });
+            if (result.canceled) return;
+
+            const asset = result.assets[0];
+
+            if (asset.size && asset.size > MAX_FILE_SIZE) {
+                Alert.alert("Lỗi", "File thoại vượt quá 100MB.");
+                return;
+            }
+
+            await chatApi.sendFileMessage(
+                conversationId,
+                {
+                    uri: asset.uri,
+                    name: asset.name || `voice-${Date.now()}.m4a`,
+                    type: asset.mimeType || "audio/mpeg",
+                },
+                "VOICE",
+            );
+
+            onSuccess();
+        } catch (error: any) {
+            console.error("Send voice error:", {
+                message: error?.message,
+                status: error?.response?.status,
+                data: error?.response?.data,
+                dataString:
+                    typeof error?.response?.data === "string"
+                        ? error?.response?.data
+                        : JSON.stringify(error?.response?.data || {}),
+                url: error?.config?.url,
+            });
+            Alert.alert("Lỗi", "Không thể gửi tin nhắn thoại.");
         }
     };
 
@@ -138,5 +218,5 @@ export const useChatAttachments = (
         }
     };
 
-    return { handlePickMedia, handlePickFile, handleOpenFile };
+    return { handlePickMedia, handlePickFile, handlePickVoice, handleOpenFile };
 };

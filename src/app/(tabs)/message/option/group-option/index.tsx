@@ -104,6 +104,11 @@ export default function GroupChatOptionsScreen() {
     const [updatingName, setUpdatingName] = useState(false);
 
     const [updatingAvatar, setUpdatingAvatar] = useState(false);
+    const [groupDescription, setGroupDescription] = useState("");
+    const [tempGroupDescription, setTempGroupDescription] = useState("");
+    const [isDescriptionModalVisible, setIsDescriptionModalVisible] =
+        useState(false);
+    const [updatingDescription, setUpdatingDescription] = useState(false);
 
     // --- STATE MỚI CHO CHỨC NĂNG RỜI NHÓM ---
     const [membersList, setMembersList] = useState<any[]>([]);
@@ -218,10 +223,41 @@ export default function GroupChatOptionsScreen() {
 
             setGroupName(detail?.groupName || initialName);
             setGroupAvatar(detail?.groupAvatarUrl || initialAvatar);
+            setGroupDescription(detail?.groupDescription || "");
         } catch (error) {
             console.log("[GroupOption] loadGroupData error:", error);
         }
     }, [conversationId, currentUserId, initialAvatar, initialName]);
+
+    const handleUpdateGroupDescription = async () => {
+        const nextDescription = tempGroupDescription.trim();
+
+        if (!conversationId || !currentUserId) return;
+        if (nextDescription === groupDescription.trim()) {
+            setIsDescriptionModalVisible(false);
+            return;
+        }
+
+        setUpdatingDescription(true);
+        try {
+            await groupApi.updateGroupDescription(
+                conversationId,
+                currentUserId,
+                nextDescription,
+            );
+            setGroupDescription(nextDescription);
+            setIsDescriptionModalVisible(false);
+            Alert.alert("Thành công", "Đã cập nhật mô tả nhóm.");
+        } catch (error: any) {
+            const errorMsg =
+                error?.response?.data?.message ||
+                error?.message ||
+                "Không thể cập nhật mô tả nhóm.";
+            Alert.alert("Lỗi", errorMsg);
+        } finally {
+            setUpdatingDescription(false);
+        }
+    };
 
     useFocusEffect(
         useCallback(() => {
@@ -642,7 +678,19 @@ export default function GroupChatOptionsScreen() {
                     </View>
 
                     <View className="bg-white mt-2">
-                        <OptionItem title="Thêm mô tả nhóm" />
+                        <OptionItem
+                            title={
+                                groupDescription
+                                    ? "Mô tả nhóm"
+                                    : "Thêm mô tả nhóm"
+                            }
+                            description={groupDescription || "Chưa có mô tả"}
+                            right={<ChevronRight size={20} color="#ccc" />}
+                            onPress={() => {
+                                setTempGroupDescription(groupDescription || "");
+                                setIsDescriptionModalVisible(true);
+                            }}
+                        />
                     </View>
 
                     <View className="bg-white mt-2">
@@ -847,6 +895,62 @@ export default function GroupChatOptionsScreen() {
                                 disabled={updatingName || !tempGroupName.trim()}
                             >
                                 {updatingName ? (
+                                    <ActivityIndicator
+                                        size="small"
+                                        color="white"
+                                    />
+                                ) : (
+                                    <Text className="text-white font-medium">
+                                        Lưu
+                                    </Text>
+                                )}
+                            </TouchableOpacity>
+                        </View>
+                    </View>
+                </View>
+            </Modal>
+
+            <Modal
+                visible={isDescriptionModalVisible}
+                transparent
+                animationType="fade"
+                onRequestClose={() => setIsDescriptionModalVisible(false)}
+            >
+                <View className="flex-1 bg-black/50 justify-center items-center px-6">
+                    <View className="bg-white w-full rounded-xl p-5">
+                        <Text className="text-lg font-semibold text-black mb-4">
+                            Mô tả nhóm
+                        </Text>
+
+                        <TextInput
+                            className="bg-gray-100 px-4 py-3 rounded-lg text-base text-black mb-5"
+                            value={tempGroupDescription}
+                            onChangeText={setTempGroupDescription}
+                            placeholder="Nhập mô tả nhóm"
+                            placeholderTextColor="#9ca3af"
+                            multiline
+                            maxLength={250}
+                            autoFocus
+                        />
+
+                        <View className="flex-row justify-end gap-3">
+                            <TouchableOpacity
+                                onPress={() =>
+                                    setIsDescriptionModalVisible(false)
+                                }
+                                className="px-4 py-2"
+                                disabled={updatingDescription}
+                            >
+                                <Text className="text-gray-500 font-medium">
+                                    Hủy
+                                </Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                                onPress={handleUpdateGroupDescription}
+                                className="bg-blue-500 px-5 py-2 rounded-lg"
+                                disabled={updatingDescription}
+                            >
+                                {updatingDescription ? (
                                     <ActivityIndicator
                                         size="small"
                                         color="white"

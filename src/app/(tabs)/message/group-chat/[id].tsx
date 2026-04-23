@@ -14,6 +14,8 @@ import {
     MoveLeft,
     Paperclip,
     Pin,
+    Search,
+    Send,
     Trash2,
     Undo,
     UserPlus,
@@ -27,6 +29,7 @@ import {
     Image as RNImage,
     ScrollView,
     Text,
+    TextInput,
     TouchableOpacity,
     TouchableWithoutFeedback,
     View,
@@ -42,6 +45,7 @@ type UiMessage = {
     time: string;
     imageUri?: string | null;
     videoUri?: string | null;
+    voiceUri?: string | null;
     senderId?: string;
     senderName?: string;
     senderAvatarUrl?: string;
@@ -51,6 +55,7 @@ type UiMessage = {
     isFile?: boolean;
     fileName?: string;
     fileUrl?: string;
+    reactions?: any[];
 };
 
 const paramToString = (value: string | string[] | undefined) => {
@@ -163,6 +168,17 @@ export default function GroupChatScreen() {
     );
     const [viewingMediaMessage, setViewingMediaMessage] =
         useState<UiMessage | null>(null);
+    const [showEditModal, setShowEditModal] = useState(false);
+    const [editingContent, setEditingContent] = useState("");
+    const [showPollModal, setShowPollModal] = useState(false);
+    const [pollQuestion, setPollQuestion] = useState("");
+    const [pollOptions, setPollOptions] = useState(["", ""]);
+    const [showSearchSheet, setShowSearchSheet] = useState(false);
+    const [searchKeyword, setSearchKeyword] = useState("");
+    const [searchResults, setSearchResults] = useState<any[]>([]);
+    const [searchLoading, setSearchLoading] = useState(false);
+    const [forwardTargets, setForwardTargets] = useState<any[]>([]);
+    const [showForwardModal, setShowForwardModal] = useState(false);
     const [showHeader, setShowHeader] = useState(true);
 
     const scrollViewRef = useRef<ScrollView>(null);
@@ -183,6 +199,7 @@ export default function GroupChatScreen() {
     const [highlightedMessageId, setHighlightedMessageId] = useState<
         string | null
     >(null);
+    const refreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
     const mapApiMessageToUi = useCallback(
         (
@@ -210,10 +227,13 @@ export default function GroupChatScreen() {
                           minute: "2-digit",
                       })
                     : "",
-                imageUri:
-                    item?.type === "IMAGE" ? resolveFileUrl(fileUrl) : null,
+                imageUri: ["IMAGE", "GIF"].includes(String(item?.type || ""))
+                    ? resolveFileUrl(fileUrl)
+                    : null,
                 videoUri:
                     item?.type === "VIDEO" ? resolveFileUrl(fileUrl) : null,
+                voiceUri:
+                    item?.type === "VOICE" ? resolveFileUrl(fileUrl) : null,
                 senderId: sId,
                 senderName: item?.system
                     ? "Hệ thống"
@@ -239,6 +259,7 @@ export default function GroupChatScreen() {
                 fileName:
                     item?.attachment?.fileName || item?.content || "Tài liệu",
                 fileUrl: resolveFileUrl(fileUrl),
+                reactions: Array.isArray(item?.reactions) ? item.reactions : [],
             };
         },
         [],
@@ -389,7 +410,7 @@ export default function GroupChatScreen() {
         mapApiMessageToUi,
     ]);
 
-    const { handlePickMedia, handlePickFile, handleOpenFile } =
+    const { handlePickMedia, handlePickFile, handlePickVoice, handleOpenFile } =
         useChatAttachments(conversationId, loadGroupConversation);
 
     const refreshMessagesAndPins = useCallback(async () => {
@@ -408,6 +429,16 @@ export default function GroupChatScreen() {
             console.log("Quick refresh error", e);
         }
     }, [conversationId, currentUserId, memberProfiles, mapApiMessageToUi]);
+
+    const scheduleRefreshMessagesAndPins = useCallback(() => {
+        if (refreshTimerRef.current) {
+            clearTimeout(refreshTimerRef.current);
+        }
+
+        refreshTimerRef.current = setTimeout(() => {
+            refreshMessagesAndPins();
+        }, 120);
+    }, [refreshMessagesAndPins]);
 
     useEffect(() => {
         (async () => {
@@ -436,23 +467,71 @@ export default function GroupChatScreen() {
         return () => clearTimeout(timer);
     }, [messages]);
 
-    // FIX: Bắt realtime event từ socket - trigger refresh khi có pin/unpin message
+    useEffect(() => {
+        return () => {
+            if (refreshTimerRef.current) {
+                clearTimeout(refreshTimerRef.current);
+            }
+        };
+    }, []);
+
+    const handleRealtimePayload = useCallback(
+        (payload: any) => {
+            if (!conversationId || !payload) return;
+
+            if (Array.isArray(payload)) {
+                const hasCurrentConversation = payload.some((item) => {
+                    const candidateId = String(item?.conversationId || "");
+                    return candidateId === conversationId;
+                });
+
+                if (hasCurrentConversation) {
+                    scheduleRefreshMessagesAndPins();
+                }
+                return;
+            }
+
+            const incoming = payload?.data || payload?.message || payload;
+            const incomingConversationId = String(
+                incoming?.conversationId || payload?.conversationId || "",
+            );
+
+            if (
+                incomingConversationId &&
+                incomingConversationId !== conversationId
+            ) {
+                return;
+            }
+
+            const incomingType = String(
+                incoming?.type ||
+                    payload?.type ||
+                    incoming?.action ||
+                    payload?.action ||
+                    incoming?.event ||
+                    payload?.event ||
+                    "",
+            ).toUpperCase();
+
+            const isPinEvent =
+                incomingType.includes("PIN") ||
+                incomingType.includes("UNPIN") ||
+                incoming?.pinnedMessages != null;
+
+            if (isPinEvent) {
+                console.log("[GroupChat] Realtime pin update:", incomingType);
+            }
+
+            scheduleRefreshMessagesAndPins();
+        },
+        [conversationId, scheduleRefreshMessagesAndPins],
+    );
+
     useChatRealtime({
         currentUserId,
         conversationId,
-        onConversationMessage: (payload) => {
-            // Event pin/unpin message
-            if (
-                payload?.type === "PIN_MESSAGE" ||
-                payload?.type === "UNPIN_MESSAGE"
-            ) {
-                console.log("[GroupChat] Nhận event pin/unpin:", payload);
-                refreshMessagesAndPins();
-                return;
-            }
-            // Event tin nhắn bình thường
-            refreshMessagesAndPins();
-        },
+        onConversationMessage: handleRealtimePayload,
+        onInboxPayload: handleRealtimePayload,
     });
 
     // FIX: Hàm send hoàn chỉnh - xử lý TEXT, IMAGE, VIDEO, FILE
@@ -553,6 +632,130 @@ export default function GroupChatScreen() {
         }
     };
 
+    const handleReactMessage = async (reaction: string) => {
+        if (!selectedMessage?.id) return;
+        try {
+            await chatApi.reactToMessage(selectedMessage.id, reaction);
+            setSelectedMessage(null);
+            await loadGroupConversation();
+        } catch {
+            Alert.alert("Lỗi", "Không thể thả cảm xúc.");
+        }
+    };
+
+    const openEditModal = () => {
+        if (
+            !selectedMessage?.raw?.id ||
+            selectedMessage?.senderId !== currentUserId ||
+            String(selectedMessage?.raw?.type || "").toUpperCase() !== "TEXT"
+        ) {
+            return;
+        }
+        setEditingContent(selectedMessage?.raw?.content || "");
+        setShowEditModal(true);
+    };
+
+    const handleEditMessage = async () => {
+        if (!selectedMessage?.raw?.id || !editingContent.trim()) return;
+        try {
+            await chatApi.editMessage(
+                String(selectedMessage.raw.id),
+                editingContent.trim(),
+            );
+            setShowEditModal(false);
+            setSelectedMessage(null);
+            await loadGroupConversation();
+        } catch {
+            Alert.alert("Lỗi", "Không thể chỉnh sửa tin nhắn.");
+        }
+    };
+
+    const extractPollData = (raw: any) =>
+        raw?.poll || raw?.payload?.poll || (raw?.type === "POLL" ? raw : null);
+
+    const handleCreatePoll = async () => {
+        const question = pollQuestion.trim();
+        const options = pollOptions.map((o) => o.trim()).filter(Boolean);
+        if (!conversationId || !question || options.length < 2) {
+            Alert.alert("Thiếu dữ liệu", "Nhập câu hỏi và ít nhất 2 lựa chọn.");
+            return;
+        }
+        try {
+            await chatApi.createPoll(conversationId, question, options);
+            setShowPollModal(false);
+            setPollQuestion("");
+            setPollOptions(["", ""]);
+            await loadGroupConversation();
+        } catch {
+            Alert.alert("Lỗi", "Không thể tạo bình chọn.");
+        }
+    };
+
+    const handleVotePoll = async (messageId: string, optionId: string) => {
+        try {
+            await chatApi.votePoll(messageId, [optionId]);
+            await loadGroupConversation();
+        } catch {
+            Alert.alert("Lỗi", "Không thể gửi bình chọn.");
+        }
+    };
+
+    const handleClosePoll = async (messageId: string) => {
+        try {
+            await chatApi.closePoll(messageId);
+            await loadGroupConversation();
+        } catch {
+            Alert.alert("Lỗi", "Không thể đóng bình chọn.");
+        }
+    };
+
+    const openForwardModal = async () => {
+        if (!selectedMessage?.id) return;
+        try {
+            const conversations = await chatApi.getConversations();
+            const targets = Array.isArray(conversations)
+                ? conversations.filter(
+                      (item) => item?.conversationId !== conversationId,
+                  )
+                : [];
+            setForwardTargets(targets);
+            setShowForwardModal(true);
+        } catch {
+            Alert.alert("Lỗi", "Không thể tải danh sách chuyển tiếp.");
+        }
+    };
+
+    const handleForwardMessage = async (targetConversationId: string) => {
+        if (!selectedMessage?.id) return;
+        try {
+            await chatApi.forwardMessage({
+                sourceMessageId: selectedMessage.id,
+                targetConversationId,
+            });
+            setShowForwardModal(false);
+            setSelectedMessage(null);
+            Alert.alert("Thành công", "Đã chuyển tiếp tin nhắn.");
+        } catch {
+            Alert.alert("Lỗi", "Không thể chuyển tiếp tin nhắn.");
+        }
+    };
+
+    const handleSearchMessages = async () => {
+        if (!conversationId || !searchKeyword.trim()) return;
+        setSearchLoading(true);
+        try {
+            const result = await chatApi.searchInConversation(
+                conversationId,
+                searchKeyword.trim(),
+            );
+            setSearchResults(Array.isArray(result) ? result : []);
+        } catch {
+            Alert.alert("Lỗi", "Không thể tìm kiếm tin nhắn.");
+        } finally {
+            setSearchLoading(false);
+        }
+    };
+
     // FIX: Hàm pin - không reload ngay, chờ realtime event
     const handlePinMessage = async () => {
         if (!selectedMessage?.id || !conversationId) return;
@@ -625,8 +828,17 @@ export default function GroupChatScreen() {
                         >
                             <UserPlus size={22} color="white" />
                         </TouchableOpacity>
-                        <TouchableOpacity style={{ marginLeft: 10 }}>
+                        <TouchableOpacity
+                            style={{ marginLeft: 10 }}
+                            onPress={() => setShowPollModal(true)}
+                        >
                             <Paperclip size={22} color="white" />
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                            style={{ marginLeft: 10 }}
+                            onPress={() => setShowSearchSheet(true)}
+                        >
+                            <Search size={22} color="white" />
                         </TouchableOpacity>
                         <TouchableOpacity
                             style={{ marginLeft: 10 }}
@@ -748,7 +960,79 @@ export default function GroupChatScreen() {
                                             }}
                                             resizeMode="cover"
                                         />
+                                    ) : msg.voiceUri ? (
+                                        <View
+                                            className={`mb-1 p-2 rounded-lg ${isMe ? "bg-blue-100" : "bg-gray-100"}`}
+                                        >
+                                            <Text className="text-[13px] text-gray-700">
+                                                Tin nhắn thoại
+                                            </Text>
+                                        </View>
                                     ) : null}
+
+                                    {extractPollData(msg.raw) && (
+                                        <View className="mt-2 mb-1 p-2 rounded-lg bg-gray-50 border border-gray-200">
+                                            <Text className="font-semibold text-[14px] mb-2">
+                                                {extractPollData(msg.raw)
+                                                    ?.question || "Bình chọn"}
+                                            </Text>
+                                            {(
+                                                extractPollData(msg.raw)
+                                                    ?.options || []
+                                            ).map((opt: any, idx: number) => (
+                                                <TouchableOpacity
+                                                    key={
+                                                        opt?.id ||
+                                                        `poll-opt-${idx}`
+                                                    }
+                                                    className="py-2 px-2 rounded-md bg-white border border-gray-200 mb-2"
+                                                    onPress={() =>
+                                                        handleVotePoll(
+                                                            String(
+                                                                msg.raw?.id ||
+                                                                    msg.id,
+                                                            ),
+                                                            String(
+                                                                opt?.id ||
+                                                                    opt?.optionId ||
+                                                                    opt?.value ||
+                                                                    idx,
+                                                            ),
+                                                        )
+                                                    }
+                                                >
+                                                    <Text className="text-[13px]">
+                                                        {opt?.text ||
+                                                            opt?.optionText ||
+                                                            `Lựa chọn ${idx + 1}`}
+                                                    </Text>
+                                                    {typeof opt?.voteCount ===
+                                                        "number" && (
+                                                        <Text className="text-[11px] text-gray-500 mt-1">
+                                                            {opt.voteCount} lượt
+                                                            chọn
+                                                        </Text>
+                                                    )}
+                                                </TouchableOpacity>
+                                            ))}
+                                            {msg.senderId === currentUserId && (
+                                                <TouchableOpacity
+                                                    onPress={() =>
+                                                        handleClosePoll(
+                                                            String(
+                                                                msg.raw?.id ||
+                                                                    msg.id,
+                                                            ),
+                                                        )
+                                                    }
+                                                >
+                                                    <Text className="text-red-500 text-[12px]">
+                                                        Đóng bình chọn
+                                                    </Text>
+                                                </TouchableOpacity>
+                                            )}
+                                        </View>
+                                    )}
 
                                     {msg.text !== "" && (
                                         <Text
@@ -767,6 +1051,19 @@ export default function GroupChatScreen() {
                                                 : msg.time}
                                         </Text>
                                     )}
+                                    {Array.isArray(msg.reactions) &&
+                                        msg.reactions.length > 0 && (
+                                            <Text className="text-[11px] mt-1 text-gray-500">
+                                                {msg.reactions
+                                                    .map(
+                                                        (r: any) =>
+                                                            r?.reaction ||
+                                                            r?.emoji,
+                                                    )
+                                                    .filter(Boolean)
+                                                    .join(" ")}
+                                            </Text>
+                                        )}
                                 </TouchableOpacity>
                             </View>
                         );
@@ -788,6 +1085,7 @@ export default function GroupChatScreen() {
                         onSend={handleSend}
                         onAttachFile={handlePickFile}
                         onPickMedia={handlePickMedia}
+                        onPickVoice={handlePickVoice}
                         onEmojiPress={() => setShowEmojiMenu(!showEmojiMenu)}
                         showEmojiMenu={showEmojiMenu}
                         onEmojiSelect={(emoji) => {
@@ -797,6 +1095,7 @@ export default function GroupChatScreen() {
                         isGroupChat={true}
                         placeholder="Tin nhắn"
                         customEmojis={["👍", "❤️", "😂"]}
+                        showMoreButton={true}
                     />
                 )}
             </KeyboardAvoidingView>
@@ -814,6 +1113,45 @@ export default function GroupChatScreen() {
                     <View className="flex-1 bg-black/60 justify-center px-4">
                         <TouchableWithoutFeedback>
                             <View className="bg-white rounded-3xl p-4">
+                                <View className="py-2 flex-row items-center">
+                                    {["👍", "❤️", "😂", "😮", "😢"].map(
+                                        (emoji) => (
+                                            <TouchableOpacity
+                                                key={emoji}
+                                                className="mr-3"
+                                                onPress={() =>
+                                                    handleReactMessage(emoji)
+                                                }
+                                            >
+                                                <Text className="text-2xl">
+                                                    {emoji}
+                                                </Text>
+                                            </TouchableOpacity>
+                                        ),
+                                    )}
+                                </View>
+                                {selectedMessage?.senderId === currentUserId &&
+                                    String(
+                                        selectedMessage?.raw?.type || "",
+                                    ).toUpperCase() === "TEXT" && (
+                                        <TouchableOpacity
+                                            className="py-3 flex-row items-center"
+                                            onPress={openEditModal}
+                                        >
+                                            <Text className="text-[15px]">
+                                                Chỉnh sửa tin nhắn
+                                            </Text>
+                                        </TouchableOpacity>
+                                    )}
+                                <TouchableOpacity
+                                    className="py-3 flex-row items-center"
+                                    onPress={openForwardModal}
+                                >
+                                    <Send size={18} color="#2563eb" />
+                                    <Text className="ml-3 text-[15px] text-blue-600">
+                                        Chuyển tiếp
+                                    </Text>
+                                </TouchableOpacity>
                                 <TouchableOpacity
                                     className="py-3 flex-row items-center"
                                     onPress={handleUnsendMessage}
@@ -845,6 +1183,194 @@ export default function GroupChatScreen() {
                         </TouchableWithoutFeedback>
                     </View>
                 </TouchableWithoutFeedback>
+            </Modal>
+
+            <Modal
+                visible={showSearchSheet}
+                transparent
+                animationType="slide"
+                onRequestClose={() => setShowSearchSheet(false)}
+            >
+                <View className="flex-1 bg-black/30 justify-end">
+                    <View className="bg-white rounded-t-3xl px-4 pt-4 pb-7 max-h-[70%]">
+                        <Text className="text-base font-semibold mb-3">
+                            Tìm trong nhóm
+                        </Text>
+                        <View className="flex-row mb-3">
+                            <TextInput
+                                className="flex-1 border border-gray-200 rounded-xl px-3 py-2"
+                                placeholder="Nhập từ khóa"
+                                value={searchKeyword}
+                                onChangeText={setSearchKeyword}
+                            />
+                            <TouchableOpacity
+                                className="ml-2 px-4 py-2 bg-blue-600 rounded-xl"
+                                onPress={handleSearchMessages}
+                                disabled={searchLoading}
+                            >
+                                <Text className="text-white">
+                                    {searchLoading ? "..." : "Tìm"}
+                                </Text>
+                            </TouchableOpacity>
+                        </View>
+                        <ScrollView>
+                            {searchResults.map((item: any) => (
+                                <View
+                                    key={String(item?.id || Math.random())}
+                                    className="py-2 border-b border-gray-100"
+                                >
+                                    <Text className="text-sm">
+                                        {item?.content || item?.text || ""}
+                                    </Text>
+                                </View>
+                            ))}
+                        </ScrollView>
+                        <TouchableOpacity
+                            onPress={() => setShowSearchSheet(false)}
+                            className="mt-4 items-center"
+                        >
+                            <Text className="text-blue-600">Đóng</Text>
+                        </TouchableOpacity>
+                    </View>
+                </View>
+            </Modal>
+
+            <Modal
+                visible={showForwardModal}
+                transparent
+                animationType="fade"
+                onRequestClose={() => setShowForwardModal(false)}
+            >
+                <View className="flex-1 bg-black/40 justify-center px-5">
+                    <View className="bg-white rounded-2xl p-4 max-h-[70%]">
+                        <Text className="text-base font-semibold mb-3">
+                            Chuyển tiếp tới
+                        </Text>
+                        <ScrollView>
+                            {forwardTargets.map((item: any) => {
+                                const displayName = pickBestDisplayName(
+                                    [
+                                        item?.groupName,
+                                        item?.counterpartName,
+                                        item?.name,
+                                    ],
+                                    "Trò chuyện",
+                                );
+                                return (
+                                    <TouchableOpacity
+                                        key={item?.conversationId}
+                                        className="py-3 border-b border-gray-100"
+                                        onPress={() =>
+                                            handleForwardMessage(
+                                                item?.conversationId,
+                                            )
+                                        }
+                                    >
+                                        <Text className="text-[15px] text-gray-800">
+                                            {displayName}
+                                        </Text>
+                                    </TouchableOpacity>
+                                );
+                            })}
+                        </ScrollView>
+                        <TouchableOpacity
+                            className="mt-3 self-end"
+                            onPress={() => setShowForwardModal(false)}
+                        >
+                            <Text className="text-gray-500">Đóng</Text>
+                        </TouchableOpacity>
+                    </View>
+                </View>
+            </Modal>
+
+            <Modal
+                visible={showEditModal}
+                transparent
+                animationType="fade"
+                onRequestClose={() => setShowEditModal(false)}
+            >
+                <View className="flex-1 bg-black/40 justify-center px-5">
+                    <View className="bg-white rounded-2xl p-4">
+                        <Text className="text-base font-semibold mb-3">
+                            Chỉnh sửa tin nhắn
+                        </Text>
+                        <TextInput
+                            className="border border-gray-200 rounded-xl px-3 py-2"
+                            value={editingContent}
+                            onChangeText={setEditingContent}
+                            multiline
+                        />
+                        <View className="flex-row justify-end mt-3">
+                            <TouchableOpacity
+                                onPress={() => setShowEditModal(false)}
+                            >
+                                <Text className="text-gray-500 mr-4">Hủy</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity onPress={handleEditMessage}>
+                                <Text className="text-blue-600 font-semibold">
+                                    Lưu
+                                </Text>
+                            </TouchableOpacity>
+                        </View>
+                    </View>
+                </View>
+            </Modal>
+
+            <Modal
+                visible={showPollModal}
+                transparent
+                animationType="fade"
+                onRequestClose={() => setShowPollModal(false)}
+            >
+                <View className="flex-1 bg-black/40 justify-center px-5">
+                    <View className="bg-white rounded-2xl p-4">
+                        <Text className="text-base font-semibold mb-3">
+                            Tạo bình chọn
+                        </Text>
+                        <TextInput
+                            className="border border-gray-200 rounded-xl px-3 py-2 mb-2"
+                            placeholder="Câu hỏi bình chọn"
+                            value={pollQuestion}
+                            onChangeText={setPollQuestion}
+                        />
+                        {pollOptions.map((option, idx) => (
+                            <TextInput
+                                key={`poll-input-${idx}`}
+                                className="border border-gray-200 rounded-xl px-3 py-2 mb-2"
+                                placeholder={`Lựa chọn ${idx + 1}`}
+                                value={option}
+                                onChangeText={(text) =>
+                                    setPollOptions((prev) =>
+                                        prev.map((v, i) =>
+                                            i === idx ? text : v,
+                                        ),
+                                    )
+                                }
+                            />
+                        ))}
+                        <TouchableOpacity
+                            onPress={() =>
+                                setPollOptions((prev) => [...prev, ""])
+                            }
+                        >
+                            <Text className="text-blue-600 text-sm mb-3">
+                                + Thêm lựa chọn
+                            </Text>
+                        </TouchableOpacity>
+                        <View className="flex-row justify-end">
+                            <TouchableOpacity
+                                onPress={() => setShowPollModal(false)}
+                            >
+                                <Text className="text-gray-500 mr-4">Hủy</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity onPress={handleCreatePoll}>
+                                <Text className="text-blue-600 font-semibold">
+                                    Tạo
+                                </Text>
+                            </TouchableOpacity>
+                        </View>
+                    </View>
+                </View>
             </Modal>
 
             {/* Media Viewer Modal */}

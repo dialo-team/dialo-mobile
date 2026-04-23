@@ -19,6 +19,8 @@ export interface ChatInputBarProps {
     onAttachFile?: () => void;
     /** Callback when pick media pressed */
     onPickMedia?: () => void;
+    /** Callback when pick/send voice pressed */
+    onPickVoice?: () => void;
     /** Callback when emoji button pressed */
     onEmojiPress?: () => void;
     /** Show emoji menu state (for controlled emoji menu) */
@@ -79,6 +81,7 @@ const ChatInputBar = React.forwardRef<TextInput, ChatInputBarProps>(
             onSend,
             onAttachFile,
             onPickMedia,
+            onPickVoice,
             onEmojiPress,
             showEmojiMenu = false,
             onEmojiSelect,
@@ -271,6 +274,7 @@ const ChatInputBar = React.forwardRef<TextInput, ChatInputBarProps>(
                 {showMoreButton && (
                     <TouchableOpacity
                         className="ml-2 p-1"
+                        onPress={onPickVoice}
                         disabled={isDisabled}
                         accessibilityLabel="More options"
                     >

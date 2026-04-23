@@ -22,6 +22,7 @@ import {
     Easing,
     Image,
     Modal,
+    Platform,
     Pressable,
     RefreshControl,
     ScrollView,
@@ -171,7 +172,6 @@ export default function MessagesScreen() {
             } finally {
                 setLoading(false);
             }
-            // eslint-disable-next-line react-hooks/exhaustive-deps
         },
         [currentUserId],
     ); // 👈 CHỈ phụ thuộc vào currentUserId
@@ -245,7 +245,7 @@ export default function MessagesScreen() {
                 toValue: 1,
                 duration: 350,
                 easing: Easing.out(Easing.cubic),
-                useNativeDriver: true,
+                useNativeDriver: Platform.OS !== "web",
             }).start();
 
             return () => {
@@ -319,7 +319,7 @@ export default function MessagesScreen() {
             toValue: 1,
             duration: 350,
             easing: Easing.out(Easing.cubic),
-            useNativeDriver: true,
+            useNativeDriver: Platform.OS !== "web",
         }).start();
     }, [listEntrance]);
 

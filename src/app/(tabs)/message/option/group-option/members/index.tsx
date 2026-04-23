@@ -15,6 +15,7 @@ import {
     Modal,
     ScrollView,
     Text,
+    TextInput,
     TouchableOpacity,
     TouchableWithoutFeedback,
     View,
@@ -119,6 +120,15 @@ export default function GroupMembersPage() {
         null,
     );
     const [isModalVisible, setIsModalVisible] = useState(false);
+    const [showSearchInput, setShowSearchInput] = useState(false);
+    const [searchKeyword, setSearchKeyword] = useState("");
+    const [searchingMembers, setSearchingMembers] = useState(false);
+    const [memberSearchResults, setMemberSearchResults] = useState<
+        any[] | null
+    >(null);
+    const [showNicknameModal, setShowNicknameModal] = useState(false);
+    const [tempNickname, setTempNickname] = useState("");
+    const [updatingNickname, setUpdatingNickname] = useState(false);
 
     const openMemberModal = (member: EnrichedMember) => {
         setSelectedMember(member);
@@ -339,6 +349,77 @@ export default function GroupMembersPage() {
         return true; // Tab ALL
     });
 
+    const displayedMembers =
+        memberSearchResults && searchKeyword.trim()
+            ? memberSearchResults
+            : filteredMembers;
+
+    const handleSearchMembers = useCallback(async () => {
+        if (!conversationId || !currentUserId || !searchKeyword.trim()) {
+            setMemberSearchResults(null);
+            return;
+        }
+
+        setSearchingMembers(true);
+        try {
+            const response = await chatApi.searchConversationMembers(
+                conversationId,
+                searchKeyword.trim(),
+            );
+            const searchedMembers = normalizeMembers(response);
+            const byId = new Map(
+                members.map((member) => [extractValidId(member), member]),
+            );
+
+            const merged = searchedMembers
+                .map((item: any) => {
+                    const id = extractValidId(item);
+                    return byId.get(id) || item;
+                })
+                .filter(Boolean);
+
+            setMemberSearchResults(merged as any[]);
+        } catch (error) {
+            Alert.alert("Lỗi", "Không thể tìm kiếm thành viên.");
+        } finally {
+            setSearchingMembers(false);
+        }
+    }, [conversationId, currentUserId, members, searchKeyword]);
+
+    const openNicknameModal = (member: EnrichedMember) => {
+        setSelectedMember(member);
+        setTempNickname(member.enrichedDisplayName || member.displayName || "");
+        setShowNicknameModal(true);
+    };
+
+    const handleUpdateNickname = async () => {
+        if (!conversationId || !currentUserId || !selectedMember?.userId)
+            return;
+
+        setUpdatingNickname(true);
+        try {
+            await groupApi.updateMemberNickname(
+                conversationId,
+                selectedMember.userId,
+                currentUserId,
+                tempNickname.trim(),
+            );
+            setShowNicknameModal(false);
+            setIsModalVisible(false);
+            await loadMembers();
+            Alert.alert("Thành công", "Đã cập nhật nickname thành viên.");
+        } catch (error: any) {
+            Alert.alert(
+                "Lỗi",
+                error?.response?.data?.message ||
+                    error?.message ||
+                    "Không thể cập nhật nickname.",
+            );
+        } finally {
+            setUpdatingNickname(false);
+        }
+    };
+
     // Hàm render label role bên dưới tên user
     const renderRoleLabel = (role: string, isMe: boolean) => {
         if (role === "OWNER") return isMe ? "Bạn (Trưởng nhóm)" : "Trưởng nhóm";
@@ -480,11 +561,47 @@ export default function GroupMembersPage() {
                     <TouchableOpacity onPress={goToAddMembers}>
                         <UserPlus color="white" size={24} />
                     </TouchableOpacity>
-                    <TouchableOpacity>
+                    <TouchableOpacity
+                        onPress={() => {
+                            setShowSearchInput((prev) => !prev);
+                            setSearchKeyword("");
+                            setMemberSearchResults(null);
+                        }}
+                    >
                         <Search color="white" size={24} />
                     </TouchableOpacity>
                 </View>
             </View>
+
+            {showSearchInput && (
+                <View className="px-4 py-3 border-b border-gray-200 bg-white">
+                    <View className="flex-row items-center">
+                        <TextInput
+                            className="flex-1 bg-gray-100 rounded-xl px-3 py-2 text-[14px]"
+                            placeholder="Tìm tên thành viên"
+                            placeholderTextColor="#9ca3af"
+                            value={searchKeyword}
+                            onChangeText={(text) => {
+                                setSearchKeyword(text);
+                                if (!text.trim()) {
+                                    setMemberSearchResults(null);
+                                }
+                            }}
+                            onSubmitEditing={handleSearchMembers}
+                            returnKeyType="search"
+                        />
+                        <TouchableOpacity
+                            className="ml-2 bg-blue-500 px-3 py-2 rounded-xl"
+                            onPress={handleSearchMembers}
+                            disabled={searchingMembers}
+                        >
+                            <Text className="text-white text-[13px] font-medium">
+                                {searchingMembers ? "..." : "Tìm"}
+                            </Text>
+                        </TouchableOpacity>
+                    </View>
+                </View>
+            )}
 
             {/* Tabs */}
             <View className="flex-row border-b border-gray-200">
@@ -570,7 +687,7 @@ export default function GroupMembersPage() {
                         </View>
                     )}
 
-                    {filteredMembers.map((member) => {
+                    {displayedMembers.map((member) => {
                         const isMe = member.userId === currentUserId;
                         const displayName =
                             member.enrichedDisplayName ||
@@ -718,6 +835,18 @@ export default function GroupMembersPage() {
                                     </Text>
                                 </TouchableOpacity>
 
+                                <TouchableOpacity
+                                    className="px-5 py-4 border-b border-gray-50"
+                                    onPress={() =>
+                                        selectedMember &&
+                                        openNicknameModal(selectedMember)
+                                    }
+                                >
+                                    <Text className="text-[16px]">
+                                        Đặt nickname trong nhóm
+                                    </Text>
+                                </TouchableOpacity>
+
                                 {canManageMembers &&
                                     selectedMember?.userId !== currentUserId &&
                                     selectedMember?.role === "MEMBER" && (
@@ -763,6 +892,46 @@ export default function GroupMembersPage() {
                         </TouchableWithoutFeedback>
                     </View>
                 </TouchableWithoutFeedback>
+            </Modal>
+
+            <Modal
+                visible={showNicknameModal}
+                transparent
+                animationType="fade"
+                onRequestClose={() => setShowNicknameModal(false)}
+            >
+                <View className="flex-1 bg-black/40 justify-center px-6">
+                    <View className="bg-white rounded-2xl p-5">
+                        <Text className="text-lg font-semibold mb-4">
+                            Cập nhật nickname
+                        </Text>
+                        <TextInput
+                            className="bg-gray-100 rounded-xl px-4 py-3 text-[15px]"
+                            value={tempNickname}
+                            onChangeText={setTempNickname}
+                            placeholder="Nhập nickname"
+                            placeholderTextColor="#9ca3af"
+                            autoFocus
+                        />
+                        <View className="flex-row justify-end mt-4 gap-3">
+                            <TouchableOpacity
+                                onPress={() => setShowNicknameModal(false)}
+                                disabled={updatingNickname}
+                            >
+                                <Text className="text-gray-500">Hủy</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                                className="bg-blue-500 px-4 py-2 rounded-lg"
+                                onPress={handleUpdateNickname}
+                                disabled={updatingNickname}
+                            >
+                                <Text className="text-white font-medium">
+                                    {updatingNickname ? "Đang lưu..." : "Lưu"}
+                                </Text>
+                            </TouchableOpacity>
+                        </View>
+                    </View>
+                </View>
             </Modal>
         </SafeAreaView>
     );

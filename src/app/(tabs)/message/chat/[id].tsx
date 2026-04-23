@@ -172,6 +172,8 @@ export default function ChatScreen() {
 
     const [selectedMessage, setSelectedMessage] = useState<any>(null);
     const [viewingMediaMessage, setViewingMediaMessage] = useState<any>(null);
+    const [showEditModal, setShowEditModal] = useState(false);
+    const [editingContent, setEditingContent] = useState("");
     const typingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const entranceAnim = useRef(new Animated.Value(0)).current;
 
@@ -348,11 +350,15 @@ export default function ChatScreen() {
                     : "",
                 senderName: finalSenderName,
                 imageUri:
-                    type === "IMAGE" && fileUrl
+                    (type === "IMAGE" || type === "GIF") && fileUrl
                         ? resolveFileUrl(fileUrl)
                         : null,
                 videoUri:
                     type === "VIDEO" && fileUrl
+                        ? resolveFileUrl(fileUrl)
+                        : null,
+                voiceUri:
+                    type === "VOICE" && fileUrl
                         ? resolveFileUrl(fileUrl)
                         : null,
                 system: !!item?.system,
@@ -360,6 +366,7 @@ export default function ChatScreen() {
                 readAt: item?.readAt || item?.seenAt || null,
                 deliveredAt: item?.deliveredAt || null,
                 messageStatus: item?.status || item?.messageStatus || null,
+                reactions: Array.isArray(item?.reactions) ? item.reactions : [],
                 pending: false,
                 raw: item,
             };
@@ -617,7 +624,7 @@ export default function ChatScreen() {
         loadBlockStatusForUser,
     ]);
 
-    const { handlePickMedia, handlePickFile, handleOpenFile } =
+    const { handlePickMedia, handlePickFile, handlePickVoice, handleOpenFile } =
         useChatAttachments(normalizedConversationId, loadConversationDetail);
 
     useEffect(() => {
@@ -834,6 +841,42 @@ export default function ChatScreen() {
             await loadConversationDetail();
         } catch (error: any) {
             Alert.alert("Lỗi", "Không thể xóa tin nhắn");
+        }
+    };
+
+    const handleReactMessage = async (reaction: string) => {
+        if (!selectedMessage?.id) return;
+        try {
+            await chatApi.reactToMessage(selectedMessage.id, reaction);
+            setSelectedMessage(null);
+            await loadConversationDetail();
+        } catch {
+            Alert.alert("Lỗi", "Không thể thả cảm xúc lúc này.");
+        }
+    };
+
+    const openEditModal = () => {
+        const isOwner = selectedMessage?.senderId === currentUserId;
+        const canEdit =
+            isOwner &&
+            String(selectedMessage?.type || "").toUpperCase() === "TEXT";
+        if (!canEdit) return;
+        setEditingContent(selectedMessage?.content || "");
+        setShowEditModal(true);
+    };
+
+    const handleEditMessage = async () => {
+        if (!selectedMessage?.id || !editingContent.trim()) return;
+        try {
+            await chatApi.editMessage(
+                selectedMessage.id,
+                editingContent.trim(),
+            );
+            setShowEditModal(false);
+            setSelectedMessage(null);
+            await loadConversationDetail();
+        } catch {
+            Alert.alert("Lỗi", "Không thể chỉnh sửa tin nhắn.");
         }
     };
 
@@ -1226,6 +1269,16 @@ export default function ChatScreen() {
                                                     }}
                                                     resizeMode="cover"
                                                 />
+                                            ) : msg.voiceUri ? (
+                                                <View
+                                                    className={`flex-row items-center mb-1 p-2 rounded-lg ${isMe ? "bg-blue-700" : "bg-gray-100"}`}
+                                                >
+                                                    <Text
+                                                        className={`${isMe ? "text-white" : "text-gray-700"} font-medium`}
+                                                    >
+                                                        Tin nhắn thoại
+                                                    </Text>
+                                                </View>
                                             ) : null}
 
                                             {/* TEXT */}
@@ -1244,6 +1297,19 @@ export default function ChatScreen() {
                                                     ? getMessageStatusLabel(msg)
                                                     : msg.time}
                                             </Text>
+                                            {Array.isArray(msg.reactions) &&
+                                                msg.reactions.length > 0 && (
+                                                    <Text className="text-[11px] mt-1 text-gray-500">
+                                                        {msg.reactions
+                                                            .map(
+                                                                (r: any) =>
+                                                                    r?.reaction ||
+                                                                    r?.emoji,
+                                                            )
+                                                            .filter(Boolean)
+                                                            .join(" ")}
+                                                    </Text>
+                                                )}
                                         </TouchableOpacity>
                                     </View>
                                 );
@@ -1296,12 +1362,20 @@ export default function ChatScreen() {
                         onSend={handleSend}
                         onAttachFile={handlePickFile}
                         onPickMedia={handlePickMedia}
+                        onPickVoice={handlePickVoice}
                         isBlockedByMe={isBlockedByMe}
                         isBlockedByThem={isBlockedByThem}
                         onUnblock={handleUnblock}
                         displayName={displayName}
                         isGroupChat={false}
-                        showEmojiButton={false}
+                        showEmojiButton={true}
+                        showMoreButton={true}
+                        onEmojiPress={() => setShowEmojiMenu((prev) => !prev)}
+                        showEmojiMenu={showEmojiMenu}
+                        onEmojiSelect={(emoji) => {
+                            setMessage((prev) => `${prev}${emoji}`);
+                            setShowEmojiMenu(false);
+                        }}
                     />
                 )}
             </KeyboardAvoidingView>
@@ -1318,6 +1392,34 @@ export default function ChatScreen() {
                 >
                     <View className="flex-1 bg-black/40 justify-end px-4 pb-10">
                         <View className="bg-white rounded-2xl p-4">
+                            <View className="py-2 flex-row items-center">
+                                {["👍", "❤️", "😂", "😮", "😢"].map((emoji) => (
+                                    <TouchableOpacity
+                                        key={emoji}
+                                        className="mr-3"
+                                        onPress={() =>
+                                            handleReactMessage(emoji)
+                                        }
+                                    >
+                                        <Text className="text-2xl">
+                                            {emoji}
+                                        </Text>
+                                    </TouchableOpacity>
+                                ))}
+                            </View>
+                            {selectedMessage?.senderId === currentUserId &&
+                                String(
+                                    selectedMessage?.type || "",
+                                ).toUpperCase() === "TEXT" && (
+                                    <TouchableOpacity
+                                        className="py-3 flex-row items-center"
+                                        onPress={openEditModal}
+                                    >
+                                        <Text className="text-sm text-gray-700">
+                                            Chỉnh sửa tin nhắn
+                                        </Text>
+                                    </TouchableOpacity>
+                                )}
                             <TouchableOpacity
                                 className="py-3 flex-row items-center"
                                 onPress={handleUnsendMessage}
@@ -1389,6 +1491,39 @@ export default function ChatScreen() {
                         </View>
                     </View>
                 </TouchableWithoutFeedback>
+            </Modal>
+
+            <Modal
+                visible={showEditModal}
+                transparent
+                animationType="fade"
+                onRequestClose={() => setShowEditModal(false)}
+            >
+                <View className="flex-1 bg-black/40 justify-center px-5">
+                    <View className="bg-white rounded-2xl p-4">
+                        <Text className="text-base font-semibold mb-3">
+                            Chỉnh sửa tin nhắn
+                        </Text>
+                        <TextInput
+                            className="border border-gray-200 rounded-xl px-3 py-2"
+                            value={editingContent}
+                            onChangeText={setEditingContent}
+                            multiline
+                        />
+                        <View className="flex-row justify-end mt-3">
+                            <TouchableOpacity
+                                onPress={() => setShowEditModal(false)}
+                            >
+                                <Text className="text-gray-500 mr-4">Hủy</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity onPress={handleEditMessage}>
+                                <Text className="text-blue-600 font-semibold">
+                                    Lưu
+                                </Text>
+                            </TouchableOpacity>
+                        </View>
+                    </View>
+                </View>
             </Modal>
 
             {/* Media Viewer Modal */}
