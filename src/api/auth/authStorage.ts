@@ -18,7 +18,6 @@ export const saveAuthData = async (
 
 export const getAccessToken = async (): Promise<string | null> => {
     try {
-        console.log("[AuthStorage] Getting access token");
         const token = await storage.getItem("accessToken");
         console.log(
             "[AuthStorage] Access token retrieved:",
@@ -33,7 +32,6 @@ export const getAccessToken = async (): Promise<string | null> => {
 
 export const getRefreshToken = async (): Promise<string | null> => {
     try {
-        console.log("[AuthStorage] Getting refresh token");
         const token = await storage.getItem("refreshToken");
         console.log(
             "[AuthStorage] Refresh token retrieved:",

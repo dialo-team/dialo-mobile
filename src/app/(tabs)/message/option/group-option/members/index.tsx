@@ -173,6 +173,20 @@ export default function GroupMembersPage() {
         );
     };
 
+    const handlePromoteToAdmin = async (memberId: string) => {
+        try {
+            setLoading(true);
+            await groupApi.assignRole(conversationId, memberId, "ADMIN");
+            closeMemberModal();
+            await loadMembers(); // Load lại danh sách để cập nhật UI
+            Alert.alert("Thành công", "Đã bổ nhiệm làm phó nhóm"); // Bật lên nếu muốn hiện thông báo
+        } catch (error) {
+            Alert.alert("Lỗi", "Không thể bổ nhiệm phó nhóm");
+        } finally {
+            setLoading(false);
+        }
+    };
+
     // Load danh sách members + bổ sung dữ liệu
     const loadMembers = useCallback(async () => {
         if (!conversationId || !currentUserId) return;
@@ -518,6 +532,44 @@ export default function GroupMembersPage() {
                 </View>
             ) : (
                 <ScrollView showsVerticalScrollIndicator={false}>
+                    {activeTab === "ADMINS" && (
+                        <View>
+                            <View className="px-4 py-3 bg-gray-50">
+                                <Text className="text-gray-500 text-[13px]">
+                                    Những người có thể thay đổi các cài đặt nhóm
+                                </Text>
+                            </View>
+
+                            {/* Chỉ hiển thị nút này nếu bạn là Trưởng nhóm */}
+                            {canManageMembers && (
+                                <TouchableOpacity
+                                    className="flex-row items-center px-4 py-3 bg-white border-b border-gray-100 active:bg-gray-50"
+                                    onPress={() => {
+                                        router.push({
+                                            pathname:
+                                                "/message/option/group-option/add-admin", // Trỏ tới file sắp tạo ở Bước 2
+                                            params: { conversationId },
+                                        });
+                                    }}
+                                >
+                                    <View className="relative mr-3">
+                                        <View className="w-12 h-12 rounded-full bg-blue-50 items-center justify-center border border-blue-100">
+                                            <UserPlus
+                                                color="#3b82f6"
+                                                size={20}
+                                            />
+                                        </View>
+                                    </View>
+                                    <View className="flex-1 justify-center">
+                                        <Text className="text-[16px] text-black">
+                                            Thêm phó nhóm
+                                        </Text>
+                                    </View>
+                                </TouchableOpacity>
+                            )}
+                        </View>
+                    )}
+
                     {filteredMembers.map((member) => {
                         const isMe = member.userId === currentUserId;
                         const displayName =
@@ -665,6 +717,25 @@ export default function GroupMembersPage() {
                                         Xem trang cá nhân
                                     </Text>
                                 </TouchableOpacity>
+
+                                {canManageMembers &&
+                                    selectedMember?.userId !== currentUserId &&
+                                    selectedMember?.role === "MEMBER" && (
+                                        <TouchableOpacity
+                                            className="px-5 py-4 border-b border-gray-50"
+                                            onPress={() =>
+                                                selectedMember &&
+                                                handlePromoteToAdmin(
+                                                    selectedMember.userId,
+                                                )
+                                            }
+                                        >
+                                            <Text className="text-[16px] text-black">
+                                                Bổ nhiệm làm phó nhóm
+                                            </Text>
+                                        </TouchableOpacity>
+                                    )}
+
                                 <TouchableOpacity className="px-5 py-4 border-b border-gray-50">
                                     <Text className="text-[16px]">
                                         Chặn thành viên

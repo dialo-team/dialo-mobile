@@ -153,15 +153,15 @@ export const isGroupConversation = (value: any) => {
         isGroupByIdPattern;
 
     if (!result) {
-        console.log("[DEBUG isGroupConversation] Not detected as group:", {
-            conversationType: value?.conversationType,
-            type: value?.type,
-            groupName: value?.groupName,
-            counterpartId: value?.counterpartId,
-            conversationId: value?.conversationId,
-            isGroupByIdPattern,
-            counterpartName: value?.counterpartName,
-        });
+        // console.log("[DEBUG isGroupConversation] Not detected as group:", {
+        //     conversationType: value?.conversationType,
+        //     type: value?.type,
+        //     groupName: value?.groupName,
+        //     counterpartId: value?.counterpartId,
+        //     conversationId: value?.conversationId,
+        //     isGroupByIdPattern,
+        //     counterpartName: value?.counterpartName,
+        // });
     } else {
         console.log("[DEBUG isGroupConversation] DETECTED AS GROUP:", {
             counterpartName: value?.counterpartName,

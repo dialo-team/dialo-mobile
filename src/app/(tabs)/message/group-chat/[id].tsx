@@ -257,21 +257,49 @@ export default function GroupChatScreen() {
                 ...normalizeMembers(detail?.members),
             ];
 
-            membersData.forEach((member: any) => {
-                const mId = extractValidId(member);
-                if (mId && mId !== "null" && mId !== "undefined") {
-                    // Lưu lại tên với fallback là "" (rỗng) để ko đè mất tên của message gốc
-                    nextMemberProfiles[mId] = {
-                        displayName: pickBestDisplayName(
-                            extractNameCandidates(member),
-                            "",
+            const enrichedProfiles: Record<string, any> = {};
+
+            for (const member of membersData) {
+                const userId = extractValidId(member);
+                if (!userId) continue;
+
+                // Nếu là mình
+                if (userId === currentUserId) {
+                    enrichedProfiles[userId] = {
+                        displayName: "Bạn",
+                        avatarUrl: null,
+                    };
+                    continue;
+                }
+
+                try {
+                    const userRes = await friendApi.getUserById(userId);
+                    const userData = userRes?.data || userRes;
+
+                    console.log("[GroupChat] fetched user:", userId, userData);
+
+                    enrichedProfiles[userId] = {
+                        displayName:
+                            userData?.userName ||
+                            userData?.fullName ||
+                            userData?.displayName ||
+                            "Thành viên",
+
+                        avatarUrl: resolveFileUrl(
+                            userData?.avatar ||
+                                userData?.avatarUrl ||
+                                userData?.profilePictureUrl,
                         ),
-                        avatarUrl: extractAvatar(member)
-                            ? resolveFileUrl(extractAvatar(member))
-                            : null,
+                    };
+                } catch (e) {
+                    console.log("[GroupChat] fallback user:", userId);
+
+                    enrichedProfiles[userId] = {
+                        displayName: member.displayName || "Thành viên",
+                        avatarUrl: resolveFileUrl(member.avatarUrl),
                     };
                 }
-            });
+            }
 
             const messagesList = Array.isArray(detail?.messages)
                 ? detail.messages
@@ -325,7 +353,7 @@ export default function GroupChatScreen() {
                 }
             }
 
-            setMemberProfiles(nextMemberProfiles);
+            setMemberProfiles(enrichedProfiles);
 
             // === BƯỚC 4: RENDER GIAO DIỆN ===
             const nextName = detail?.counterpartName || initialName || "Nhóm";

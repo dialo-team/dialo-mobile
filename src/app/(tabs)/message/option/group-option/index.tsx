@@ -1,19 +1,29 @@
 import { chatApi, chatAuthUtils } from "@/src/api/chat/chatApi";
+import { friendApi } from "@/src/api/friend/friendApi";
 import { groupApi } from "@/src/api/group/groupApi";
-import { getInitials, pickBestDisplayName } from "@/src/utils/displayUser";
+import { getInitials } from "@/src/utils/displayUser";
 import * as ImagePicker from "expo-image-picker";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import {
+    BarChart3,
     Bell,
+    ChevronRight,
     Clock,
     EyeOff,
     Flag,
     Image as ImageIcon,
     Link,
+    LogOut,
+    MessageSquareX,
     MoveLeft,
     Pencil,
     Pin,
+    Settings,
+    ShieldCheck,
     Trash,
+    Trash2,
+    UserCheck,
+    UserCog,
     UserPlus,
     Users,
     X,
@@ -47,6 +57,26 @@ const normalizeMembers = (data: any): any[] => {
     if (Array.isArray(data?.members)) return data.members;
     if (Array.isArray(data?.data?.members)) return data.data.members;
     return [];
+};
+const CHAT_BASE_URL = "http://14.225.254.174:8085";
+
+const resolveFileUrl = (fileUrl?: string | null) => {
+    if (!fileUrl) return "";
+    if (/^https?:\/\//i.test(fileUrl)) return fileUrl;
+    return `${CHAT_BASE_URL}${fileUrl.startsWith("/") ? "" : "/"}${fileUrl}`;
+};
+
+const extractValidId = (item: any) => {
+    if (!item) return "";
+    if (typeof item === "string") return item.trim();
+    return String(
+        item?.userId ||
+            item?.id ||
+            item?.targetId ||
+            item?.senderId ||
+            item?.user?.id ||
+            "",
+    ).trim();
 };
 
 export default function GroupChatOptionsScreen() {
@@ -105,72 +135,91 @@ export default function GroupChatOptionsScreen() {
         if (!conversationId || !currentUserId) return;
 
         try {
-            console.log("[GroupOption] loadGroupData started:", {
-                conversationId,
-                currentUserId,
-            });
-
-            const [detailRes, membersRes] = await Promise.all([
+            const [detailRes, rawMembersRes] = await Promise.all([
                 chatApi.getConversationDetail(conversationId),
                 groupApi.getGroupMembers(conversationId, currentUserId),
             ]);
 
             const detail = detailRes?.data || detailRes;
+            const membersFromApi = normalizeMembers(rawMembersRes);
+            const membersFromDetail = [
+                ...normalizeMembers(detail?.participants),
+                ...normalizeMembers(detail?.members),
+            ];
 
-            console.log("[GroupOption] loadGroupData responses:", {
-                detail: {
-                    groupName: detail?.groupName,
-                    groupAvatarUrl: detail?.groupAvatarUrl,
-                    fields: Object.keys(detail || {}),
-                },
-                membersCount: Array.isArray(membersRes) ? membersRes.length : 0,
+            const rawMembersMap = new Map();
+
+            [...membersFromApi, ...membersFromDetail].forEach((m) => {
+                const id = extractValidId(m);
+                if (id) rawMembersMap.set(id, m);
             });
 
-            const nextName = pickBestDisplayName(
-                [
-                    detail?.groupName,
-                    detail?.conversationName,
-                    detail?.name,
-                    initialName,
-                ],
-                "Nhóm",
+            const rawMembers = Array.from(rawMembersMap.values());
+
+            // --- BƯỚC ENRICH (LÀM GIÀU DỮ LIỆU) ---
+            const enrichedMembers = await Promise.all(
+                rawMembers.map(async (member) => {
+                    const userId = extractValidId(member);
+
+                    if (!userId) return member;
+
+                    if (userId === currentUserId) {
+                        return {
+                            ...member,
+                            userId,
+                            displayName: "Bạn",
+                            avatarUrl: resolveFileUrl(member.avatarUrl),
+                        };
+                    }
+
+                    try {
+                        const userRes = await friendApi.getUserById(userId);
+                        console.log(
+                            `[GroupOption] Fetched user data for ${userId}:`,
+                            userRes,
+                        );
+                        const userData = userRes?.data || userRes;
+
+                        return {
+                            ...member,
+                            userId,
+                            displayName:
+                                userData?.fullName ||
+                                userData?.displayName ||
+                                userData?.userName ||
+                                member.displayName ||
+                                "Thành viên",
+
+                            avatarUrl: resolveFileUrl(
+                                userData?.avatar ||
+                                    userData?.avatarUrl ||
+                                    userData?.profilePictureUrl ||
+                                    member.avatarUrl,
+                            ),
+                        };
+                    } catch {
+                        return {
+                            ...member,
+                            userId,
+                            avatarUrl: resolveFileUrl(member.avatarUrl),
+                        };
+                    }
+                }),
             );
 
-            const nextAvatar =
-                detail?.groupAvatarUrl ||
-                detail?.avatarUrl ||
-                detail?.avatar ||
-                initialAvatar ||
-                "";
+            setMembersList(enrichedMembers);
+            console.log(enrichedMembers);
+            setMemberCount(enrichedMembers.length);
 
-            const members = normalizeMembers(membersRes);
-
-            // Tìm quyền của user hiện tại
-            const me = members.find(
-                (m) => String(m.userId) === String(currentUserId),
+            const me = enrichedMembers.find(
+                (m) => extractValidId(m) === currentUserId,
             );
-            if (me) {
-                setCurrentUserRole(me.role);
-            }
+            if (me) setCurrentUserRole(me.role);
 
-            setGroupName(nextName);
-            setGroupAvatar(nextAvatar);
-            setMemberCount(members.length);
-            setMembersList(members); // Lưu lại list để dùng cho Modal chuyển quyền
-            setJoiningLink(
-                detail?.groupLink || detail?.inviteLink || detail?.link || "",
-            );
-
-            console.log("[GroupOption] loadGroupData completed:", {
-                groupName: nextName,
-                memberCount: members.length,
-                currentUserRole: me?.role,
-            });
+            setGroupName(detail?.groupName || initialName);
+            setGroupAvatar(detail?.groupAvatarUrl || initialAvatar);
         } catch (error) {
-            console.log(
-                "[GroupOption] loadGroupData error:",
-                error?.message || error,
-            );
+            console.log("[GroupOption] loadGroupData error:", error);
         }
     }, [conversationId, currentUserId, initialAvatar, initialName]);
 
@@ -247,25 +296,15 @@ export default function GroupChatOptionsScreen() {
                     text: "Đồng ý",
                     style: "destructive",
                     onPress: async () => {
-                        setTransferringId(selectedMember.userId);
-                        try {
-                            console.log(
-                                "[GroupOption] Transfer & Leave started:",
-                                {
-                                    newOwnerId: selectedMember.userId,
-                                    conversationId,
-                                },
-                            );
+                        const userId = extractValidId(selectedMember);
+                        setTransferringId(userId);
 
+                        try {
                             // Gọi API 1: Phân quyền
                             await groupApi.assignRole(
                                 conversationId as string,
-                                selectedMember.userId,
+                                userId,
                                 "OWNER" as any,
-                            );
-
-                            console.log(
-                                "[GroupOption] assignRole success, now leaving",
                             );
 
                             // Gọi API 2: Rời nhóm
@@ -608,8 +647,38 @@ export default function GroupChatOptionsScreen() {
 
                     <View className="bg-white mt-2">
                         <OptionItem
+                            icon={<Clock size={20} color="#666" />}
+                            title="Lịch nhóm"
+                            right={<ChevronRight size={20} color="#ccc" />}
+                        />
+                        <OptionItem
+                            icon={<Pin size={20} color="#666" />}
+                            title="Tin nhắn đã ghim"
+                            right={<ChevronRight size={20} color="#ccc" />}
+                        />
+                        <OptionItem
+                            icon={<BarChart3 size={20} color="#666" />}
+                            title="Bình chọn"
+                            right={<ChevronRight size={20} color="#ccc" />}
+                        />
+                    </View>
+
+                    {(currentUserRole === "OWNER" ||
+                        currentUserRole === "ADMIN") && (
+                        <View className="bg-white mt-2">
+                            <OptionItem
+                                icon={<Settings size={20} color="#666" />}
+                                title="Cài đặt nhóm"
+                                right={<ChevronRight size={20} color="#ccc" />}
+                            />
+                        </View>
+                    )}
+
+                    <View className="bg-white mt-2">
+                        <OptionItem
                             icon={<ImageIcon size={20} />}
                             title="Ảnh, file, link"
+                            right={<ChevronRight size={20} color="#ccc" />}
                             onPress={() =>
                                 router.push({
                                     pathname: "/message/option/media-list",
@@ -621,31 +690,41 @@ export default function GroupChatOptionsScreen() {
 
                     <View className="bg-white mt-2">
                         <OptionItem
-                            icon={<Clock size={20} />}
-                            title="Lịch nhóm"
+                            icon={<Users size={20} color="#666" />}
+                            title={`Xem thành viên (${memberCount})`}
+                            right={<ChevronRight size={20} color="#ccc" />}
+                            onPress={() =>
+                                router.push({
+                                    pathname:
+                                        "/message/option/group-option/members",
+                                    params: { conversationId },
+                                })
+                            }
                         />
                         <OptionItem
-                            icon={<Pin size={20} />}
-                            title="Tin nhắn đã ghim"
+                            icon={<UserCheck size={20} color="#666" />}
+                            title="Phê duyệt thành viên mới"
+                            right={<ChevronRight size={20} color="#ccc" />}
+                        />
+                        <OptionItem
+                            icon={<Link size={20} color="#666" />}
+                            title="Link nhóm"
+                            description={joiningLink || "Tắt"}
+                            right={<ChevronRight size={20} color="#ccc" />}
                         />
                     </View>
 
                     <View className="bg-white mt-2">
                         <OptionItem
-                            icon={<Users size={20} />}
-                            title={`Xem thành viên (${memberCount})`}
-                            onPress={() => {
-                                router.push({
-                                    pathname:
-                                        "/message/option/group-option/members",
-                                    params: { conversationId },
-                                });
-                            }}
+                            icon={<UserCog size={20} color="#666" />}
+                            title="Cài đặt cá nhân"
+                            right={<ChevronRight size={20} color="#ccc" />}
                         />
                         <OptionItem
-                            icon={<Link size={20} />}
-                            title="Link nhóm"
-                            description={joiningLink || "Chưa có link mới"}
+                            icon={<MessageSquareX size={20} color="#666" />}
+                            title="Tin nhắn tự xóa"
+                            description="Không tự xóa"
+                            right={<ChevronRight size={20} color="#ccc" />}
                         />
                     </View>
 
@@ -693,30 +772,41 @@ export default function GroupChatOptionsScreen() {
                         />
                     </View>
 
-                    <View className="bg-white mt-2">
-                        <TouchableOpacity
-                            className="px-4 py-4 items-center border-b border-gray-100"
-                            onPress={handleDissolveGroup}
-                            disabled={loadingLeave || !conversationId}
-                        >
-                            <Text className="text-red-600 text-[15px] font-medium">
-                                {loadingLeave
-                                    ? "Đang xử lý..."
-                                    : "Giải tán nhóm"}
-                            </Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity
-                            className="px-4 py-4 items-center"
-                            onPress={handleLeaveGroup}
-                            disabled={loadingLeave || !conversationId}
-                        >
-                            <Text className="text-red-500 text-[15px] font-medium">
-                                {loadingLeave ? "Đang xử lý..." : "Rời nhóm"}
-                            </Text>
-                        </TouchableOpacity>
-                    </View>
+                    <View className="bg-white mt-2 mb-10">
+                        {/* CHỈ OWNER MỚI CÓ MỤC CHUYỂN QUYỀN (Icon ShieldCheck như đã nói ở trên) */}
+                        {currentUserRole === "OWNER" && (
+                            <OptionItem
+                                icon={<ShieldCheck size={20} color="#666" />}
+                                title="Chuyển quyền trưởng nhóm"
+                                right={<ChevronRight size={20} color="#ccc" />}
+                                onPress={() => setIsTransferModalVisible(true)}
+                            />
+                        )}
 
-                    <View className="h-12" />
+                        {/* RỜI NHÓM: Icon LogOut màu đỏ */}
+                        <OptionItem
+                            icon={<LogOut size={20} color="#ef4444" />} // Màu đỏ (red-500)
+                            title={
+                                <Text className="text-red-500 font-medium">
+                                    Rời nhóm
+                                </Text>
+                            }
+                            onPress={handleLeaveGroup}
+                        />
+
+                        {/* GIẢI TÁN NHÓM: Chỉ Owner thấy, Icon Trash2 hoặc UserMinus màu đỏ đậm */}
+                        {currentUserRole === "OWNER" && (
+                            <OptionItem
+                                icon={<Trash2 size={20} color="#dc2626" />} // Màu đỏ đậm (red-600)
+                                title={
+                                    <Text className="text-red-600 font-medium">
+                                        Giải tán nhóm
+                                    </Text>
+                                }
+                                onPress={handleDissolveGroup}
+                            />
+                        )}
+                    </View>
                 </ScrollView>
             </Animated.View>
 
@@ -772,11 +862,11 @@ export default function GroupChatOptionsScreen() {
                 </View>
             </Modal>
 
-            {/* MODAL CHỌN TRƯỞNG NHÓM MỚI (CHỈ OWNER MỚI THẤY) */}
             <Modal
                 visible={isTransferModalVisible}
                 animationType="slide"
                 transparent
+                onRequestClose={() => setIsTransferModalVisible(false)}
             >
                 <View className="flex-1 bg-black/50 justify-end">
                     <View className="bg-white rounded-t-2xl p-5 max-h-[80%]">
@@ -790,58 +880,72 @@ export default function GroupChatOptionsScreen() {
                                 <X size={24} color="black" />
                             </TouchableOpacity>
                         </View>
+
                         <Text className="text-gray-500 mb-4 text-sm">
-                            Bạn đang là Trưởng nhóm. Vui lòng chuyển quyền cho
-                            một thành viên khác trước khi rời đi.
+                            Vui lòng chọn một thành viên để bàn giao quyền quản
+                            lý trước khi rời nhóm.
                         </Text>
 
                         <ScrollView showsVerticalScrollIndicator={false}>
                             {membersList
                                 .filter(
                                     (m) =>
-                                        String(m.userId) !==
+                                        String(extractValidId(m)) !==
                                         String(currentUserId),
                                 )
                                 .map((member) => (
                                     <TouchableOpacity
-                                        key={member.userId}
-                                        className="flex-row items-center py-3 border-b border-gray-100"
+                                        key={extractValidId(member)}
+                                        className="flex-row items-center py-3 border-b border-gray-50"
                                         onPress={() =>
                                             handleTransferAndLeave(member)
                                         }
                                         disabled={transferringId !== null}
                                     >
-                                        {member.avatarUrl ? (
-                                            <Image
-                                                source={{
-                                                    uri: member.avatarUrl,
-                                                }}
-                                                className="w-12 h-12 rounded-full mr-3 bg-gray-200"
-                                            />
-                                        ) : (
-                                            <View className="w-12 h-12 rounded-full bg-blue-400 items-center justify-center mr-3">
-                                                <Text className="text-white font-bold text-lg">
-                                                    {member.displayName
-                                                        ?.charAt(0)
-                                                        ?.toUpperCase() || "U"}
-                                                </Text>
-                                            </View>
-                                        )}
+                                        {/* Avatar đã được Enrich */}
+                                        <View>
+                                            {member.avatarUrl ? (
+                                                <Image
+                                                    source={{
+                                                        uri: resolveFileUrl(
+                                                            member.avatarUrl,
+                                                        ),
+                                                    }}
+                                                    className="w-12 h-12 rounded-full mr-3 bg-gray-100"
+                                                />
+                                            ) : (
+                                                <View className="w-12 h-12 rounded-full bg-blue-500 items-center justify-center mr-3">
+                                                    <Text className="text-white font-bold text-lg">
+                                                        {member.displayName
+                                                            ?.charAt(0)
+                                                            .toUpperCase()}
+                                                    </Text>
+                                                </View>
+                                            )}
+                                        </View>
+
+                                        {/* Tên Account đã được Enrich */}
                                         <View className="flex-1 justify-center">
-                                            <Text className="text-base font-medium text-black">
+                                            <Text className="text-[16px] font-medium text-black">
                                                 {member.displayName}
                                             </Text>
                                             {member.role === "ADMIN" && (
-                                                <Text className="text-[13px] text-blue-500 mt-0.5">
+                                                <Text className="text-[12px] text-blue-500 mt-0.5">
                                                     Phó nhóm
                                                 </Text>
                                             )}
                                         </View>
 
-                                        {transferringId === member.userId && (
+                                        {transferringId ===
+                                        extractValidId(member) ? (
                                             <ActivityIndicator
                                                 size="small"
                                                 color="#3b82f6"
+                                            />
+                                        ) : (
+                                            <ChevronRight
+                                                size={20}
+                                                color="#ccc"
                                             />
                                         )}
                                     </TouchableOpacity>
