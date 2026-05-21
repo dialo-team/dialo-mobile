@@ -33,7 +33,7 @@ import { pickBestDisplayName } from "@/src/utils/displayUser";
 // Các tab hiển thị
 type TabType = "ALL" | "ADMINS" | "BLOCKED";
 
-const CHAT_BASE_URL = "http://14.225.254.174:8085";
+const CHAT_BASE_URL = "http://14.225.192.37:8085";
 const resolveFileUrl = (fileUrl?: string | null) => {
     if (!fileUrl) return "";
     if (/^https?:\/\//i.test(fileUrl)) return fileUrl;

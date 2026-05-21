@@ -1,4 +1,5 @@
-import { chatApi } from "@/src/api/chat/chatApi";
+import { chatAuthUtils } from "@/src/api/chat/chatApi";
+import { mediaApi } from "@/src/api/chat/mediaApi";
 import * as DocumentPicker from "expo-document-picker";
 import * as FileSystem from "expo-file-system/legacy"; // ✅ FIX ở đây
 import * as ImagePicker from "expo-image-picker";
@@ -36,6 +37,7 @@ export const useChatAttachments = (
             mediaTypes: ["images", "videos"],
             allowsEditing: true,
             quality: 1,
+            base64: true,
         });
 
         if (result.canceled) return;
@@ -56,31 +58,21 @@ export const useChatAttachments = (
         }
 
         try {
-            const messageType = detectMessageType(asset.mimeType);
-            await chatApi.sendFileMessage(
-                conversationId,
-                {
-                    uri: asset.uri,
-                    name:
-                        asset.fileName ||
-                        `upload-${Date.now()}${isVideo ? ".mp4" : ".jpg"}`,
-                    type:
-                        asset.mimeType ||
-                        (isVideo ? "video/mp4" : "image/jpeg"),
-                },
-                messageType as any,
-            );
+            const userId = await chatAuthUtils.getCurrentUserId();
+
+            await mediaApi.sendMediaFile(userId, conversationId, {
+                uri: asset.uri,
+                name:
+                    asset.fileName ||
+                    `upload-${Date.now()}${isVideo ? ".mp4" : ".jpg"}`,
+                type: asset.mimeType || (isVideo ? "video/mp4" : "image/jpeg"),
+            });
             onSuccess();
         } catch (error: any) {
             console.error("Send media error:", {
                 message: error?.message,
                 status: error?.response?.status,
                 data: error?.response?.data,
-                dataString:
-                    typeof error?.response?.data === "string"
-                        ? error?.response?.data
-                        : JSON.stringify(error?.response?.data || {}),
-                url: error?.config?.url,
             });
             Alert.alert("Lỗi", "Không thể gửi media.");
         }
@@ -103,27 +95,18 @@ export const useChatAttachments = (
                 return;
             }
 
-            await chatApi.sendFileMessage(
-                conversationId,
-                {
-                    uri: asset.uri,
-                    name: asset.name || `file-${Date.now()}`,
-                    type: asset.mimeType || "application/octet-stream",
-                },
-                detectMessageType(asset.mimeType) as any,
-            );
+            const userId = await chatAuthUtils.getCurrentUserId();
+            await mediaApi.sendMediaFile(userId, conversationId, {
+                uri: asset.uri,
+                name: asset.name || `file-${Date.now()}`,
+                type: asset.mimeType || "application/octet-stream",
+            });
 
             onSuccess();
         } catch (error: any) {
             console.error("Send file error:", {
                 message: error?.message,
                 status: error?.response?.status,
-                data: error?.response?.data,
-                dataString:
-                    typeof error?.response?.data === "string"
-                        ? error?.response?.data
-                        : JSON.stringify(error?.response?.data || {}),
-                url: error?.config?.url,
             });
             Alert.alert("Lỗi", "Không thể gửi tài liệu.");
         }
@@ -145,27 +128,18 @@ export const useChatAttachments = (
                 return;
             }
 
-            await chatApi.sendFileMessage(
-                conversationId,
-                {
-                    uri: asset.uri,
-                    name: asset.name || `voice-${Date.now()}.m4a`,
-                    type: asset.mimeType || "audio/mpeg",
-                },
-                "VOICE",
-            );
+            const userId = await chatAuthUtils.getCurrentUserId();
+            await mediaApi.sendMediaFile(userId, conversationId, {
+                uri: asset.uri,
+                name: asset.name || `voice-${Date.now()}.m4a`,
+                type: asset.mimeType || "audio/mpeg",
+            });
 
             onSuccess();
         } catch (error: any) {
             console.error("Send voice error:", {
                 message: error?.message,
                 status: error?.response?.status,
-                data: error?.response?.data,
-                dataString:
-                    typeof error?.response?.data === "string"
-                        ? error?.response?.data
-                        : JSON.stringify(error?.response?.data || {}),
-                url: error?.config?.url,
             });
             Alert.alert("Lỗi", "Không thể gửi tin nhắn thoại.");
         }

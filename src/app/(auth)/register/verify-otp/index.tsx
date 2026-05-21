@@ -30,6 +30,18 @@ export default function VerifyOtpScreen() {
     const [countdown, setCountdown] = useState(50);
     const [isSubmitting, setIsSubmitting] = useState(false);
 
+    const extractTokens = (response: any) => {
+        const root = response?.data ?? response;
+        const payload = root?.data ?? root?.result ?? root;
+        const accessToken = payload?.accessToken ?? payload?.access_token;
+        const refreshToken = payload?.refreshToken ?? payload?.refresh_token;
+
+        return {
+            accessToken: typeof accessToken === "string" ? accessToken : "",
+            refreshToken: typeof refreshToken === "string" ? refreshToken : "",
+        };
+    };
+
     useEffect(() => {
         if (countdown === 0) return;
 
@@ -92,9 +104,10 @@ export default function VerifyOtpScreen() {
                         password: String(password),
                     });
 
-                    if (loginResponse.data?.accessToken) {
-                        const { accessToken, refreshToken } =
-                            loginResponse.data;
+                    const { accessToken, refreshToken } =
+                        extractTokens(loginResponse);
+
+                    if (accessToken && refreshToken) {
                         await saveAuthData(accessToken, refreshToken);
                         console.log("Đăng nhập ngầm OK!");
 
@@ -111,7 +124,10 @@ export default function VerifyOtpScreen() {
                                 },
                             ],
                         );
+                        return;
                     }
+
+                    Alert.alert("Lỗi", "Đăng nhập ngầm chưa nhận được token.");
                 } catch (loginError: any) {
                     console.log(
                         "Lỗi đăng nhập ngầm:",

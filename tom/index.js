@@ -1,7 +1,7 @@
 const { Client } = require("@stomp/stompjs");
 const SockJS = require("sockjs-client");
 
-const BASE_URL = "http://14.225.254.174:8085";
+const BASE_URL = "http://14.225.192.37:8085";
 const conversationId = "69df8eabe75de55cdf3a118c";
 const userId = "a3c139d4-35df-4253-884e-15fcbe899f2d";
 

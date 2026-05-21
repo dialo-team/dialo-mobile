@@ -10,7 +10,7 @@ import {
 } from "./types";
 
 // Use API gateway (9000) for web CORS compatibility.
-const CHAT_BASE_URL = "http://14.225.254.174:9000";
+const CHAT_BASE_URL = "http://14.225.192.37:8085";
 
 const chatClient = axios.create({
     baseURL: CHAT_BASE_URL,
@@ -464,7 +464,8 @@ export const chatApi = {
         const senderId = await chatAuthUtils.getCurrentUserId();
         const token = await getAccessToken();
         const createFilePart = async () => {
-            const isWeb = typeof window !== "undefined";
+            const isWeb =
+                typeof window !== "undefined" && typeof File !== "undefined";
             if (!isWeb) {
                 return {
                     uri: fileData.uri,
@@ -519,6 +520,7 @@ export const chatApi = {
                     {
                         headers: {
                             Authorization: `Bearer ${token}`,
+                            "Content-Type": "multipart/form-data",
                         },
                     },
                 );

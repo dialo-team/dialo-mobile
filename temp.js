@@ -1,7 +1,7 @@
 const { Buffer } = require("buffer");
 const axios = require("axios");
 
-const BASE_URL = "http://14.225.254.174:9000";
+const BASE_URL = "http://14.225.192.37:9000";
 
 const ACCOUNTS = {
     OWNER: {

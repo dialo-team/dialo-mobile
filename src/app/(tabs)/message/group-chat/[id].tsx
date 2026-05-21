@@ -36,7 +36,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-const CHAT_BASE_URL = "http://14.225.254.174:8085";
+const CHAT_BASE_URL = "http://14.225.192.37:8085";
 
 type UiMessage = {
     id: string;
@@ -67,7 +67,8 @@ const paramToString = (value: string | string[] | undefined) => {
 const resolveFileUrl = (fileUrl?: string | null) => {
     if (!fileUrl) return "";
     if (/^https?:\/\//i.test(fileUrl)) return fileUrl;
-    return `${CHAT_BASE_URL}${fileUrl.startsWith("/") ? "" : "/"}${fileUrl}`;
+    // API Gateway (9000) handles served file routing
+    return `http://14.225.192.37:9000${fileUrl.startsWith("/") ? "" : "/"}${fileUrl}`;
 };
 
 const dedupeMessages = (items: UiMessage[]) => {

@@ -8,7 +8,7 @@ const redis = require("redis");
 async function checkRedisOTP() {
     const client = redis.createClient({
         socket: {
-            host: "14.225.254.174",
+            host: "14.225.192.37",
             port: 6379,
         },
     });
@@ -71,7 +71,7 @@ async function checkRedisOTP() {
         console.error("Code:", error.code);
         console.error("\nCó thể Redis không chạy hoặc host/port không đúng");
         console.error("Hãy kiểm tra:");
-        console.error("- Redis server đang chạy? telnet 14.225.254.174 6379");
+        console.error("- Redis server đang chạy? telnet 14.225.192.37 6379");
         console.error("- Port mở trên firewall?");
     }
 }

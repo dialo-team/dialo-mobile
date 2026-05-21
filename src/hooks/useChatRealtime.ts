@@ -3,7 +3,7 @@ import { Client, IMessage, StompSubscription } from "@stomp/stompjs";
 import { useCallback, useEffect, useRef, useState } from "react";
 import SockJS from "sockjs-client";
 
-const CHAT_WS_BASE_URL = "http://14.225.254.174:8085";
+const CHAT_WS_BASE_URL = "http://14.225.192.37:8085";
 
 type UseChatRealtimeOptions = {
     currentUserId?: string;

@@ -35,7 +35,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-const CHAT_BASE_URL = "http://14.225.254.174:8085";
+const CHAT_BASE_URL = "http://14.225.192.37:8085";
 
 function paramStr(v: string | string[] | undefined): string | undefined {
     if (typeof v === "string") return v;
@@ -46,7 +46,8 @@ function paramStr(v: string | string[] | undefined): string | undefined {
 function resolveFileUrl(fileUrl?: string) {
     if (!fileUrl) return "";
     if (/^https?:\/\//i.test(fileUrl)) return fileUrl;
-    return `${CHAT_BASE_URL}${fileUrl.startsWith("/") ? "" : "/"}${fileUrl}`;
+    // API Gateway (9000) usually handles served file paths better
+    return `http://14.225.192.37:9000${fileUrl.startsWith("/") ? "" : "/"}${fileUrl}`;
 }
 
 function formatRelativeActivity(value?: string) {
