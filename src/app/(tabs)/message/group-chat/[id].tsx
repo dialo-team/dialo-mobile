@@ -36,8 +36,6 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-const CHAT_BASE_URL = "http://14.225.192.37:8085";
-
 type UiMessage = {
     id: string;
     text: string;

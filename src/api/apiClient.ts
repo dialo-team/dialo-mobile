@@ -5,10 +5,10 @@ const BASE_URL = "http://14.225.192.37:9000";
 
 // Danh sách các API không cần gửi Token và không xử lý Logout khi gặp 401
 const PUBLIC_ENDPOINTS = [
-    "/auth/signup",
-    "/auth/verify-otp", // Đảm bảo tên route này khớp với URL thực tế của bạn
-    "/auth/signin",
-    "/auth/resend-otp",
+    "/api/v1/auth/signup",
+    "/api/v1/auth/verify-otp", // Đảm bảo tên route này khớp với URL thực tế của bạn
+    "/api/v1/auth/signin",
+    "/api/v1/auth/resend-otp",
 ];
 
 const apiClient = axios.create({

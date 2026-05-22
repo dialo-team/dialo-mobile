@@ -461,80 +461,79 @@ export const chatApi = {
         fileData: { uri: string; name: string; type: string },
         messageType?: "IMAGE" | "VIDEO" | "FILE" | "VOICE" | "GIF",
     ) {
-        const senderId = await chatAuthUtils.getCurrentUserId();
-        const token = await getAccessToken();
-        const createFilePart = async () => {
+        try {
+            const formData = new FormData();
+
+            // Build file part safely - use Blob directly to avoid read-only property issues
             const isWeb =
                 typeof window !== "undefined" && typeof File !== "undefined";
+
             if (!isWeb) {
-                return {
+                // React Native - send as plain object
+                formData.append("file", {
                     uri: fileData.uri,
                     name: fileData.name,
                     type: fileData.type,
-                } as any;
+                } as any);
+            } else {
+                // Web - fetch and use Blob with filename
+                try {
+                    const resp = await fetch(fileData.uri);
+                    const blob = await resp.blob();
+                    const fileType =
+                        fileData.type ||
+                        blob.type ||
+                        "application/octet-stream";
+
+                    // Use Blob directly with slice to avoid read-only issues
+                    const fileBlob = blob.slice(0, blob.size, fileType);
+
+                    // Append blob with filename as second parameter
+                    formData.append("file", fileBlob, fileData.name);
+                } catch (error) {
+                    console.warn(
+                        "[chatApi] Failed to fetch blob, retrying with object:",
+                        error,
+                    );
+                    // Fallback: try as plain object
+                    formData.append("file", {
+                        uri: fileData.uri,
+                        name: fileData.name,
+                        type: fileData.type || "application/octet-stream",
+                    } as any);
+                }
             }
 
-            try {
-                const resp = await fetch(fileData.uri);
-                const blob = await resp.blob();
-                const fileType =
-                    fileData.type || blob.type || "application/octet-stream";
-                return new File([blob], fileData.name, { type: fileType });
-            } catch {
-                return {
-                    uri: fileData.uri,
-                    name: fileData.name,
-                    type: fileData.type || "application/octet-stream",
-                } as any;
-            }
-        };
+            console.log("[chatApi] sendFileMessage request:", {
+                method: "POST",
+                url: "/api/v1/messages/file",
+                conversationId,
+                fileName: fileData.name,
+                fileType: fileData.type,
+                messageType,
+            });
 
-        const buildForm = async (mode: "full" | "noSender" | "minimal") => {
-            const formData = new FormData();
-            const filePart = await createFilePart();
-            formData.append("file", filePart as any);
-            formData.append("conversationId", conversationId);
-
-            if (mode !== "minimal" && senderId) {
-                formData.append("senderId", senderId);
-            }
-            if (mode === "full" && messageType) {
-                formData.append("type", messageType);
-            }
-            return formData;
-        };
-
-        const tryModes: ("full" | "noSender" | "minimal")[] = [
-            "full",
-            "noSender",
-            "minimal",
-        ];
-
-        let lastError: any;
-        for (const mode of tryModes) {
-            try {
-                const formData = await buildForm(mode);
-                return await chatClient.post(
-                    "/api/v1/messages/file",
-                    formData,
-                    {
-                        headers: {
-                            Authorization: `Bearer ${token}`,
-                            "Content-Type": "multipart/form-data",
-                        },
+            const res = await chatClient.post(
+                "/api/v1/messages/file",
+                formData,
+                {
+                    params: {
+                        conversationId,
                     },
-                );
-            } catch (error: any) {
-                lastError = error;
-                console.warn("[chatApi] sendFileMessage failed", {
-                    mode,
-                    status: error?.response?.status,
-                    data: error?.response?.data,
-                });
-            }
-        }
+                },
+            );
 
-        throw lastError;
+            console.log("[chatApi] sendFileMessage success:", res?.data);
+            return res?.data || res;
+        } catch (error: any) {
+            console.error("[chatApi] sendFileMessage error:", {
+                message: error?.message,
+                status: error?.response?.status,
+                data: error?.response?.data,
+                url: error?.config?.url,
+            });
+            throw error;
+        }
     },
 
     deleteMessage: async (messageId: string) => {

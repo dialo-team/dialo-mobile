@@ -7,7 +7,7 @@ import {
 export const qrAuthApi = {
     requestChallenge: async (): Promise<QrChallengeRequestResponse> => {
         const response = await apiClient.post(
-            "/api/v1/auth/qr/challenges/request",
+            "/auth/qr/challenges/request",
             {},
         );
         return response.data;
@@ -15,7 +15,7 @@ export const qrAuthApi = {
 
     approveChallenge: async (challengeId: string) => {
         const response = await apiClient.post(
-            `/api/v1/auth/qr/challenges/${challengeId}/approve`,
+            `/auth/qr/challenges/${challengeId}/approve`,
             {},
         );
         return response.data;
@@ -25,7 +25,7 @@ export const qrAuthApi = {
         challengeId: string,
     ): Promise<QrChallengeExchangeResponse> => {
         const response = await apiClient.post(
-            `/api/v1/auth/qr/challenges/${challengeId}/exchange`,
+            `/auth/qr/challenges/${challengeId}/exchange`,
             {},
         );
         return response.data;

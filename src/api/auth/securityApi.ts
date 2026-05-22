@@ -19,17 +19,17 @@ const normalizeSessionList = (data: unknown): SessionDeviceItem[] => {
 
 export const securityApi = {
     lockAccount: async () => {
-        const response = await apiClient.post("/api/v1/auth/lock", {});
+        const response = await apiClient.post("/auth/lock", {});
         return response.data;
     },
 
     getActiveSessions: async (): Promise<SessionDeviceItem[]> => {
-        const response = await apiClient.get("/api/v1/auth/sessions/active");
+        const response = await apiClient.get("/auth/sessions/active");
         return normalizeSessionList(response.data);
     },
 
     getInactiveSessions: async (): Promise<SessionDeviceItem[]> => {
-        const response = await apiClient.get("/api/v1/auth/sessions/unactive");
+        const response = await apiClient.get("/auth/sessions/unactive");
         return normalizeSessionList(response.data);
     },
 };
