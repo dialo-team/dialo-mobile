@@ -67,7 +67,7 @@ export default function RegisterScreen() {
         } catch (error: any) {
             console.log("Lỗi đăng kí", error);
             Alert.alert(
-                "Lỗi",
+                "Số điện thoại đã được sử dụng",
                 error.response?.data?.message || "Không thể gửi mã OTP",
             );
         } finally {

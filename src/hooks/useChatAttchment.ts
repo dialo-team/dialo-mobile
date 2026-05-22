@@ -1,7 +1,7 @@
 import { chatAuthUtils } from "@/src/api/chat/chatApi";
 import { mediaApi } from "@/src/api/chat/mediaApi";
 import * as DocumentPicker from "expo-document-picker";
-import * as FileSystem from "expo-file-system/legacy"; // ✅ FIX ở đây
+import * as FileSystem from "expo-file-system/legacy";
 import * as ImagePicker from "expo-image-picker";
 import * as Sharing from "expo-sharing";
 import { Alert } from "react-native";
@@ -14,15 +14,6 @@ export const useChatAttachments = (
     conversationId: string,
     onSuccess: () => void,
 ) => {
-    const detectMessageType = (mimeType?: string) => {
-        const normalized = String(mimeType || "").toLowerCase();
-        if (normalized === "image/gif") return "GIF";
-        if (normalized.startsWith("audio/")) return "VOICE";
-        if (normalized.startsWith("video/")) return "VIDEO";
-        if (normalized.startsWith("image/")) return "IMAGE";
-        return "FILE";
-    };
-
     const handlePickMedia = async () => {
         if (!conversationId) return;
 
@@ -33,11 +24,12 @@ export const useChatAttachments = (
             return;
         }
 
+        // Tối ưu hóa cấu hình chọn ảnh để tránh làm sập RAM và Server Backend
         const result = await ImagePicker.launchImageLibraryAsync({
             mediaTypes: ["images", "videos"],
             allowsEditing: true,
-            quality: 1,
-            base64: true,
+            aspect: [1, 1], // 🔥 THÊM DÒNG NÀY: Ép cắt ảnh vuông (ví dụ 800x800 hoặc 1000x1000)
+            quality: 0.5, // 💎 FIX: Tắt đi vì chúng ta sử dụng FileSystem đọc ở Api để tránh lãng phí RAM song song
         });
 
         if (result.canceled) return;
@@ -59,6 +51,10 @@ export const useChatAttachments = (
 
         try {
             const userId = await chatAuthUtils.getCurrentUserId();
+
+            console.log(
+                `[useChatAttachments] 📸 Chọn ảnh thành công. Kích thước đã tối ưu: W:${asset.width} x H:${asset.height}`,
+            );
 
             await mediaApi.sendMediaFile(userId, conversationId, {
                 uri: asset.uri,

@@ -1,15 +1,17 @@
+// src/api/chat/chatApi.ts
+
 import { pickBestDisplayName } from "@/src/utils/displayUser";
 import axios, { AxiosRequestConfig } from "axios";
 import { getAccessToken } from "../auth/authStorage";
 import {
     ChatConversationDetail,
     ChatConversationItem,
+    ChatMediaItem,
     ChatUserProfile,
     ForwardMessagePayload,
     SendMessagePayload,
 } from "./types";
 
-// Use API gateway (9000) for web CORS compatibility.
 const CHAT_BASE_URL = "http://14.225.192.37:8085";
 
 const chatClient = axios.create({
@@ -82,26 +84,8 @@ chatClient.interceptors.response.use(
         const status = error?.response?.status;
         const message = error?.response?.data?.message || error?.message;
 
-        // Detect and handle CORS errors
         if (error?.message === "Network Error" && !error?.response) {
             console.warn("[chatClient] CORS or Network Error detected");
-            console.warn("[chatClient] Attempted URL:", error?.config?.url);
-            console.warn(
-                "[chatClient] Origin:",
-                typeof window !== "undefined" ? window.location.origin : "N/A",
-            );
-
-            if (
-                typeof window !== "undefined" &&
-                error?.message === "Network Error"
-            ) {
-                console.warn(
-                    "[chatClient] CORS-like error - ensure backend has CORS headers configured for localhost",
-                );
-                console.warn(
-                    "[chatClient] Consider testing on physical device via Expo Go instead of web",
-                );
-            }
         }
 
         console.log("[chatClient] response error:", {
@@ -128,18 +112,12 @@ export const isGroupConversation = (value: any) => {
             "",
     ).toLowerCase();
 
-    // Cách detect group từ API response:
-    // 1. Nếu có explicit type === 'group'
-    // 2. Hoặc nếu counterpartId === conversationId (group pattern)
-    // 3. Hoặc có các field group-specific
-
     const hasExplicitGroupType = type === "group";
     const hasGroupName = !!value?.groupName;
     const hasGroupAvatar = !!value?.groupAvatarUrl;
     const hasParticipants = Array.isArray(value?.participants);
     const hasMemberRoles = !!value?.memberRoles;
 
-    // KEY PATTERN: counterpartId === conversationId là group
     const isGroupByIdPattern =
         value?.counterpartId &&
         value?.conversationId &&
@@ -152,17 +130,6 @@ export const isGroupConversation = (value: any) => {
         hasParticipants ||
         hasMemberRoles ||
         isGroupByIdPattern;
-
-    if (!result) {
-        console.log("[DEBUG isGroupConversation] DETECTED AS GROUP:", {
-            counterpartName: value?.counterpartName,
-            reason: hasExplicitGroupType
-                ? "explicit type"
-                : isGroupByIdPattern
-                  ? "id pattern"
-                  : "other field",
-        });
-    }
 
     return result;
 };
@@ -291,23 +258,7 @@ const request = async <T>(
             error?.message ||
             `Request failed with status code ${status}`;
 
-        // Enhanced error logging for debugging
-        console.log(`[chatApi] ${path} error:`, {
-            message,
-            status,
-            data,
-            url: error?.config?.url,
-            method: error?.config?.method,
-            payload: error?.config?.data,
-            isCORSError: !error?.response && error?.code === "ERR_NETWORK",
-        });
-
-        // Provide user-friendly error messages
-        if (!error?.response && error?.message === "Network Error") {
-            throw new Error(
-                "Network error - check if backend is reachable. For web testing, ensure CORS is enabled or test on physical device.",
-            );
-        }
+        console.log(`[chatApi] ${path} error:`, { message, status, data });
 
         const apiError: any = new Error(message);
         apiError.response = error?.response;
@@ -398,9 +349,19 @@ export const chatApi = {
         });
     },
 
-    getConversationMedia: async (conversationId: string) => {
+    getConversationMedia: async (
+        conversationId: string,
+        type: "IMAGE" | "VIDEO" | "FILE" = "IMAGE",
+    ): Promise<ChatMediaItem[]> => {
+        const token = await getAccessToken();
+        const userId = decodeJwtSub(token);
+
         return request(`/api/v1/conversations/${conversationId}/media`, {
             method: "GET",
+            headers: {
+                "X-User-Id": userId,
+            },
+            params: { type },
         });
     },
 
@@ -456,86 +417,6 @@ export const chatApi = {
         });
     },
 
-    async sendFileMessage(
-        conversationId: string,
-        fileData: { uri: string; name: string; type: string },
-        messageType?: "IMAGE" | "VIDEO" | "FILE" | "VOICE" | "GIF",
-    ) {
-        try {
-            const formData = new FormData();
-
-            // Build file part safely - use Blob directly to avoid read-only property issues
-            const isWeb =
-                typeof window !== "undefined" && typeof File !== "undefined";
-
-            if (!isWeb) {
-                // React Native - send as plain object
-                formData.append("file", {
-                    uri: fileData.uri,
-                    name: fileData.name,
-                    type: fileData.type,
-                } as any);
-            } else {
-                // Web - fetch and use Blob with filename
-                try {
-                    const resp = await fetch(fileData.uri);
-                    const blob = await resp.blob();
-                    const fileType =
-                        fileData.type ||
-                        blob.type ||
-                        "application/octet-stream";
-
-                    // Use Blob directly with slice to avoid read-only issues
-                    const fileBlob = blob.slice(0, blob.size, fileType);
-
-                    // Append blob with filename as second parameter
-                    formData.append("file", fileBlob, fileData.name);
-                } catch (error) {
-                    console.warn(
-                        "[chatApi] Failed to fetch blob, retrying with object:",
-                        error,
-                    );
-                    // Fallback: try as plain object
-                    formData.append("file", {
-                        uri: fileData.uri,
-                        name: fileData.name,
-                        type: fileData.type || "application/octet-stream",
-                    } as any);
-                }
-            }
-
-            console.log("[chatApi] sendFileMessage request:", {
-                method: "POST",
-                url: "/api/v1/messages/file",
-                conversationId,
-                fileName: fileData.name,
-                fileType: fileData.type,
-                messageType,
-            });
-
-            const res = await chatClient.post(
-                "/api/v1/messages/file",
-                formData,
-                {
-                    params: {
-                        conversationId,
-                    },
-                },
-            );
-
-            console.log("[chatApi] sendFileMessage success:", res?.data);
-            return res?.data || res;
-        } catch (error: any) {
-            console.error("[chatApi] sendFileMessage error:", {
-                message: error?.message,
-                status: error?.response?.status,
-                data: error?.response?.data,
-                url: error?.config?.url,
-            });
-            throw error;
-        }
-    },
-
     deleteMessage: async (messageId: string) => {
         return request(`/api/v1/messages/${messageId}`, {
             method: "DELETE",
@@ -580,7 +461,6 @@ export const chatApi = {
             } catch (error: any) {
                 const status = error?.response?.status;
                 lastError = error;
-                // Retry only when backend says bad request payload.
                 if (status !== 400) {
                     throw error;
                 }

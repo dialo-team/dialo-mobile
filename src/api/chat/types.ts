@@ -76,7 +76,8 @@ export type ForwardMessagePayload = {
     targetConversationId: string;
 };
 
-export type MediaType = "IMAGE" | "VIDEO" | "FILE";
+// Trong file types.ts, cập nhật lại enum/union:
+export type MediaType = "IMAGE" | "VIDEO" | "FILE" | "LINK" | "VOICE" | "GIF";
 
 export interface Attachment {
     fileName: string;
@@ -90,9 +91,7 @@ export interface ChatMediaItem {
     id: string;
     conversationId: string;
     type: MediaType;
-
     content?: string;
-
     attachment?: Attachment;
 
     createdAt: string;

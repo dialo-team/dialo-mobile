@@ -164,10 +164,6 @@ export default function MessagesScreen() {
 
                 setConversations(unblocked);
             } catch (e: any) {
-                console.error(
-                    "[MessagesScreen] loadConversations error:",
-                    e?.message,
-                );
                 setError("Không thể tải danh sách cuộc trò chuyện");
             } finally {
                 setLoading(false);
@@ -182,7 +178,6 @@ export default function MessagesScreen() {
         }
         console.log("[MessagesScreen] Debounced refresh scheduled");
         refreshTimerRef.current = setTimeout(() => {
-            console.log("[MessagesScreen] Executing debounced refresh");
             loadConversations();
         }, 1000);
     }, [loadConversations]);
@@ -288,13 +283,14 @@ export default function MessagesScreen() {
     const getConversationDisplayName = (conversation: Conversation) =>
         pickBestDisplayName(
             [
-                conversation.counterpartName,
+                (conversation as any)?.counterpartName,
                 (conversation as any)?.remarkName,
                 (conversation as any)?.counterpartUserName,
                 (conversation as any)?.displayName,
                 (conversation as any)?.userName,
                 (conversation as any)?.name,
                 (conversation as any)?.fullName,
+                (conversation as any)?.nickName,
             ],
             "Nguoi dung",
         );

@@ -3,7 +3,7 @@ import { ChatMediaItem } from "@/src/api/chat/types";
 import { getFullUrl } from "@/src/utils/url";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { FileText, Link2, MoveLeft } from "lucide-react-native";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
     ActivityIndicator,
     Image,
@@ -27,63 +27,91 @@ export default function ChatMediaScreen() {
     const router = useRouter();
     const params = useLocalSearchParams<{
         conversationId: string;
+        userId: string;
         name: string;
     }>();
     const conversationId = paramStr(params.conversationId);
+    const userId = paramStr(params.userId);
+
     const [activeTab, setActiveTab] = useState<TabType>("MEDIA");
     const [loading, setLoading] = useState(true);
-    const [groupedData, setGroupedData] = useState<{ [key: string]: any[] }>(
-        {},
-    );
-    const [media, setMedia] = useState<ChatMediaItem[]>([]);
+    // State lưu danh sách dữ liệu thô nhận từ API
+    const [rawMediaList, setRawMediaList] = useState<ChatMediaItem[]>([]);
 
+    // Chỉ gọi API 1 lần duy nhất khi vào màn hình hoặc đổi cuộc hội thoại / user
     useEffect(() => {
-        if (!conversationId) return;
+        if (!conversationId || !userId) return;
         fetchMediaData();
-    }, [conversationId, activeTab]);
+    }, [conversationId, userId]);
 
     const fetchMediaData = async () => {
         setLoading(true);
         try {
-            const data = await mediaApi.getMediaByConversation(conversationId);
-            console.log("conversationId:", conversationId);
-
-            // 🔥 Map API -> format UI đang dùng
-            const mapped = data
-                .filter((item) => item.attachment) // chỉ lấy item có file
-                .map((item) => ({
-                    id: item.id,
-                    type: item.type,
-                    url: getFullUrl(item.attachment?.fileUrl),
-                    createdAt: item.createdAt,
-                    name: item.attachment?.fileName || "File",
-                }))
-                .filter((item) =>
-                    activeTab === "MEDIA"
-                        ? item.type === "IMAGE" || item.type === "VIDEO"
-                        : item.type === activeTab,
-                );
-
-            // 🔥 group theo ngày
-            const grouped = mapped.reduce((acc: any, curr: any) => {
-                const date = new Date(curr.createdAt).toLocaleDateString(
-                    "vi-VN",
-                );
-                if (!acc[date]) acc[date] = [];
-                acc[date].push(curr);
-                return acc;
-            }, {});
-
-            setGroupedData(grouped);
+            const data = await mediaApi.getMediaByConversation(
+                conversationId,
+                userId,
+            );
+            console.log(
+                "Fetch media thành công cho conversationId:",
+                conversationId,
+            );
+            setRawMediaList(data);
         } catch (error) {
-            console.error("Lỗi lấy dữ liệu media:", error);
+            console.error("Lỗi lấy dữ liệu media từ server:", error);
         } finally {
             setLoading(false);
         }
     };
 
+    // 🔥 TỐI ƯU HÓA: Tự động filter và group theo Ngày ở Local bằng useMemo khi switch Tab
+    const groupedData = useMemo(() => {
+        // 1. Lọc và chuyển đổi dữ liệu thô từ API sang format UI
+        const mapped = rawMediaList
+            .filter((item) => {
+                const currentType = String(item.type).toUpperCase();
+                // Nếu Tab hiện tại là LINK, chỉ lấy tin nhắn loại LINK
+                if (activeTab === "LINK") return currentType === "LINK";
+                // Nếu Tab hiện tại là Ảnh hoặc File, bắt buộc phải có thông tin file đính kèm
+                return item.attachment;
+            })
+            .map((item) => {
+                const currentType = String(item.type).toUpperCase();
+                return {
+                    id: item.id,
+                    type: currentType, // Ép chữ hoa chuẩn để so sánh Tab không bị lệch
+                    // Gọi hàm getFullUrl đã fix tự chèn /uploads/ ở câu trước
+                    url:
+                        currentType === "LINK"
+                            ? item.content || ""
+                            : getFullUrl(item.attachment?.fileUrl || ""),
+                    createdAt: item.createdAt,
+                    name: item.attachment?.fileName || "File",
+                };
+            });
+
+        // 2. Lọc chính xác theo Tab đang chọn (Ép kiểu as any để diệt hoàn toàn lỗi đỏ TypeScript ts(2367))
+        const filtered = mapped.filter((item) => {
+            if (activeTab === "MEDIA") {
+                return item.type === "IMAGE" || item.type === "VIDEO";
+            }
+            return item.type === activeTab;
+        });
+
+        // 3. Gom nhóm dữ liệu đã lọc theo Ngày (vi-VN)
+        return filtered.reduce((acc: { [key: string]: any[] }, curr: any) => {
+            const date = new Date(curr.createdAt).toLocaleDateString("vi-VN");
+            if (!acc[date]) acc[date] = [];
+            acc[date].push(curr);
+            return acc;
+        }, {});
+    }, [rawMediaList, activeTab]);
+
     const handleOpenFile = (url: string) => {
-        if (url) Linking.openURL(url);
+        if (url) {
+            Linking.openURL(url).catch((err) =>
+                console.error("Không thể mở liên kết này:", err),
+            );
+        }
     };
 
     return (
@@ -137,7 +165,7 @@ export default function ChatMediaScreen() {
                                 {date}
                             </Text>
 
-                            {/* Grid cho Ảnh/Video, List cho File/Link */}
+                            {/* Grid cho Ảnh/Video, List dọc cho File/Link */}
                             <View
                                 className={
                                     activeTab === "MEDIA"
@@ -205,7 +233,7 @@ export default function ChatMediaScreen() {
     );
 }
 
-// Component phụ cho Tab
+// Component nút chuyển đổi Tab
 function TabButton({
     title,
     isActive,

@@ -66,7 +66,7 @@ const resolveFileUrl = (fileUrl?: string | null) => {
     if (!fileUrl) return "";
     if (/^https?:\/\//i.test(fileUrl)) return fileUrl;
     // API Gateway (9000) handles served file routing
-    return `http://14.225.192.37:9000${fileUrl.startsWith("/") ? "" : "/"}${fileUrl}`;
+    return `http://14.225.192.37:8085${fileUrl.startsWith("/") ? "" : "/"}${fileUrl}`;
 };
 
 const dedupeMessages = (items: UiMessage[]) => {
@@ -600,14 +600,6 @@ export default function GroupChatScreen() {
             Alert.alert("Lỗi", "Không thể gửi tin nhắn. Vui lòng thử lại.");
         }
     };
-
-    // FIX: Hàm send media/file - check xem useChatAttachments đã xử lý hay chưa
-    // Nếu useChatAttachments chưa return sent message, phải reload
-    const handleMediaSent = useCallback(async () => {
-        // loadGroupConversation sẽ được gọi từ useChatAttachments
-        // Chỉ cần đảm bảo state được sync
-        await loadGroupConversation();
-    }, [loadGroupConversation]);
 
     const handleUnsendMessage = async () => {
         if (!selectedMessage?.raw?.id) return;
