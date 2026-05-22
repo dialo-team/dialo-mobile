@@ -4,6 +4,7 @@ import ChatInputBar from "@/src/components/ChatInputBar";
 import { useChatAttachments } from "@/src/hooks/useChatAttchment";
 import { useChatRealtime } from "@/src/hooks/useChatRealtime";
 import { getInitials, pickBestDisplayName } from "@/src/utils/displayUser";
+import { getFullUrl } from "@/src/utils/url";
 import { Video as AVVideo, ResizeMode } from "expo-av";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import {
@@ -41,13 +42,6 @@ function paramStr(v: string | string[] | undefined): string | undefined {
     if (typeof v === "string") return v;
     if (Array.isArray(v) && v[0] != null) return v[0];
     return undefined;
-}
-
-function resolveFileUrl(fileUrl?: string) {
-    if (!fileUrl) return "";
-    if (/^https?:\/\//i.test(fileUrl)) return fileUrl;
-    // API Gateway (9000) usually handles served file paths better
-    return `http://14.225.192.37:9000${fileUrl.startsWith("/") ? "" : "/"}${fileUrl}`;
 }
 
 function formatRelativeActivity(value?: string) {
@@ -327,8 +321,10 @@ export default function ChatScreen() {
             const isCenter = rawPosition === "CENTER" || !!item?.system;
             const isMe = !isCenter && mineBySender;
 
-            const fileUrl = item?.attachment?.fileUrl;
-            const type = item?.type || "TEXT";
+            // Lấy chính xác đường dẫn fileUrl từ attachment hoặc content tùy cấu trúc API
+            const fileUrl =
+                item?.attachment?.fileUrl || item?.fileUrl || item?.content;
+            const type = String(item?.type || "TEXT").toUpperCase();
 
             const rawSenderName = item?.senderName || "";
             const isSenderPhone = /^\+?\d{8,15}$/.test(
@@ -341,7 +337,7 @@ export default function ChatScreen() {
 
             return {
                 id: item?.id,
-                text: item?.content || "",
+                text: type === "TEXT" ? item?.content || "" : "",
                 type: isMe ? "right" : "left",
                 time: item?.createdAt
                     ? new Date(item.createdAt).toLocaleTimeString("vi-VN", {
@@ -350,18 +346,15 @@ export default function ChatScreen() {
                       })
                     : "",
                 senderName: finalSenderName,
+                // 💎 FIX: Gọi hàm toàn cục getFullUrl thông minh để tự handle Port 8085 và thư mục /uploads/
                 imageUri:
                     (type === "IMAGE" || type === "GIF") && fileUrl
-                        ? resolveFileUrl(fileUrl)
+                        ? getFullUrl(fileUrl)
                         : null,
                 videoUri:
-                    type === "VIDEO" && fileUrl
-                        ? resolveFileUrl(fileUrl)
-                        : null,
+                    type === "VIDEO" && fileUrl ? getFullUrl(fileUrl) : null,
                 voiceUri:
-                    type === "VOICE" && fileUrl
-                        ? resolveFileUrl(fileUrl)
-                        : null,
+                    type === "VOICE" && fileUrl ? getFullUrl(fileUrl) : null,
                 system: !!item?.system,
                 position: isCenter ? "center" : isMe ? "right" : "left",
                 readAt: item?.readAt || item?.seenAt || null,
