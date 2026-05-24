@@ -79,6 +79,20 @@ const dedupeMessages = (items: UiMessage[]) => {
     });
 };
 
+function isGenericDisplayName(value?: string) {
+    const normalized = (value || "").trim().toLowerCase();
+    if (!normalized) return true;
+
+    return (
+        normalized === "nguoi dung" ||
+        normalized === "người dùng" ||
+        normalized === "tro chuyen" ||
+        normalized === "trò chuyện" ||
+        normalized === "user" ||
+        normalized === "unknown"
+    );
+}
+
 type UserProfileDict = Record<
     string,
     { displayName: string; avatarUrl: string | null }
@@ -177,7 +191,6 @@ export default function GroupChatScreen() {
     const [searchResults, setSearchResults] = useState<any[]>([]);
     const [searchLoading, setSearchLoading] = useState(false);
     const [forwardTargets, setForwardTargets] = useState<any[]>([]);
-    const [showForwardModal, setShowForwardModal] = useState(false);
     const [showHeader, setShowHeader] = useState(true);
 
     const scrollViewRef = useRef<ScrollView>(null);
@@ -700,34 +713,125 @@ export default function GroupChatScreen() {
         }
     };
 
-    const openForwardModal = async () => {
-        if (!selectedMessage?.id) return;
+    const handleSelectMessage = async (msg: any) => {
+        setSelectedMessage(msg.raw || msg);
+
         try {
             const conversations = await chatApi.getConversations();
-            const targets = Array.isArray(conversations)
+            let targets = Array.isArray(conversations)
                 ? conversations.filter(
-                      (item) => item?.conversationId !== conversationId,
+                      (conv) => conv.conversationId !== conversationId,
                   )
                 : [];
+
+            targets = await Promise.all(
+                targets.map(async (target) => {
+                    const rawCounterpartName = target?.counterpartName || "";
+
+                    const isPhoneNumber = /^\+?\d{8,15}$/.test(
+                        rawCounterpartName.replace(/[\s.-]/g, ""),
+                    );
+
+                    const needsLookup =
+                        isGenericDisplayName(rawCounterpartName) ||
+                        isPhoneNumber ||
+                        !(
+                            target?.counterpartAvatarUrl ||
+                            target?.counterpartAvatar ||
+                            target?.profilePicture ||
+                            target?.avatar
+                        );
+
+                    let displayName = pickBestDisplayName(
+                        [
+                            isGenericDisplayName(rawCounterpartName)
+                                ? ""
+                                : rawCounterpartName,
+                            target?.counterpartUserName,
+                            target?.counterpartDisplayName,
+                            target?.displayName,
+                            target?.userName,
+                            target?.username,
+                            target?.name,
+                        ],
+                        "Trò chuyện",
+                    );
+
+                    let displayAvatar =
+                        target?.counterpartAvatarUrl ||
+                        target?.counterpartAvatar ||
+                        target?.avatar ||
+                        "";
+
+                    const targetUserId =
+                        target?.counterpartId || target?.targetUserId || "";
+
+                    if (needsLookup && targetUserId) {
+                        try {
+                            const userRes =
+                                await friendApi.getUserById(targetUserId);
+                            const profile = userRes?.data || userRes;
+
+                            const combinedName =
+                                `${profile?.lastName || ""} ${profile?.firstName || ""}`.trim();
+
+                            displayName = pickBestDisplayName(
+                                [
+                                    profile?.fullName,
+                                    combinedName,
+                                    profile?.displayName,
+                                    profile?.name,
+                                    profile?.userName,
+                                    profile?.username,
+                                    isGenericDisplayName(rawCounterpartName)
+                                        ? ""
+                                        : rawCounterpartName,
+                                ],
+                                "Trò chuyện",
+                            );
+
+                            displayAvatar =
+                                displayAvatar ||
+                                profile?.avatarUrl ||
+                                profile?.avatar ||
+                                "";
+                        } catch (error) {
+                            console.log(
+                                "[handleSelectMessage] User lookup failed for",
+                                targetUserId,
+                            );
+                        }
+                    }
+
+                    return {
+                        ...target,
+                        _displayName: displayName,
+                        _displayAvatar: displayAvatar,
+                    };
+                }),
+            );
+
             setForwardTargets(targets);
-            setShowForwardModal(true);
-        } catch {
-            Alert.alert("Lỗi", "Không thể tải danh sách chuyển tiếp.");
+        } catch (error) {
+            console.error(
+                "[GroupChatScreen] Error fetching forward targets:",
+                error,
+            );
+            setForwardTargets([]);
         }
     };
 
-    const handleForwardMessage = async (targetConversationId: string) => {
+    const handleForwardMessage = async (targetId: string) => {
         if (!selectedMessage?.id) return;
         try {
             await chatApi.forwardMessage({
                 sourceMessageId: selectedMessage.id,
-                targetConversationId,
+                targetConversationId: targetId,
             });
-            setShowForwardModal(false);
+            Alert.alert("Thành công", "Đã chuyển tiếp");
             setSelectedMessage(null);
-            Alert.alert("Thành công", "Đã chuyển tiếp tin nhắn.");
-        } catch {
-            Alert.alert("Lỗi", "Không thể chuyển tiếp tin nhắn.");
+        } catch (error: any) {
+            Alert.alert("Lỗi", "Không thể chuyển tiếp");
         }
     };
 
@@ -909,7 +1013,7 @@ export default function GroupChatScreen() {
                                     onLongPress={() =>
                                         !msg.isUnsent &&
                                         !msg.pending &&
-                                        setSelectedMessage(msg)
+                                        handleSelectMessage(msg)
                                     }
                                     className={`${isMe ? "bg-[#cde7f4]" : "bg-white"} px-4 py-2 rounded-2xl max-w-[74%] ${highlightedMessageId === msg.id ? "border-2 border-cyan-800" : ""}`}
                                 >
@@ -1136,15 +1240,6 @@ export default function GroupChatScreen() {
                                     )}
                                 <TouchableOpacity
                                     className="py-3 flex-row items-center"
-                                    onPress={openForwardModal}
-                                >
-                                    <Send size={18} color="#2563eb" />
-                                    <Text className="ml-3 text-[15px] text-blue-600">
-                                        Chuyển tiếp
-                                    </Text>
-                                </TouchableOpacity>
-                                <TouchableOpacity
-                                    className="py-3 flex-row items-center"
                                     onPress={handleUnsendMessage}
                                 >
                                     <Undo size={20} color="#ef4444" />
@@ -1170,6 +1265,56 @@ export default function GroupChatScreen() {
                                         Ghim tin nhắn
                                     </Text>
                                 </TouchableOpacity>
+                                <View className="mt-2 border-t border-gray-100 pt-3">
+                                    <Text className="text-sm font-semibold mb-2">
+                                        Chuyển tiếp tới
+                                    </Text>
+                                    <ScrollView className="max-h-[200px]">
+                                        {forwardTargets.map((item: any) => {
+                                            const displayName =
+                                                item._displayName ||
+                                                item.counterpartName ||
+                                                "Trò chuyện";
+                                            const displayAvatar =
+                                                item._displayAvatar ||
+                                                item.counterpartAvatarUrl ||
+                                                item.counterpartAvatar ||
+                                                "";
+
+                                            return (
+                                                <TouchableOpacity
+                                                    key={item.conversationId}
+                                                    className="flex-row items-center py-3 border-b border-gray-100"
+                                                    onPress={() =>
+                                                        handleForwardMessage(
+                                                            item.conversationId,
+                                                        )
+                                                    }
+                                                >
+                                                    {displayAvatar ? (
+                                                        <RNImage
+                                                            source={{
+                                                                uri: displayAvatar,
+                                                            }}
+                                                            className="w-9 h-9 rounded-full mr-3"
+                                                        />
+                                                    ) : (
+                                                        <View className="w-9 h-9 rounded-full bg-blue-500 items-center justify-center mr-3">
+                                                            <Text className="text-white text-xs font-semibold">
+                                                                {getInitials(
+                                                                    displayName,
+                                                                )}
+                                                            </Text>
+                                                        </View>
+                                                    )}
+                                                    <Text className="text-sm font-medium text-gray-800 flex-1">
+                                                        {displayName}
+                                                    </Text>
+                                                </TouchableOpacity>
+                                            );
+                                        })}
+                                    </ScrollView>
+                                </View>
                             </View>
                         </TouchableWithoutFeedback>
                     </View>
@@ -1221,54 +1366,6 @@ export default function GroupChatScreen() {
                             className="mt-4 items-center"
                         >
                             <Text className="text-blue-600">Đóng</Text>
-                        </TouchableOpacity>
-                    </View>
-                </View>
-            </Modal>
-
-            <Modal
-                visible={showForwardModal}
-                transparent
-                animationType="fade"
-                onRequestClose={() => setShowForwardModal(false)}
-            >
-                <View className="flex-1 bg-black/40 justify-center px-5">
-                    <View className="bg-white rounded-2xl p-4 max-h-[70%]">
-                        <Text className="text-base font-semibold mb-3">
-                            Chuyển tiếp tới
-                        </Text>
-                        <ScrollView>
-                            {forwardTargets.map((item: any) => {
-                                const displayName = pickBestDisplayName(
-                                    [
-                                        item?.groupName,
-                                        item?.counterpartName,
-                                        item?.name,
-                                    ],
-                                    "Trò chuyện",
-                                );
-                                return (
-                                    <TouchableOpacity
-                                        key={item?.conversationId}
-                                        className="py-3 border-b border-gray-100"
-                                        onPress={() =>
-                                            handleForwardMessage(
-                                                item?.conversationId,
-                                            )
-                                        }
-                                    >
-                                        <Text className="text-[15px] text-gray-800">
-                                            {displayName}
-                                        </Text>
-                                    </TouchableOpacity>
-                                );
-                            })}
-                        </ScrollView>
-                        <TouchableOpacity
-                            className="mt-3 self-end"
-                            onPress={() => setShowForwardModal(false)}
-                        >
-                            <Text className="text-gray-500">Đóng</Text>
                         </TouchableOpacity>
                     </View>
                 </View>
