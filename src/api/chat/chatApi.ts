@@ -485,31 +485,39 @@ export const chatApi = {
 
     createPoll: async (
         conversationId: string,
-        question: string,
+        question: string, // Biến question map sang trường "title" của Swagger
         options: string[],
     ) => {
-        return request(`/api/v1/messages/poll`, {
+        return request<any>("/api/v1/messages/poll", {
             method: "POST",
-            data: { conversationId, question, options },
+            data: {
+                conversationId: conversationId.trim(),
+                title: question.trim(), // Đổi từ question -> title theo đúng ảnh 9
+                options: options.map((opt) => opt.trim()).filter(Boolean), // Mảng string[] giữ nguyên theo ảnh 9
+            },
         });
     },
 
     votePoll: async (messageId: string, optionIds: string[]) => {
-        return request(`/api/v1/messages/${messageId}/poll/votes`, {
+        return request<any>(`/api/v1/messages/${messageId}/poll/votes`, {
             method: "PUT",
-            data: { optionIds },
+            data: {
+                optionIds, // Mảng string[] theo đúng ảnh 6
+            },
         });
     },
 
     addPollOption: async (messageId: string, optionText: string) => {
-        return request(`/api/v1/messages/${messageId}/poll/options`, {
+        return request<any>(`/api/v1/messages/${messageId}/poll/options`, {
             method: "POST",
-            data: { optionText },
+            data: {
+                content: optionText.trim(), // Đổi từ optionText -> content theo đúng ảnh 7
+            },
         });
     },
 
     closePoll: async (messageId: string) => {
-        return request(`/api/v1/messages/${messageId}/poll/close`, {
+        return request<any>(`/api/v1/messages/${messageId}/poll/close`, {
             method: "POST",
         });
     },
