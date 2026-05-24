@@ -15,7 +15,6 @@ import {
     Paperclip,
     Pin,
     Search,
-    Send,
     Trash2,
     Undo,
     UserPlus,
@@ -92,6 +91,20 @@ function isGenericDisplayName(value?: string) {
         normalized === "unknown"
     );
 }
+
+const getUniqueVotersCount = (options: any[]) => {
+    const uniqueIds = new Set<string>();
+    options.forEach((opt) => {
+        const optionVoters = Array.isArray(opt.voters) ? opt.voters : [];
+        optionVoters.forEach((voter) => {
+            const voterId = extractValidId(voter);
+            if (voterId) {
+                uniqueIds.add(voterId);
+            }
+        });
+    });
+    return uniqueIds.size;
+};
 
 type UserProfileDict = Record<
     string,
@@ -835,6 +848,19 @@ export default function GroupChatScreen() {
         }
     };
 
+    const handleNavigateToPollDetail = (msg: any) => {
+        const pollData = extractPollData(msg.raw);
+        router.push({
+            pathname: "/message/group-chat/poll",
+            params: {
+                messageId: String(msg.raw?.id || msg.id),
+                conversationId: conversationId,
+                pollData: JSON.stringify(pollData),
+                senderId: msg.senderId || msg.raw?.senderId || "",
+            },
+        });
+    };
+
     const handleSearchMessages = async () => {
         if (!conversationId || !searchKeyword.trim()) return;
         setSearchLoading(true);
@@ -976,9 +1002,10 @@ export default function GroupChatScreen() {
                                     messageYOffsets.current[msg.id] =
                                         event.nativeEvent.layout.y;
                                 }}
-                                className={`mb-3 flex-row ${isMe ? "justify-end" : ""}`}
+                                className={`mb-3 flex-row ${msg.raw?.type === "POLL" ? "justify-center" : isMe ? "justify-end" : ""}`}
                             >
-                                {!isMe &&
+                                {msg.raw?.type !== "POLL" &&
+                                    !isMe &&
                                     !msg.isUnsent &&
                                     (msg.senderAvatarUrl ? (
                                         <RNImage
@@ -998,168 +1025,534 @@ export default function GroupChatScreen() {
                                         </View>
                                     ))}
 
-                                <TouchableOpacity
-                                    activeOpacity={0.85}
-                                    onPress={() => {
-                                        if (msg.imageUri || msg.videoUri) {
-                                            setViewingMediaMessage(msg);
-                                        } else if (msg.isFile && msg.fileUrl) {
-                                            handleOpenFile(
-                                                msg.fileUrl,
-                                                msg.fileName,
-                                            );
+                                {msg.raw?.type === "POLL" ? (
+                                    <TouchableOpacity
+                                        activeOpacity={0.85}
+                                        onPress={() =>
+                                            handleNavigateToPollDetail(msg)
                                         }
-                                    }}
-                                    onLongPress={() =>
-                                        !msg.isUnsent &&
-                                        !msg.pending &&
-                                        handleSelectMessage(msg)
-                                    }
-                                    className={`${isMe ? "bg-[#cde7f4]" : "bg-white"} px-4 py-2 rounded-2xl max-w-[74%] ${highlightedMessageId === msg.id ? "border-2 border-cyan-800" : ""}`}
-                                >
-                                    {!isMe && !msg.isUnsent && (
-                                        <Text className="mb-1 text-[11px] text-blue-600 font-bold">
-                                            {msg.senderName}
-                                        </Text>
-                                    )}
+                                        onLongPress={() =>
+                                            !msg.isUnsent &&
+                                            !msg.pending &&
+                                            handleSelectMessage(msg)
+                                        }
+                                        style={{
+                                            width: 260,
+                                            shadowColor: "#000",
+                                            shadowOffset: {
+                                                width: 0,
+                                                height: 1,
+                                            },
+                                            shadowOpacity: 0.1,
+                                            shadowRadius: 2,
+                                            elevation: 2,
+                                        }}
+                                        className={`bg-white p-4 rounded-2xl ${highlightedMessageId === msg.id ? "border-2 border-cyan-800" : ""}`}
+                                    >
+                                        {(() => {
+                                            const pollData = extractPollData(
+                                                msg.raw,
+                                            );
+                                            const options = Array.isArray(
+                                                pollData?.options,
+                                            )
+                                                ? pollData.options
+                                                : [];
+                                            const totalVotes = options.reduce(
+                                                (sum: number, opt: any) =>
+                                                    sum +
+                                                    (Number(opt?.voteCount) ||
+                                                        0),
+                                                0,
+                                            );
+                                            const uniqueVotersCount =
+                                                getUniqueVotersCount(options);
+                                            const displayVotersCount =
+                                                uniqueVotersCount > 0
+                                                    ? uniqueVotersCount
+                                                    : totalVotes;
 
-                                    {msg.videoUri ? (
-                                        <View
-                                            style={{
-                                                width: 150,
-                                                height: 150,
-                                                borderRadius: 10,
-                                                marginBottom: 4,
-                                                overflow: "hidden",
-                                                backgroundColor: "black",
-                                            }}
-                                        >
-                                            <AVVideo
-                                                source={{ uri: msg.videoUri }}
-                                                style={{
-                                                    width: "100%",
-                                                    height: "100%",
-                                                }}
-                                                resizeMode={ResizeMode.COVER}
-                                                shouldPlay={false}
-                                            />
-                                        </View>
-                                    ) : msg.imageUri ? (
-                                        <RNImage
-                                            source={{ uri: msg.imageUri }}
-                                            style={{
-                                                width: 150,
-                                                height: 150,
-                                                borderRadius: 10,
-                                                marginBottom: 4,
-                                            }}
-                                            resizeMode="cover"
-                                        />
-                                    ) : msg.voiceUri ? (
-                                        <View
-                                            className={`mb-1 p-2 rounded-lg ${isMe ? "bg-blue-100" : "bg-gray-100"}`}
-                                        >
-                                            <Text className="text-[13px] text-gray-700">
-                                                Tin nhắn thoại
-                                            </Text>
-                                        </View>
-                                    ) : null}
-
-                                    {extractPollData(msg.raw) && (
-                                        <View className="mt-2 mb-1 p-2 rounded-lg bg-gray-50 border border-gray-200">
-                                            <Text className="font-semibold text-[14px] mb-2">
-                                                {extractPollData(msg.raw)
-                                                    ?.question || "Bình chọn"}
-                                            </Text>
-                                            {(
-                                                extractPollData(msg.raw)
-                                                    ?.options || []
-                                            ).map((opt: any, idx: number) => (
-                                                <TouchableOpacity
-                                                    key={
-                                                        opt?.id ||
-                                                        `poll-opt-${idx}`
-                                                    }
-                                                    className="py-2 px-2 rounded-md bg-white border border-gray-200 mb-2"
-                                                    onPress={() =>
-                                                        handleVotePoll(
-                                                            String(
-                                                                msg.raw?.id ||
-                                                                    msg.id,
-                                                            ),
-                                                            String(
-                                                                opt?.id ||
-                                                                    opt?.optionId ||
-                                                                    opt?.value ||
-                                                                    idx,
-                                                            ),
+                                            const hasVoted = options.some(
+                                                (opt: any) => {
+                                                    const optionVoters =
+                                                        Array.isArray(
+                                                            opt.voters,
                                                         )
-                                                    }
-                                                >
-                                                    <Text className="text-[13px]">
-                                                        {opt?.text ||
-                                                            opt?.optionText ||
-                                                            `Lựa chọn ${idx + 1}`}
+                                                            ? opt.voters
+                                                            : [];
+                                                    return optionVoters.some(
+                                                        (voter: any) => {
+                                                            const voterId =
+                                                                extractValidId(
+                                                                    voter,
+                                                                );
+                                                            return (
+                                                                voterId &&
+                                                                currentUserId &&
+                                                                voterId ===
+                                                                    currentUserId
+                                                            );
+                                                        },
+                                                    );
+                                                },
+                                            );
+                                            const isClosed =
+                                                pollData?.closed === true ||
+                                                pollData?.status === "CLOSED" ||
+                                                pollData?.isClosed === true ||
+                                                msg.raw?.closed === true;
+
+                                            return (
+                                                <View className="w-full">
+                                                    {/* Tiêu đề Poll */}
+                                                    <Text className="font-bold text-[16px] text-gray-800 text-left mb-1">
+                                                        {pollData?.title ||
+                                                            pollData?.question ||
+                                                            "Bình chọn"}
                                                     </Text>
-                                                    {typeof opt?.voteCount ===
-                                                        "number" && (
-                                                        <Text className="text-[11px] text-gray-500 mt-1">
-                                                            {opt.voteCount} lượt
-                                                            chọn
+
+                                                    {/* Thanh thống kê */}
+                                                    {displayVotersCount > 0 ? (
+                                                        <Text className="text-[13px] text-blue-600 mb-3 text-left">
+                                                            {`${displayVotersCount} người đã bình chọn`}
                                                         </Text>
+                                                    ) : null}
+
+                                                    {/* Danh sách các phương án */}
+                                                    {options.map(
+                                                        (
+                                                            opt: any,
+                                                            idx: number,
+                                                        ) => {
+                                                            const voteCount =
+                                                                Number(
+                                                                    opt?.voteCount,
+                                                                ) || 0;
+                                                            const percentage =
+                                                                totalVotes > 0
+                                                                    ? (voteCount /
+                                                                          totalVotes) *
+                                                                      100
+                                                                    : 0;
+                                                            const optionVoters =
+                                                                Array.isArray(
+                                                                    opt.voters,
+                                                                )
+                                                                    ? opt.voters
+                                                                    : [];
+                                                            const displayedVoters =
+                                                                optionVoters.slice(
+                                                                    0,
+                                                                    2,
+                                                                );
+
+                                                            return (
+                                                                <TouchableOpacity
+                                                                    key={
+                                                                        opt?.id ||
+                                                                        `poll-opt-${idx}`
+                                                                    }
+                                                                    style={{
+                                                                        height: 40,
+                                                                        borderRadius: 12,
+                                                                        borderWidth: 1,
+                                                                        borderColor:
+                                                                            "#e5e7eb",
+                                                                        backgroundColor:
+                                                                            "#f9fafb",
+                                                                        overflow:
+                                                                            "hidden",
+                                                                        flexDirection:
+                                                                            "row",
+                                                                        alignItems:
+                                                                            "center",
+                                                                        justifyContent:
+                                                                            "space-between",
+                                                                        paddingHorizontal: 12,
+                                                                        position:
+                                                                            "relative",
+                                                                        marginBottom: 8,
+                                                                    }}
+                                                                    activeOpacity={
+                                                                        0.8
+                                                                    }
+                                                                    onPress={() =>
+                                                                        handleNavigateToPollDetail(
+                                                                            msg,
+                                                                        )
+                                                                    }
+                                                                >
+                                                                    {/* Progress Bar View */}
+                                                                    <View
+                                                                        style={{
+                                                                            position:
+                                                                                "absolute",
+                                                                            left: 0,
+                                                                            top: 0,
+                                                                            bottom: 0,
+                                                                            width: `${percentage}%`,
+                                                                            backgroundColor:
+                                                                                "#dbeafe",
+                                                                            zIndex: 1,
+                                                                        }}
+                                                                    />
+
+                                                                    {/* Option label */}
+                                                                    <Text
+                                                                        style={{
+                                                                            zIndex: 2,
+                                                                        }}
+                                                                        className="text-[14px] text-gray-800 font-medium flex-1 mr-2 text-left"
+                                                                        numberOfLines={
+                                                                            1
+                                                                        }
+                                                                    >
+                                                                        {opt?.text ||
+                                                                            opt?.optionText ||
+                                                                            opt?.content ||
+                                                                            `Lựa chọn ${idx + 1}`}
+                                                                    </Text>
+
+                                                                    {/* Avatar Stack & Vote count */}
+                                                                    <View
+                                                                        style={{
+                                                                            flexDirection:
+                                                                                "row",
+                                                                            alignItems:
+                                                                                "center",
+                                                                            zIndex: 2,
+                                                                        }}
+                                                                    >
+                                                                        {displayedVoters.length >
+                                                                        0 ? (
+                                                                            <View
+                                                                                style={{
+                                                                                    flexDirection:
+                                                                                        "row",
+                                                                                    alignItems:
+                                                                                        "center",
+                                                                                    marginRight: 4,
+                                                                                }}
+                                                                            >
+                                                                                {displayedVoters.map(
+                                                                                    (
+                                                                                        voter: any,
+                                                                                        vIdx: number,
+                                                                                    ) => {
+                                                                                        const voterId =
+                                                                                            extractValidId(
+                                                                                                voter,
+                                                                                            );
+                                                                                        const profile =
+                                                                                            voterId
+                                                                                                ? memberProfiles[
+                                                                                                      voterId
+                                                                                                  ]
+                                                                                                : null;
+                                                                                        const rawAvatar =
+                                                                                            extractAvatar(
+                                                                                                voter,
+                                                                                            ) ||
+                                                                                            profile?.avatarUrl ||
+                                                                                            "";
+                                                                                        const avatarUri =
+                                                                                            rawAvatar
+                                                                                                ? resolveFileUrl(
+                                                                                                      rawAvatar,
+                                                                                                  )
+                                                                                                : "";
+                                                                                        const displayName =
+                                                                                            profile?.displayName ||
+                                                                                            voter?.displayName ||
+                                                                                            voter?.fullName ||
+                                                                                            "U";
+
+                                                                                        return (
+                                                                                            <View
+                                                                                                key={
+                                                                                                    voterId ||
+                                                                                                    `voter-${vIdx}`
+                                                                                                }
+                                                                                                style={{
+                                                                                                    width: 16,
+                                                                                                    height: 16,
+                                                                                                    borderRadius: 8,
+                                                                                                    borderWidth: 1,
+                                                                                                    borderColor:
+                                                                                                        "white",
+                                                                                                    backgroundColor:
+                                                                                                        "#3b82f6",
+                                                                                                    justifyContent:
+                                                                                                        "center",
+                                                                                                    alignItems:
+                                                                                                        "center",
+                                                                                                    marginLeft:
+                                                                                                        vIdx >
+                                                                                                        0
+                                                                                                            ? -6
+                                                                                                            : 0,
+                                                                                                    overflow:
+                                                                                                        "hidden",
+                                                                                                }}
+                                                                                            >
+                                                                                                {!!avatarUri ? (
+                                                                                                    <RNImage
+                                                                                                        source={{
+                                                                                                            uri: avatarUri,
+                                                                                                        }}
+                                                                                                        style={{
+                                                                                                            width: "100%",
+                                                                                                            height: "100%",
+                                                                                                        }}
+                                                                                                    />
+                                                                                                ) : (
+                                                                                                    <Text
+                                                                                                        style={{
+                                                                                                            fontSize: 8,
+                                                                                                            color: "white",
+                                                                                                            fontWeight:
+                                                                                                                "bold",
+                                                                                                        }}
+                                                                                                    >
+                                                                                                        {getInitials(
+                                                                                                            displayName,
+                                                                                                        ).slice(
+                                                                                                            0,
+                                                                                                            1,
+                                                                                                        )}
+                                                                                                    </Text>
+                                                                                                )}
+                                                                                            </View>
+                                                                                        );
+                                                                                    },
+                                                                                )}
+                                                                            </View>
+                                                                        ) : null}
+
+                                                                        {voteCount >
+                                                                        0 ? (
+                                                                            <Text className="text-[12px] text-gray-500 font-semibold">
+                                                                                {String(
+                                                                                    voteCount,
+                                                                                )}
+                                                                            </Text>
+                                                                        ) : null}
+                                                                    </View>
+                                                                </TouchableOpacity>
+                                                            );
+                                                        },
                                                     )}
-                                                </TouchableOpacity>
-                                            ))}
-                                            {msg.senderId === currentUserId && (
-                                                <TouchableOpacity
-                                                    onPress={() =>
-                                                        handleClosePoll(
-                                                            String(
-                                                                msg.raw?.id ||
-                                                                    msg.id,
-                                                            ),
-                                                        )
-                                                    }
-                                                >
-                                                    <Text className="text-red-500 text-[12px]">
-                                                        Đóng bình chọn
-                                                    </Text>
-                                                </TouchableOpacity>
-                                            )}
-                                        </View>
-                                    )}
 
-                                    {msg.text !== "" && (
-                                        <Text
-                                            className={`text-[15px] ${msg.isUnsent ? "text-gray-400 italic" : "text-black"}`}
-                                        >
-                                            {msg.text}
-                                        </Text>
-                                    )}
+                                                    {/* Nút Bình chọn / Đổi bình chọn */}
+                                                    {isClosed ? (
+                                                        <View className="bg-gray-100 py-2.5 rounded-full w-full items-center mt-2 border border-gray-200">
+                                                            <Text className="text-gray-500 font-semibold text-[14px]">
+                                                                Bình chọn đã
+                                                                khóa
+                                                            </Text>
+                                                        </View>
+                                                    ) : (
+                                                        <TouchableOpacity
+                                                            className="bg-blue-50 py-2.5 rounded-full w-full items-center mt-2 border border-blue-100"
+                                                            activeOpacity={0.8}
+                                                            onPress={() =>
+                                                                handleNavigateToPollDetail(
+                                                                    msg,
+                                                                )
+                                                            }
+                                                        >
+                                                            <Text className="text-blue-600 font-semibold text-[14px]">
+                                                                {hasVoted
+                                                                    ? "Đổi bình chọn"
+                                                                    : "Bình chọn"}
+                                                            </Text>
+                                                        </TouchableOpacity>
+                                                    )}
+                                                </View>
+                                            );
+                                        })()}
 
-                                    {!msg.isUnsent && (
-                                        <Text
-                                            className={`text-gray-500 text-[11px] mt-1 ${isMe ? "text-right" : ""}`}
-                                        >
+                                        <Text className="text-gray-500 text-[10px] mt-2 text-right">
                                             {msg.pending
                                                 ? "Đang gửi..."
                                                 : msg.time}
                                         </Text>
-                                    )}
-                                    {Array.isArray(msg.reactions) &&
-                                        msg.reactions.length > 0 && (
-                                            <Text className="text-[11px] mt-1 text-gray-500">
-                                                {msg.reactions
-                                                    .map(
-                                                        (r: any) =>
-                                                            r?.reaction ||
-                                                            r?.emoji,
-                                                    )
-                                                    .filter(Boolean)
-                                                    .join(" ")}
+                                    </TouchableOpacity>
+                                ) : (
+                                    <TouchableOpacity
+                                        activeOpacity={0.85}
+                                        onPress={() => {
+                                            if (msg.imageUri || msg.videoUri) {
+                                                setViewingMediaMessage(msg);
+                                            } else if (
+                                                msg.isFile &&
+                                                msg.fileUrl
+                                            ) {
+                                                handleOpenFile(
+                                                    msg.fileUrl,
+                                                    msg.fileName,
+                                                );
+                                            }
+                                        }}
+                                        onLongPress={() =>
+                                            !msg.isUnsent &&
+                                            !msg.pending &&
+                                            handleSelectMessage(msg)
+                                        }
+                                        className={`${isMe ? "bg-[#cde7f4]" : "bg-white"} px-4 py-2 rounded-2xl max-w-[74%] ${highlightedMessageId === msg.id ? "border-2 border-cyan-800" : ""}`}
+                                    >
+                                        {!isMe && !msg.isUnsent && (
+                                            <Text className="mb-1 text-[11px] text-blue-600 font-bold">
+                                                {msg.senderName}
                                             </Text>
                                         )}
-                                </TouchableOpacity>
+
+                                        {msg.videoUri ? (
+                                            <View
+                                                style={{
+                                                    width: 150,
+                                                    height: 150,
+                                                    borderRadius: 10,
+                                                    marginBottom: 4,
+                                                    overflow: "hidden",
+                                                    backgroundColor: "black",
+                                                }}
+                                            >
+                                                <AVVideo
+                                                    source={{
+                                                        uri: msg.videoUri,
+                                                    }}
+                                                    style={{
+                                                        width: "100%",
+                                                        height: "100%",
+                                                    }}
+                                                    resizeMode={
+                                                        ResizeMode.COVER
+                                                    }
+                                                    shouldPlay={false}
+                                                />
+                                            </View>
+                                        ) : msg.imageUri ? (
+                                            <RNImage
+                                                source={{ uri: msg.imageUri }}
+                                                style={{
+                                                    width: 150,
+                                                    height: 150,
+                                                    borderRadius: 10,
+                                                    marginBottom: 4,
+                                                }}
+                                                resizeMode="cover"
+                                            />
+                                        ) : msg.voiceUri ? (
+                                            <View
+                                                className={`mb-1 p-2 rounded-lg ${isMe ? "bg-blue-100" : "bg-gray-100"}`}
+                                            >
+                                                <Text className="text-[13px] text-gray-700">
+                                                    Tin nhắn thoại
+                                                </Text>
+                                            </View>
+                                        ) : null}
+
+                                        {extractPollData(msg.raw) && (
+                                            <View className="mt-2 mb-1 p-2 rounded-lg bg-gray-50 border border-gray-200">
+                                                <Text className="font-semibold text-[14px] mb-2">
+                                                    {extractPollData(msg.raw)
+                                                        ?.question ||
+                                                        "Bình chọn"}
+                                                </Text>
+                                                {(
+                                                    extractPollData(msg.raw)
+                                                        ?.options || []
+                                                ).map(
+                                                    (opt: any, idx: number) => (
+                                                        <TouchableOpacity
+                                                            key={
+                                                                opt?.id ||
+                                                                `poll-opt-${idx}`
+                                                            }
+                                                            className="py-2 px-2 rounded-md bg-white border border-gray-200 mb-2"
+                                                            onPress={() =>
+                                                                handleVotePoll(
+                                                                    String(
+                                                                        msg.raw
+                                                                            ?.id ||
+                                                                            msg.id,
+                                                                    ),
+                                                                    String(
+                                                                        opt?.id ||
+                                                                            opt?.optionId ||
+                                                                            opt?.value ||
+                                                                            idx,
+                                                                    ),
+                                                                )
+                                                            }
+                                                        >
+                                                            <Text className="text-[13px]">
+                                                                {opt?.text ||
+                                                                    opt?.optionText ||
+                                                                    `Lựa chọn ${idx + 1}`}
+                                                            </Text>
+                                                            {typeof opt?.voteCount ===
+                                                                "number" && (
+                                                                <Text className="text-[11px] text-gray-500 mt-1">
+                                                                    {
+                                                                        opt.voteCount
+                                                                    }{" "}
+                                                                    lượt chọn
+                                                                </Text>
+                                                            )}
+                                                        </TouchableOpacity>
+                                                    ),
+                                                )}
+                                                {msg.senderId ===
+                                                    currentUserId && (
+                                                    <TouchableOpacity
+                                                        onPress={() =>
+                                                            handleClosePoll(
+                                                                String(
+                                                                    msg.raw
+                                                                        ?.id ||
+                                                                        msg.id,
+                                                                ),
+                                                            )
+                                                        }
+                                                    ></TouchableOpacity>
+                                                )}
+                                            </View>
+                                        )}
+
+                                        {msg.text !== "" && (
+                                            <Text
+                                                className={`text-[15px] ${msg.isUnsent ? "text-gray-400 italic" : "text-black"}`}
+                                            >
+                                                {msg.text}
+                                            </Text>
+                                        )}
+
+                                        {!msg.isUnsent && (
+                                            <Text
+                                                className={`text-gray-500 text-[11px] mt-1 ${isMe ? "text-right" : ""}`}
+                                            >
+                                                {msg.pending
+                                                    ? "Đang gửi..."
+                                                    : msg.time}
+                                            </Text>
+                                        )}
+                                        {Array.isArray(msg.reactions) &&
+                                            msg.reactions.length > 0 && (
+                                                <Text className="text-[11px] mt-1 text-gray-500">
+                                                    {msg.reactions
+                                                        .map(
+                                                            (r: any) =>
+                                                                r?.reaction ||
+                                                                r?.emoji,
+                                                        )
+                                                        .filter(Boolean)
+                                                        .join(" ")}
+                                                </Text>
+                                            )}
+                                    </TouchableOpacity>
+                                )}
                             </View>
                         );
                     })}
