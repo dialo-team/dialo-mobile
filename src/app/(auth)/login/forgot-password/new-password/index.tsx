@@ -33,9 +33,8 @@ export default function NewPasswordScreen() {
 
     // Logic kiểm tra mật khẩu hợp lệ:
     const isValidLength = password.length >= 6 && password.length <= 32;
-    const hasLetterAndNumberOrSpecial = /(?=.*[a-zA-Z])(?=.*[\d\W_])/.test(
-        password,
-    );
+    const hasLetterAndNumberOrSpecial =
+        /^(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&]).{6,}$/.test(password);
     const isMatched = password === rePassword && password !== "";
 
     // Nút "Tiếp tục" chỉ bật khi thoả mãn tất cả điều kiện trên
@@ -183,7 +182,7 @@ export default function NewPasswordScreen() {
                             <Text
                                 className={`text-[14px] flex-1 ${hasLetterAndNumberOrSpecial ? "text-[#0068FF]" : "text-gray-600"}`}
                             >
-                                Gồm chữ và ít nhất 1 số hoặc 1 ký tự đặc biệt
+                                Gồm số, chữ hoa và ký tự đặc biệt
                             </Text>
                         </View>
                     </View>

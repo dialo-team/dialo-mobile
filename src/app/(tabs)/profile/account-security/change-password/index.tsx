@@ -59,9 +59,8 @@ export default function ChangePasswordScreen() {
 
     const isValidOldPass = oldPass.length >= 6;
     const isValidNewPass = newPass.length >= 6 && newPass.length <= 32;
-    const hasLetterAndNumberOrSpecial = /(?=.*[a-zA-Z])(?=.*[\d\W_])/.test(
-        newPass,
-    );
+    const hasLetterAndNumberOrSpecial =
+        /^(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&]).{6,}$/.test(newPass);
     const isMatched = newPass === confirmPass && confirmPass !== "";
 
     const isFormValid =
@@ -226,7 +225,7 @@ export default function ChangePasswordScreen() {
                         <Text
                             className={`text-[14px] ${hasLetterAndNumberOrSpecial ? "text-[#0068FF]" : "text-gray-500"}`}
                         >
-                            • Gồm chữ và ít nhất 1 số hoặc 1 ký tự đặc biệt
+                            • Gồm số, chữ hoa và ký tự đặc biệt
                         </Text>
                         <Text
                             className={`text-[14px] ${isMatched ? "text-[#0068FF]" : "text-gray-500"}`}

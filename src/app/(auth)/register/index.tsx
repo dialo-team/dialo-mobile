@@ -37,9 +37,8 @@ export default function RegisterScreen() {
 
     // --- LOGIC RÀNG BUỘC MẬT KHẨU MỚI ---
     const isValidLength = password.length >= 6 && password.length <= 32;
-    const hasLetterAndNumberOrSpecial = /(?=.*[a-zA-Z])(?=.*[\d\W_])/.test(
-        password,
-    );
+    const hasLetterAndNumberOrSpecial =
+        /^(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&]).{6,}$/.test(password);
     const isValidPassword = isValidLength && hasLetterAndNumberOrSpecial;
 
     const isFormValid =
@@ -149,7 +148,7 @@ export default function RegisterScreen() {
                         <Text
                             className={`text-[13px] ${hasLetterAndNumberOrSpecial ? "text-blue-600" : "text-gray-500"}`}
                         >
-                            • Gồm chữ và ít nhất 1 số hoặc 1 ký tự đặc biệt
+                            • Gồm số, chữ hoa và ký tự đặc biệt
                         </Text>
                     </View>
 

@@ -341,11 +341,11 @@ export default function CreateGroup() {
 
     const handleCreateGroup = async () => {
         // 1. Kiểm tra điều kiện trước khi gọi API
-        if (selectedUsers.length < 3 || isCreating) {
-            if (selectedUsers.length > 0 && selectedUsers.length < 3) {
+        if (selectedUsers.length < 2 || isCreating) {
+            if (selectedUsers.length > 0 && selectedUsers.length < 2) {
                 Alert.alert(
                     "Thiếu thành viên",
-                    "Vui lòng chọn ít nhất 3 người để tạo nhóm.",
+                    "Vui lòng chọn ít nhất 2 người bạn để tạo nhóm.",
                 );
             }
             return;
@@ -579,12 +579,12 @@ export default function CreateGroup() {
 
                         <TouchableOpacity
                             className={`w-12 h-12 rounded-full items-center justify-center shadow-sm ${
-                                selectedUsers.length >= 3
+                                selectedUsers.length >= 2
                                     ? "bg-blue-600"
                                     : "bg-gray-400"
                             }`}
                             onPress={handleCreateGroup}
-                            disabled={isCreating || selectedUsers.length < 3}
+                            disabled={isCreating || selectedUsers.length < 2}
                         >
                             {isCreating ? (
                                 <ActivityIndicator size="small" color="white" />
