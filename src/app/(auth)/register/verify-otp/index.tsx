@@ -1,5 +1,5 @@
 import { authenticationApi } from "@/src/api/auth/authenticationApi";
-import { saveAuthData } from "@/src/api/auth/authStorage";
+import { saveAuthData, savePhone } from "@/src/api/auth/authStorage";
 import BackHeader from "@/src/components/ui/BackHeader";
 import PrimaryButton from "@/src/components/ui/PrimaryButton";
 import { maskPhone } from "@/src/utils/phone";
@@ -109,6 +109,7 @@ export default function VerifyOtpScreen() {
 
                     if (accessToken && refreshToken) {
                         await saveAuthData(accessToken, refreshToken);
+                        await savePhone(String(phone));
                         console.log("Đăng nhập ngầm OK!");
 
                         Alert.alert(

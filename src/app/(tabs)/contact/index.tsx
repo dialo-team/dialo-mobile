@@ -1,7 +1,7 @@
 import { chatApi, normalizeConversationIdentity } from "@/src/api/chat/chatApi";
 import { ChatConversationItem } from "@/src/api/chat/types";
 import { connectionsApi } from "@/src/api/friend/connectionsApi";
-import { friendApi } from "@/src/api/friend/friendApi";
+import { extractBlockedUserId, friendApi } from "@/src/api/friend/friendApi";
 import { getInitials, pickBestDisplayName } from "@/src/utils/displayUser";
 import { Feather } from "@expo/vector-icons";
 import { useFocusEffect, useRouter } from "expo-router";
@@ -106,6 +106,157 @@ export default function ContactsScreen() {
                         })
                         .filter((f) => f.id !== ""); // Chỉ lọc những người ko có ID, tuyệt đối ko lọc mất tên
 
+                    // --- PHẦN MỚI: Mapping Danh sách Chặn để gộp vào Danh bạ ---
+                    const rawBlocked = Array.isArray(blockedUsersList)
+                        ? blockedUsersList
+                        : [];
+                    const mappedBlocked = rawBlocked
+                        .map((item: any) => {
+                            const id = extractBlockedUserId(item);
+                            return {
+                                id: id,
+                                name:
+                                    item.blockedUserName ||
+                                    item.name ||
+                                    item.userName ||
+                                    "Người dùng",
+                                avatar:
+                                    item.blockedAvatar ||
+                                    item.avatarUrl ||
+                                    item.avatar ||
+                                    "",
+                            };
+                        })
+                        .filter((b) => b.id !== "");
+
+                    // --- PHẦN MỚI: Mapping Danh sách Cuộc trò chuyện đơn để gộp vào Danh bạ ---
+                    const rawConversations = Array.isArray(conversationsRes)
+                        ? conversationsRes
+                        : [];
+                    const mappedConversationsDirect = rawConversations
+                        .map((conv: any) => normalizeConversationIdentity(conv))
+                        .filter((conv) => !conv.isGroup)
+                        .map((conv) => {
+                            const counterpartId = String(
+                                conv.counterpartId || conv.targetUserId || "",
+                            );
+                            const counterpartName = pickBestDisplayName(
+                                [
+                                    conv.remarkName,
+                                    conv.counterpartName,
+                                    conv.displayName,
+                                    conv.fullName,
+                                    conv.userName,
+                                    conv.name,
+                                ],
+                                "Người dùng",
+                            );
+                            const counterpartAvatar =
+                                conv.counterpartAvatarUrl ||
+                                conv.avatarUrl ||
+                                "";
+                            return {
+                                id: counterpartId,
+                                name: counterpartName,
+                                avatar: counterpartAvatar,
+                            };
+                        })
+                        .filter((c) => c.id !== "");
+
+                    // Gộp ba danh sách và loại bỏ trùng lặp bằng Map (ưu tiên mappedFriends -> mappedConversationsDirect -> mappedBlocked)
+                    const combinedMap = new Map<string, Contact>();
+                    mappedFriends.forEach((f) => combinedMap.set(f.id, f));
+                    mappedConversationsDirect.forEach((c) => {
+                        if (!combinedMap.has(c.id)) {
+                            combinedMap.set(c.id, c);
+                        }
+                    });
+                    mappedBlocked.forEach((b) => {
+                        if (!combinedMap.has(b.id)) {
+                            combinedMap.set(b.id, b);
+                        }
+                    });
+                    const rawCombinedList = Array.from(combinedMap.values());
+
+                    const isGenericName = (val?: string) => {
+                        const norm = (val || "").trim().toLowerCase();
+                        return (
+                            !norm ||
+                            norm === "nguoi dung" ||
+                            norm === "người dùng" ||
+                            norm === "user" ||
+                            norm === "unknown"
+                        );
+                    };
+
+                    const finalFriendsList = await Promise.all(
+                        rawCombinedList.map(async (contact) => {
+                            // Nếu đã có trong danh sách bạn bè chuẩn và không phải tên mặc định thì dùng luôn
+                            const isAlreadyFriend = rawArray.some(
+                                (item: any) => {
+                                    const u = item.friend || item.user || item;
+                                    const fid = String(
+                                        u.id ||
+                                            u.userId ||
+                                            item.friendId ||
+                                            item.id ||
+                                            "",
+                                    );
+                                    return fid === contact.id;
+                                },
+                            );
+
+                            if (
+                                isAlreadyFriend &&
+                                !isGenericName(contact.name) &&
+                                contact.avatar
+                            ) {
+                                return contact;
+                            }
+
+                            // Ngược lại, hoặc nếu thiếu avatar/tên mặc định, ta gọi API để enrich chính xác
+                            try {
+                                const userRes = await friendApi.getUserById(
+                                    contact.id,
+                                );
+                                const profile = userRes?.data || userRes;
+
+                                const combinedName =
+                                    `${profile?.lastName || ""} ${profile?.firstName || ""}`.trim();
+                                const correctName = pickBestDisplayName(
+                                    [
+                                        profile?.remarkName,
+                                        profile?.displayName,
+                                        profile?.fullName,
+                                        combinedName,
+                                        profile?.userName,
+                                        profile?.username,
+                                        profile?.name,
+                                        profile?.nickName,
+                                        profile?.nickname,
+                                    ],
+                                    contact.name || "Người dùng",
+                                );
+
+                                const correctAvatar =
+                                    profile?.avatarUrl ||
+                                    profile?.avatar ||
+                                    profile?.profilePictureUrl ||
+                                    profile?.profilePicture ||
+                                    contact.avatar ||
+                                    "";
+
+                                return {
+                                    id: contact.id,
+                                    name: correctName,
+                                    avatar: correctAvatar,
+                                };
+                            } catch {
+                                return contact;
+                            }
+                        }),
+                    );
+
                     // --- Mapping Nhóm (giữ nguyên logic chuẩn) ---
                     const normalizedGroups = (
                         Array.isArray(conversationsRes) ? conversationsRes : []
@@ -130,8 +281,10 @@ export default function ContactsScreen() {
                                 "",
                         }));
 
+                    if (!isMounted) return;
+
                     // --- Cập nhật State ---
-                    setContacts(mappedFriends);
+                    setContacts(finalFriendsList);
                     setGroups(normalizedGroups);
 
                     const pData = pendingRes?.data || pendingRes || [];

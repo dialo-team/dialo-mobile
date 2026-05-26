@@ -172,17 +172,7 @@ export default function MessagesScreen() {
                     }),
                 );
 
-                // Sử dụng danh sách chặn truyền vào hoặc state hiện tại
-                const activeBlockedIds = currentBlockedIds || blockedUserIds;
-
-                const unblocked = enriched.filter((conv: any) => {
-                    const counterpartId = String(
-                        conv?.counterpartId || conv?.targetUserId || "",
-                    );
-                    return !activeBlockedIds.has(counterpartId);
-                });
-
-                setConversations(unblocked);
+                setConversations(enriched);
             } catch (e: any) {
                 setError("Không thể tải danh sách cuộc trò chuyện");
             } finally {
@@ -192,15 +182,28 @@ export default function MessagesScreen() {
         [currentUserId],
     ); // 👈 CHỈ phụ thuộc vào currentUserId
 
-    const debounceRefreshConversations = useCallback(() => {
-        if (refreshTimerRef.current) {
-            clearTimeout(refreshTimerRef.current);
-        }
-        console.log("[MessagesScreen] Debounced refresh scheduled");
-        refreshTimerRef.current = setTimeout(() => {
-            loadConversations();
-        }, 1000);
-    }, [loadConversations]);
+    const debounceRefreshConversations = useCallback(
+        (payload?: any) => {
+            if (payload) {
+                const senderId = payload?.senderId;
+                if (senderId && blockedUserIds.has(String(senderId))) {
+                    console.log(
+                        "[MessagesScreen] Ignoring realtime update from blocked sender:",
+                        senderId,
+                    );
+                    return;
+                }
+            }
+            if (refreshTimerRef.current) {
+                clearTimeout(refreshTimerRef.current);
+            }
+            console.log("[MessagesScreen] Debounced refresh scheduled");
+            refreshTimerRef.current = setTimeout(() => {
+                loadConversations();
+            }, 1000);
+        },
+        [loadConversations, blockedUserIds],
+    );
 
     useEffect(() => {
         (async () => {
@@ -364,6 +367,13 @@ export default function MessagesScreen() {
     };
 
     const formatPreview = (item: Conversation) => {
+        const isGroup = item.conversationId === item.counterpartId;
+        const counterpartId = String(
+            item?.counterpartId || item?.targetUserId || "",
+        );
+        if (!isGroup && counterpartId && blockedUserIds.has(counterpartId)) {
+            return "Tin nhắn đã ẩn do chặn";
+        }
         if (item.lastMessageType === "IMAGE") return "[Ảnh]";
         if (item.lastMessageType === "VIDEO") return "[Video]";
         if (item.lastMessageType === "FILE") return "[File]";
@@ -513,16 +523,30 @@ export default function MessagesScreen() {
                                 </View>
 
                                 {/* Unread indicator */}
-                                {(conversation.unreadCount || 0) > 0 ? (
-                                    <View className="min-w-[20px] h-5 px-1 rounded-full bg-red-500 items-center justify-center ml-2">
-                                        <Text className="text-white text-[11px] font-semibold">
-                                            {conversation.unreadCount &&
-                                            conversation.unreadCount > 99
-                                                ? "99+"
-                                                : conversation.unreadCount}
-                                        </Text>
-                                    </View>
-                                ) : null}
+                                {(() => {
+                                    const counterpartId = String(
+                                        conversation?.counterpartId ||
+                                            conversation?.targetUserId ||
+                                            "",
+                                    );
+                                    const isBlocked =
+                                        !isGroup &&
+                                        counterpartId &&
+                                        blockedUserIds.has(counterpartId);
+                                    const displayUnreadCount = isBlocked
+                                        ? 0
+                                        : conversation.unreadCount || 0;
+
+                                    return displayUnreadCount > 0 ? (
+                                        <View className="min-w-[20px] h-5 px-1 rounded-full bg-red-500 items-center justify-center ml-2">
+                                            <Text className="text-white text-[11px] font-semibold">
+                                                {displayUnreadCount > 99
+                                                    ? "99+"
+                                                    : displayUnreadCount}
+                                            </Text>
+                                        </View>
+                                    ) : null;
+                                })()}
                             </TouchableOpacity>
                         );
                     })}

@@ -1,5 +1,5 @@
 import { authenticationApi } from "@/src/api/auth/authenticationApi";
-import { saveAuthData } from "@/src/api/auth/authStorage";
+import { saveAuthData, savePhone } from "@/src/api/auth/authStorage";
 import BackHeader from "@/src/components/ui/BackHeader";
 import PrimaryButton from "@/src/components/ui/PrimaryButton";
 import { maskPhone, normalizePhoneTo84 } from "@/src/utils/phone";
@@ -97,6 +97,7 @@ export default function LoginVerifyScreen() {
 
             if (accessToken && refreshToken) {
                 await saveAuthData(accessToken, refreshToken);
+                await savePhone(phoneStr);
                 console.log("Đăng nhập verify thành công:", response);
                 Alert.alert("Thành công", "Đăng nhập thành công!");
                 router.replace("/(tabs)/message" as any);

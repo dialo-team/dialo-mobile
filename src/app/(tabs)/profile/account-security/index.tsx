@@ -1,5 +1,9 @@
 import { authenticationApi } from "@/src/api/auth/authenticationApi";
-import { getAccessToken, getRefreshToken } from "@/src/api/auth/authStorage";
+import {
+    getAccessToken,
+    getPhone,
+    getRefreshToken,
+} from "@/src/api/auth/authStorage";
 import { securityApi } from "@/src/api/auth/securityApi";
 import { SessionDeviceItem } from "@/src/api/auth/types";
 import { userApi } from "@/src/api/user/userApi";
@@ -69,7 +73,21 @@ export default function AccountSecurityScreen() {
                         "Nguoi dung",
                     ),
                 );
-                setPhoneNumber(profile?.phone || "-");
+                let phoneNum = profile?.phone || profile?.phoneNumber || "";
+                if (!phoneNum || phoneNum === "-") {
+                    try {
+                        const savedPhone = await getPhone();
+                        if (savedPhone) {
+                            phoneNum = savedPhone;
+                        }
+                    } catch (storageErr) {
+                        console.error(
+                            "[AccountSecurity] Failed to load phone from storage:",
+                            storageErr,
+                        );
+                    }
+                }
+                setPhoneNumber(phoneNum || "-");
                 setAvatarUrl(
                     profile?.avatarUrl ||
                         profile?.avatar ||
@@ -258,7 +276,7 @@ export default function AccountSecurityScreen() {
                                 Số điện thoại
                             </Text>
                             <Text className="text-[14px] text-gray-500">
-                                {getInitials(phoneNumber)}
+                                {phoneNumber}
                             </Text>
                         </View>
                         <ChevronRight size={24} color="#C4C4C4" />

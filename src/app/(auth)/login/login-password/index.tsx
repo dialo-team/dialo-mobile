@@ -14,7 +14,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { authenticationApi } from "@/src/api/auth/authenticationApi";
-import { saveAuthData } from "@/src/api/auth/authStorage";
+import { saveAuthData, savePhone } from "@/src/api/auth/authStorage";
 import { keepPhoneDigitsOnly, maskPhone } from "@/src/utils/phone";
 
 export default function LoginWithPasswordScreen() {
@@ -95,6 +95,7 @@ export default function LoginWithPasswordScreen() {
             // ✅ Backend trả token trực tiếp
             if (accessToken && refreshToken) {
                 await saveAuthData(accessToken, refreshToken);
+                await savePhone(normalizedPhone);
                 Alert.alert("Thành công", "Đăng nhập thành công!");
                 router.replace("/(tabs)/message" as any);
                 return;

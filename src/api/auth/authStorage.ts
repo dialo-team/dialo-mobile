@@ -49,8 +49,25 @@ export const clearAuthData = async () => {
         console.log("[AuthStorage] Clearing auth data");
         await storage.removeItem("accessToken");
         await storage.removeItem("refreshToken");
+        await storage.removeItem("loginPhone");
         console.log("[AuthStorage] Auth data cleared");
     } catch (error) {
         console.error("[AuthStorage] Error clearing auth data:", error);
+    }
+};
+
+export const savePhone = async (phone: string) => {
+    try {
+        await storage.setItem("loginPhone", phone);
+    } catch (error) {
+        console.error("[AuthStorage] Error saving phone number:", error);
+    }
+};
+
+export const getPhone = async (): Promise<string | null> => {
+    try {
+        return await storage.getItem("loginPhone");
+    } catch (error) {
+        return null;
     }
 };

@@ -7,19 +7,17 @@ export default function TabsLayout() {
     const insets = useSafeAreaInsets();
     const pathname = usePathname();
 
-    const isChatScreen = pathname.includes("/chat");
-    const isGroupChatScreen = pathname.includes("/group-chat");
-    const isQRScreen = pathname.includes("/qr");
+    const showBottomTab =
+        pathname === "/message" ||
+        pathname === "/contact" ||
+        pathname === "/profile";
 
     return (
         <Tabs
             screenOptions={{
                 headerShown: false,
                 tabBarStyle: {
-                    display:
-                        isChatScreen || isGroupChatScreen || isQRScreen
-                            ? "none"
-                            : "flex",
+                    display: showBottomTab ? "flex" : "none",
                     backgroundColor: "white",
                     borderTopWidth: 1,
                     borderTopColor: "#E5E7EB",
