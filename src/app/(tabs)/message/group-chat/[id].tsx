@@ -10,6 +10,8 @@ import { getInitials, pickBestDisplayName } from "@/src/utils/displayUser";
 import { Video as AVVideo, ResizeMode } from "expo-av";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import {
+    ChevronDown,
+    ChevronUp,
     MoreHorizontal,
     MoveLeft,
     Paperclip,
@@ -92,6 +94,57 @@ function isGenericDisplayName(value?: string) {
     );
 }
 
+const getCleanPinnedContent = (content: string) => {
+    if (!content) return "Nội dung đính kèm";
+    const lower = content.toLowerCase();
+
+    // Check if it is an image path or extension
+    const isImage =
+        lower.endsWith(".jpg") ||
+        lower.endsWith(".jpeg") ||
+        lower.endsWith(".png") ||
+        lower.endsWith(".gif") ||
+        lower.endsWith(".webp") ||
+        lower.includes("image") ||
+        lower.includes("/uploads/upload-") ||
+        (lower.includes("/uploads/") &&
+            (lower.includes(".jpg") ||
+                lower.includes(".png") ||
+                lower.includes(".jpeg") ||
+                lower.includes(".gif")));
+
+    if (isImage) {
+        return "[Hình ảnh]";
+    }
+
+    const isVideo =
+        lower.endsWith(".mp4") ||
+        lower.endsWith(".mov") ||
+        lower.endsWith(".avi") ||
+        lower.endsWith(".mkv") ||
+        lower.includes("video") ||
+        (lower.includes("/uploads/") && lower.includes(".mp4"));
+
+    if (isVideo) {
+        return "[Video]";
+    }
+
+    const isVoice =
+        lower.endsWith(".mp3") ||
+        lower.endsWith(".m4a") ||
+        lower.endsWith(".wav") ||
+        lower.endsWith(".aac") ||
+        lower.includes("voice") ||
+        (lower.includes("/uploads/") &&
+            (lower.includes(".m4a") || lower.includes(".mp3")));
+
+    if (isVoice) {
+        return "[Tin nhắn thoại]";
+    }
+
+    return content;
+};
+
 const getUniqueVotersCount = (options: any[]) => {
     const uniqueIds = new Set<string>();
     options.forEach((opt) => {
@@ -172,6 +225,7 @@ export default function GroupChatScreen() {
         id?: string | string[];
         name?: string | string[];
         avatar?: string | string[];
+        scrollToMessageId?: string;
     }>();
 
     const conversationId = paramToString(params.id);
@@ -183,6 +237,7 @@ export default function GroupChatScreen() {
     const [currentUserId, setCurrentUserId] = useState("");
     const [groupName, setGroupName] = useState(initialName);
     const [groupAvatar, setGroupAvatar] = useState(initialAvatar);
+    const [showPinnedDropdown, setShowPinnedDropdown] = useState(false);
 
     const [memberProfiles, setMemberProfiles] = useState<Record<string, any>>(
         {},
@@ -212,10 +267,23 @@ export default function GroupChatScreen() {
     const scrollToMessage = (msgId: string) => {
         const yOffset = messageYOffsets.current[msgId];
         if (yOffset !== undefined) {
-            setHighlightedMessageId(msgId);
+            // Cuộn mượt mà đến vị trí tin nhắn gốc
             scrollViewRef.current?.scrollTo({ y: yOffset, animated: true });
 
-            setTimeout(() => setHighlightedMessageId(null), 2000);
+            // Hiệu ứng nhấp nháy đổi màu nền 2 lần kiểu Zalo
+            setHighlightedMessageId(msgId);
+
+            setTimeout(() => {
+                setHighlightedMessageId(null);
+
+                setTimeout(() => {
+                    setHighlightedMessageId(msgId);
+
+                    setTimeout(() => {
+                        setHighlightedMessageId(null);
+                    }, 800);
+                }, 150);
+            }, 350);
         }
     };
 
@@ -483,6 +551,18 @@ export default function GroupChatScreen() {
             }
         }, [conversationId, currentUserId, loadGroupConversation]),
     );
+
+    // Tự động cuộn đến tin nhắn đã ghim khi điều hướng từ màn hình PinMessageScreen
+    const scrollToMessageIdParam = paramToString(params.scrollToMessageId);
+    useEffect(() => {
+        if (scrollToMessageIdParam && messages.length > 0) {
+            const timer = setTimeout(() => {
+                scrollToMessage(scrollToMessageIdParam);
+                router.setParams({ scrollToMessageId: "" });
+            }, 600);
+            return () => clearTimeout(timer);
+        }
+    }, [scrollToMessageIdParam, messages.length]);
 
     useEffect(() => {
         if (!messages.length) return;
@@ -877,13 +957,20 @@ export default function GroupChatScreen() {
         }
     };
 
-    // FIX: Hàm pin - không reload ngay, chờ realtime event
     const handlePinMessage = async () => {
         if (!selectedMessage?.id || !conversationId) return;
+
+        // Giới hạn ghim tối đa 3 tin nhắn
+        if (pinnedMessages.length >= 3) {
+            Alert.alert("Giới hạn ghim", "Chỉ được ghim tối đa 3 tin nhắn.");
+            setSelectedMessage(null);
+            return;
+        }
 
         try {
             await chatApi.pinMessage(conversationId, selectedMessage.id);
             setSelectedMessage(null);
+            // Cập nhật state ngay lập tức để hiển thị kết quả
             await loadGroupConversation();
         } catch (error) {
             console.error("[GroupChat] Pin error:", error);
@@ -977,13 +1064,117 @@ export default function GroupChatScreen() {
                     </View>
                 </View>
 
-                <PinnedMessageBar
-                    pinnedMessages={pinnedMessages}
-                    onUnpin={handleUnpinMessage}
-                    onPress={(msgId: string) => {
-                        scrollToMessage(msgId);
-                    }}
-                />
+                {/* Thanh ghim tin nhắn mở rộng kiểu Zalo */}
+                {pinnedMessages.length > 0 && (
+                    <View className="z-50 bg-white/95 mx-3 mt-2 rounded-xl border-l-4 border-blue-500 shadow-sm overflow-hidden">
+                        {/* Thanh chính */}
+                        <View className="px-3 py-2 flex-row items-center">
+                            <TouchableOpacity
+                                className="flex-row items-center flex-1"
+                                onPress={() =>
+                                    setShowPinnedDropdown((prev) => !prev)
+                                }
+                                activeOpacity={0.7}
+                            >
+                                <Pin size={16} color="#2563eb" />
+                                <View className="ml-2 flex-1">
+                                    <Text className="text-blue-600 font-bold text-[11px] uppercase">
+                                        Tin nhắn đã ghim (
+                                        {pinnedMessages.length}/3)
+                                    </Text>
+                                    <Text
+                                        numberOfLines={1}
+                                        className="text-gray-600 text-[13px]"
+                                    >
+                                        {getCleanPinnedContent(
+                                            pinnedMessages[
+                                                pinnedMessages.length - 1
+                                            ].content,
+                                        )}
+                                    </Text>
+                                </View>
+                                {showPinnedDropdown ? (
+                                    <ChevronUp size={18} color="#9ca3af" />
+                                ) : (
+                                    <ChevronDown size={18} color="#9ca3af" />
+                                )}
+                            </TouchableOpacity>
+
+                            <View className="w-[1px] h-6 bg-gray-200 mx-2" />
+
+                            <TouchableOpacity
+                                onPress={() =>
+                                    handleUnpinMessage(
+                                        pinnedMessages[
+                                            pinnedMessages.length - 1
+                                        ].messageId,
+                                    )
+                                }
+                                className="p-1"
+                            >
+                                <Trash2 size={16} color="#9ca3af" />
+                            </TouchableOpacity>
+                        </View>
+
+                        {/* Danh sách xổ xuống hiển thị toàn bộ tin nhắn ghim */}
+                        {showPinnedDropdown && (
+                            <View className="border-t border-gray-100 bg-gray-50/50 px-3 py-2">
+                                <ScrollView
+                                    style={{ maxHeight: 150 }}
+                                    showsVerticalScrollIndicator={false}
+                                >
+                                    {pinnedMessages.map((item, index) => (
+                                        <View
+                                            key={item.messageId}
+                                            className={`flex-row items-center py-2 ${
+                                                index !==
+                                                pinnedMessages.length - 1
+                                                    ? "border-b border-gray-100"
+                                                    : ""
+                                            }`}
+                                        >
+                                            <TouchableOpacity
+                                                className="flex-row items-center flex-1 mr-2"
+                                                onPress={() => {
+                                                    scrollToMessage(
+                                                        item.messageId,
+                                                    );
+                                                    setShowPinnedDropdown(
+                                                        false,
+                                                    );
+                                                }}
+                                                activeOpacity={0.7}
+                                            >
+                                                <View className="w-1.5 h-1.5 rounded-full bg-blue-500 mr-2" />
+                                                <Text
+                                                    numberOfLines={1}
+                                                    className="text-gray-700 text-[13px] flex-1"
+                                                >
+                                                    {getCleanPinnedContent(
+                                                        item.content,
+                                                    )}
+                                                </Text>
+                                            </TouchableOpacity>
+                                            <TouchableOpacity
+                                                onPress={() => {
+                                                    handleUnpinMessage(
+                                                        item.messageId,
+                                                    );
+                                                }}
+                                                className="p-1"
+                                            >
+                                                <Trash2
+                                                    size={14}
+                                                    color="#dc2626"
+                                                />
+                                            </TouchableOpacity>
+                                        </View>
+                                    ))}
+                                </ScrollView>
+                            </View>
+                        )}
+                    </View>
+                )}
 
                 <ScrollView
                     ref={scrollViewRef}
@@ -1045,7 +1236,11 @@ export default function GroupChatScreen() {
                                             shadowRadius: 2,
                                             elevation: 2,
                                         }}
-                                        className={`bg-white p-4 rounded-2xl ${highlightedMessageId === msg.id ? "border-2 border-cyan-800" : ""}`}
+                                        className={`p-4 rounded-2xl ${
+                                            highlightedMessageId === msg.id
+                                                ? "bg-[#FFF9C4] border border-[#FBC02D]"
+                                                : "bg-white"
+                                        }`}
                                     >
                                         {(() => {
                                             const pollData = extractPollData(
@@ -1397,7 +1592,13 @@ export default function GroupChatScreen() {
                                             !msg.pending &&
                                             handleSelectMessage(msg)
                                         }
-                                        className={`${isMe ? "bg-[#cde7f4]" : "bg-white"} px-4 py-2 rounded-2xl max-w-[74%] ${highlightedMessageId === msg.id ? "border-2 border-cyan-800" : ""}`}
+                                        className={`${
+                                            highlightedMessageId === msg.id
+                                                ? "bg-[#FFF9C4] border border-[#FBC02D]"
+                                                : isMe
+                                                  ? "bg-[#cde7f4]"
+                                                  : "bg-white"
+                                        } px-4 py-2 rounded-2xl max-w-[74%]`}
                                     >
                                         {!isMe && !msg.isUnsent && (
                                             <Text className="mb-1 text-[11px] text-blue-600 font-bold">
@@ -1519,13 +1720,26 @@ export default function GroupChatScreen() {
                                             </View>
                                         )}
 
-                                        {msg.text !== "" && (
-                                            <Text
-                                                className={`text-[15px] ${msg.isUnsent ? "text-gray-400 italic" : "text-black"}`}
-                                            >
-                                                {msg.text}
-                                            </Text>
-                                        )}
+                                        {msg.text !== "" &&
+                                            !msg.imageUri &&
+                                            !msg.videoUri &&
+                                            !msg.voiceUri &&
+                                            ![
+                                                "IMAGE",
+                                                "GIF",
+                                                "VIDEO",
+                                                "VOICE",
+                                            ].includes(
+                                                String(
+                                                    msg.raw?.type || "",
+                                                ).toUpperCase(),
+                                            ) && (
+                                                <Text
+                                                    className={`text-[15px] ${msg.isUnsent ? "text-gray-400 italic" : "text-black"}`}
+                                                >
+                                                    {msg.text}
+                                                </Text>
+                                            )}
 
                                         {!msg.isUnsent && (
                                             <Text

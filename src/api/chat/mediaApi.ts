@@ -9,10 +9,11 @@ export const mediaApi = {
     async getMediaByConversation(
         conversationId: string,
         userId: string,
+        type?: string,
     ): Promise<ChatMediaItem[]> {
         try {
             console.log(
-                `[mediaApi] 🔄 Đang gọi GET Media cho conversationId: ${conversationId}, userId: ${userId}`,
+                `[mediaApi] 🔄 Đang gọi GET Media cho conversationId: ${conversationId}, userId: ${userId}, type: ${type}`,
             );
             const token = await getAccessToken();
             const res = await apiClient.get(
@@ -22,6 +23,7 @@ export const mediaApi = {
                         "X-User-Id": userId,
                         ...(token ? { Authorization: `Bearer ${token}` } : {}),
                     },
+                    params: type ? { type } : {},
                 },
             );
             const data = res?.data || res;

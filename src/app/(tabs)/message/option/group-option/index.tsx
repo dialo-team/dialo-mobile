@@ -703,6 +703,13 @@ export default function GroupChatOptionsScreen() {
                             icon={<Pin size={20} color="#666" />}
                             title="Tin nhắn đã ghim"
                             right={<ChevronRight size={20} color="#ccc" />}
+                            onPress={() =>
+                                router.push({
+                                    pathname:
+                                        "/message/option/group-option/pin-message",
+                                    params: { conversationId },
+                                })
+                            }
                         />
                         <OptionItem
                             icon={<BarChart3 size={20} color="#666" />}

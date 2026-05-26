@@ -13,6 +13,57 @@ interface PinnedMessageBarProps {
     onPress: (messageId: string) => void; // Để scroll tới tin nhắn đó
 }
 
+const getCleanPinnedContent = (content: string) => {
+    if (!content) return "Nội dung đính kèm";
+    const lower = content.toLowerCase();
+
+    // Check if it is an image path or extension
+    const isImage =
+        lower.endsWith(".jpg") ||
+        lower.endsWith(".jpeg") ||
+        lower.endsWith(".png") ||
+        lower.endsWith(".gif") ||
+        lower.endsWith(".webp") ||
+        lower.includes("image") ||
+        lower.includes("/uploads/upload-") ||
+        (lower.includes("/uploads/") &&
+            (lower.includes(".jpg") ||
+                lower.includes(".png") ||
+                lower.includes(".jpeg") ||
+                lower.includes(".gif")));
+
+    if (isImage) {
+        return "[Hình ảnh]";
+    }
+
+    const isVideo =
+        lower.endsWith(".mp4") ||
+        lower.endsWith(".mov") ||
+        lower.endsWith(".avi") ||
+        lower.endsWith(".mkv") ||
+        lower.includes("video") ||
+        (lower.includes("/uploads/") && lower.includes(".mp4"));
+
+    if (isVideo) {
+        return "[Video]";
+    }
+
+    const isVoice =
+        lower.endsWith(".mp3") ||
+        lower.endsWith(".m4a") ||
+        lower.endsWith(".wav") ||
+        lower.endsWith(".aac") ||
+        lower.includes("voice") ||
+        (lower.includes("/uploads/") &&
+            (lower.includes(".m4a") || lower.includes(".mp3")));
+
+    if (isVoice) {
+        return "[Tin nhắn thoại]";
+    }
+
+    return content;
+};
+
 export const PinnedMessageBar: React.FC<PinnedMessageBarProps> = ({
     pinnedMessages,
     onUnpin,
@@ -38,7 +89,7 @@ export const PinnedMessageBar: React.FC<PinnedMessageBarProps> = ({
                         numberOfLines={1}
                         className="text-gray-600 text-[13px]"
                     >
-                        {latestPin.content || "Nội dung đính kèm"}
+                        {getCleanPinnedContent(latestPin.content)}
                     </Text>
                 </View>
                 <ChevronRight size={16} color="#9ca3af" />

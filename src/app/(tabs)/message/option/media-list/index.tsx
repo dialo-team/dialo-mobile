@@ -1,4 +1,5 @@
 import { mediaApi } from "@/src/api/chat/mediaApi";
+import { chatAuthUtils } from "@/src/api/chat/chatApi";
 import { ChatMediaItem } from "@/src/api/chat/types";
 import { getFullUrl } from "@/src/utils/url";
 import { useLocalSearchParams, useRouter } from "expo-router";
@@ -31,33 +32,78 @@ export default function ChatMediaScreen() {
         name: string;
     }>();
     const conversationId = paramStr(params.conversationId);
-    const userId = paramStr(params.userId);
+    const [userId, setUserId] = useState(paramStr(params.userId));
 
     const [activeTab, setActiveTab] = useState<TabType>("MEDIA");
     const [loading, setLoading] = useState(true);
     // State lưu danh sách dữ liệu thô nhận từ API
     const [rawMediaList, setRawMediaList] = useState<ChatMediaItem[]>([]);
 
-    // Chỉ gọi API 1 lần duy nhất khi vào màn hình hoặc đổi cuộc hội thoại / user
+    // Tự động lấy currentUserId từ session khi params không truyền sang
+    useEffect(() => {
+        if (!userId) {
+            chatAuthUtils.getCurrentUserId().then((id) => {
+                if (id) setUserId(id);
+            });
+        }
+    }, [userId]);
+
+    // Gọi API khi vào màn hình, đổi cuộc hội thoại, hoặc khi chuyển tab
     useEffect(() => {
         if (!conversationId || !userId) return;
         fetchMediaData();
-    }, [conversationId, userId]);
+    }, [conversationId, userId, activeTab]);
 
     const fetchMediaData = async () => {
         setLoading(true);
         try {
-            const data = await mediaApi.getMediaByConversation(
-                conversationId,
-                userId,
-            );
+            let data: ChatMediaItem[] = [];
+            if (activeTab === "MEDIA") {
+                // Gọi song song cả IMAGE và VIDEO để gộp chung hiển thị
+                const [images, videos] = await Promise.all([
+                    mediaApi
+                        .getMediaByConversation(conversationId, userId, "IMAGE")
+                        .catch(() => []),
+                    mediaApi
+                        .getMediaByConversation(conversationId, userId, "VIDEO")
+                        .catch(() => []),
+                ]);
+                data = [...images, ...videos];
+            } else {
+                data = await mediaApi.getMediaByConversation(
+                    conversationId,
+                    userId,
+                    activeTab, // "FILE" hoặc "LINK"
+                );
+            }
             console.log(
-                "Fetch media thành công cho conversationId:",
-                conversationId,
+                `[ChatMediaScreen] Fetch media thành công cho conversationId: ${conversationId}, tab: ${activeTab}`,
             );
-            setRawMediaList(data);
+
+            // Lọc chỉ lấy các mục thuộc đúng cuộc trò chuyện hiện tại để tránh rò rỉ ảnh nhóm sang chat đơn
+            const filteredData = data.filter((item) => {
+                return (
+                    !item.conversationId ||
+                    String(item.conversationId) === String(conversationId)
+                );
+            });
+
+            // Loại bỏ hoàn toàn các phần tử trùng lặp ID để tránh lỗi non-unique keys trong React
+            const seen = new Set<string>();
+            const uniqueData = filteredData.filter((item) => {
+                const id = String(item.id || "");
+                if (!id) return true;
+                if (seen.has(id)) return false;
+                seen.add(id);
+                return true;
+            });
+
+            setRawMediaList(uniqueData);
         } catch (error) {
-            console.error("Lỗi lấy dữ liệu media từ server:", error);
+            console.error(
+                "[ChatMediaScreen] Lỗi lấy dữ liệu media từ server:",
+                error,
+            );
         } finally {
             setLoading(false);
         }
