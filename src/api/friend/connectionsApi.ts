@@ -23,12 +23,18 @@ const normalizeList = <T>(data: unknown): T[] => {
 
 export const connectionsApi = {
     getFriendsList: async (): Promise<UserProfileResponse[]> => {
-        const response = await apiClient.get("/api/v1/me/friends");
+        const timestamp = new Date().getTime();
+        const response = await apiClient.get(
+            `/api/v1/me/friends?t=${timestamp}`,
+        );
         return normalizeList<UserProfileResponse>(response.data);
     },
 
     getBlockedList: async (): Promise<UserProfileResponse[]> => {
-        const response = await apiClient.get("/api/v1/me/blocks");
+        const timestamp = new Date().getTime();
+        const response = await apiClient.get(
+            `/api/v1/me/blocks?t=${timestamp}`,
+        );
         return normalizeList<UserProfileResponse>(response.data);
     },
 };

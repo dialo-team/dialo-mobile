@@ -884,20 +884,18 @@ export default function GroupChatScreen() {
         try {
             await chatApi.pinMessage(conversationId, selectedMessage.id);
             setSelectedMessage(null);
-            // Không cập nhật state ngay - chờ realtime event từ socket
-            // refreshMessagesAndPins sẽ được gọi tự động
+            await loadGroupConversation();
         } catch (error) {
             console.error("[GroupChat] Pin error:", error);
             Alert.alert("Lỗi", "Không thể ghim tin nhắn này.");
         }
     };
 
-    // FIX: Hàm unpin - không reload ngay, chờ realtime event
     const handleUnpinMessage = async (msgId: string) => {
         if (!conversationId) return;
         try {
             await chatApi.unpinMessage(conversationId, msgId);
-            // Không cập nhật state ngay - chờ realtime event từ socket
+            await loadGroupConversation();
         } catch (error) {
             console.error("[GroupChat] Unpin error:", error);
             Alert.alert("Lỗi", "Không thể bỏ ghim.");

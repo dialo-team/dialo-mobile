@@ -45,6 +45,20 @@ type Conversation = {
     dissolved?: boolean;
 };
 
+function isGenericDisplayName(value?: string) {
+    const normalized = (value || "").trim().toLowerCase();
+    if (!normalized) return true;
+
+    return (
+        normalized === "nguoi dung" ||
+        normalized === "người dùng" ||
+        normalized === "tro chuyen" ||
+        normalized === "trò chuyện" ||
+        normalized === "user" ||
+        normalized === "unknown"
+    );
+}
+
 export default function MessagesScreen() {
     const router = useRouter();
     const [searchText, setSearchText] = useState("");
@@ -78,25 +92,32 @@ export default function MessagesScreen() {
                     return !isDissolved && !isDissolveSystemMessage;
                 });
 
-                const extractProfileDisplayInfo = (profile: any) => ({
-                    name: pickBestDisplayName(
-                        [
-                            profile?.userName,
-                            profile?.username,
-                            profile?.name,
-                            profile?.displayName,
-                            profile?.nickName,
-                            profile?.nickname,
-                            profile?.fullName,
-                        ],
-                        "Người dùng",
-                    ),
-                    avatar:
-                        profile?.avatarUrl ||
-                        profile?.avatar ||
-                        profile?.profilePictureUrl ||
-                        "",
-                });
+                const extractProfileDisplayInfo = (profile: any) => {
+                    const combinedName =
+                        `${profile?.lastName || ""} ${profile?.firstName || ""}`.trim();
+                    return {
+                        name: pickBestDisplayName(
+                            [
+                                profile?.remarkName,
+                                profile?.displayName,
+                                profile?.fullName,
+                                combinedName,
+                                profile?.userName,
+                                profile?.username,
+                                profile?.name,
+                                profile?.nickName,
+                                profile?.nickname,
+                            ],
+                            "Người dùng",
+                        ),
+                        avatar:
+                            profile?.avatarUrl ||
+                            profile?.avatar ||
+                            profile?.profilePictureUrl ||
+                            profile?.profilePicture ||
+                            "",
+                    };
+                };
 
                 const enriched = await Promise.all(
                     activeList.map(async (conversation: any) => {
@@ -115,7 +136,7 @@ export default function MessagesScreen() {
                             conversation.avatarUrl ||
                             "";
 
-                        if (baseName !== "Người dùng" && baseAvatar) {
+                        if (!isGenericDisplayName(baseName) && baseAvatar) {
                             return {
                                 ...conversation,
                                 counterpartName: baseName,
@@ -135,10 +156,9 @@ export default function MessagesScreen() {
 
                             return {
                                 ...conversation,
-                                counterpartName:
-                                    baseName !== "Người dùng"
-                                        ? baseName
-                                        : profileDisplay.name,
+                                counterpartName: !isGenericDisplayName(baseName)
+                                    ? baseName
+                                    : profileDisplay.name,
                                 counterpartAvatarUrl:
                                     baseAvatar || profileDisplay.avatar,
                             };
@@ -292,7 +312,7 @@ export default function MessagesScreen() {
                 (conversation as any)?.fullName,
                 (conversation as any)?.nickName,
             ],
-            "Nguoi dung",
+            "Người dùng",
         );
 
     const plusMenu = [
