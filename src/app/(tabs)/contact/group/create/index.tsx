@@ -42,14 +42,14 @@ function formatRelativeTime(value?: string) {
     const diffMs = Date.now() - date.getTime();
     const diffMinutes = Math.floor(diffMs / 60000);
 
-    if (diffMinutes < 1) return "vua xong";
-    if (diffMinutes < 60) return `${diffMinutes} phut truoc`;
+    if (diffMinutes < 1) return "Mới kết bạn";
+    if (diffMinutes < 60) return `${diffMinutes} phút trước`;
 
     const diffHours = Math.floor(diffMinutes / 60);
-    if (diffHours < 24) return `${diffHours} gio truoc`;
+    if (diffHours < 24) return `${diffHours} giờ trước`;
 
     const diffDays = Math.floor(diffHours / 24);
-    if (diffDays < 7) return `${diffDays} ngay truoc`;
+    if (diffDays < 7) return `${diffDays} ngày trước`;
 
     return date.toLocaleDateString("vi-VN");
 }

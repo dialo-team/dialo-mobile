@@ -7,7 +7,7 @@ import {
     UserPlus,
     X,
 } from "lucide-react-native";
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
     ActivityIndicator,
     Alert,
@@ -338,21 +338,59 @@ export default function GroupMembersPage() {
     );
     const canManageMembers = currentUserMember?.role === "OWNER";
 
-    // Logic lọc danh sách dựa trên Tab hiện tại
-    const filteredMembers = members.filter((m) => {
-        if (activeTab === "ADMINS") {
-            return m.role === "OWNER" || m.role === "ADMIN";
-        }
-        if (activeTab === "BLOCKED") {
-            return false; // Giả định chưa có logic block
-        }
-        return true; // Tab ALL
-    });
+    // Logic lọc danh sách dựa trên Tab hiện tại (dùng useMemo để tối ưu hóa)
+    const filteredMembers = useMemo(() => {
+        return members.filter((m) => {
+            if (activeTab === "ADMINS") {
+                return m.role === "OWNER" || m.role === "ADMIN";
+            }
+            if (activeTab === "BLOCKED") {
+                return false; // Giả định chưa có logic block
+            }
+            return true; // Tab ALL
+        });
+    }, [members, activeTab]);
 
-    const displayedMembers =
-        memberSearchResults && searchKeyword.trim()
-            ? memberSearchResults
-            : filteredMembers;
+    // Lọc theo từ khóa tìm kiếm (Local search real-time) + Sắp xếp vai trò lên đầu (OWNER -> ADMIN -> MEMBER)
+    const displayedMembers = useMemo(() => {
+        let baseList = [...filteredMembers];
+
+        // Nếu có kết quả tìm kiếm từ API (khi nhấn nút tìm), ta dùng nó
+        if (memberSearchResults && searchKeyword.trim()) {
+            baseList = [...memberSearchResults];
+        }
+
+        // Lọc thêm theo từ khóa tìm kiếm local để đảm bảo gõ chữ là lọc được ngay lập tức (Real-time local filter)
+        if (searchKeyword.trim()) {
+            const keyword = searchKeyword.toLowerCase().trim();
+            baseList = baseList.filter((m) => {
+                const displayName = (
+                    m.enrichedDisplayName ||
+                    m.displayName ||
+                    ""
+                ).toLowerCase();
+                const userName = (
+                    m.userName ||
+                    m.user?.userName ||
+                    ""
+                ).toLowerCase();
+                return (
+                    displayName.includes(keyword) || userName.includes(keyword)
+                );
+            });
+        }
+
+        // Sắp xếp: OWNER (3) -> ADMIN (2) -> MEMBER (1)
+        const getRoleWeight = (role?: string) => {
+            if (role === "OWNER") return 3;
+            if (role === "ADMIN") return 2;
+            return 1;
+        };
+
+        return baseList.sort((a, b) => {
+            return getRoleWeight(b.role) - getRoleWeight(a.role);
+        });
+    }, [filteredMembers, memberSearchResults, searchKeyword]);
 
     const handleSearchMembers = useCallback(async () => {
         if (!conversationId || !currentUserId || !searchKeyword.trim()) {
@@ -374,17 +412,45 @@ export default function GroupMembersPage() {
             const merged = searchedMembers
                 .map((item: any) => {
                     const id = extractValidId(item);
-                    return byId.get(id) || item;
+                    const found = byId.get(id);
+                    if (found) return found;
+
+                    // Nếu không tìm thấy trong members hiện tại, hãy map các thuộc tính cơ bản
+                    const profile = enrichedProfiles[id];
+                    return {
+                        ...item,
+                        userId: id,
+                        enrichedDisplayName:
+                            profile?.displayName ||
+                            item.displayName ||
+                            item.remarkName ||
+                            item.fullName ||
+                            item.userName ||
+                            "Thành viên",
+                        enrichedAvatarUrl:
+                            profile?.avatarUrl ||
+                            (item.avatarUrl
+                                ? resolveFileUrl(item.avatarUrl)
+                                : null),
+                    };
                 })
                 .filter(Boolean);
 
             setMemberSearchResults(merged as any[]);
         } catch (error) {
-            Alert.alert("Lỗi", "Không thể tìm kiếm thành viên.");
+            console.log("Lỗi tìm kiếm thành viên từ API:", error);
+            // Gặp lỗi API thì fallback dùng local search cực kỳ mượt mà, không gián đoạn trải nghiệm
+            setMemberSearchResults(null);
         } finally {
             setSearchingMembers(false);
         }
-    }, [conversationId, currentUserId, members, searchKeyword]);
+    }, [
+        conversationId,
+        currentUserId,
+        members,
+        searchKeyword,
+        enrichedProfiles,
+    ]);
 
     const openNicknameModal = (member: EnrichedMember) => {
         setSelectedMember(member);
