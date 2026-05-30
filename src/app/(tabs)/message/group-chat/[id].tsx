@@ -4,6 +4,7 @@ import { groupApi } from "@/src/api/group/groupApi";
 import { Message } from "@/src/api/group/types";
 import ChatInputBar from "@/src/components/ChatInputBar";
 import { PinnedMessageBar } from "@/src/components/PinnedMessageBar";
+import VoicePlayer from "@/src/components/VoicePlayer";
 import { useChatAttachments } from "@/src/hooks/useChatAttchment";
 import { useChatRealtime } from "@/src/hooks/useChatRealtime";
 import { getInitials, pickBestDisplayName } from "@/src/utils/displayUser";
@@ -23,6 +24,7 @@ import {
 } from "lucide-react-native";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
+    ActivityIndicator,
     Alert,
     KeyboardAvoidingView,
     Modal,
@@ -66,9 +68,10 @@ const paramToString = (value: string | string[] | undefined) => {
 const resolveFileUrl = (fileUrl?: string | null) => {
     if (!fileUrl) return "";
     if (/^https?:\/\//i.test(fileUrl)) return fileUrl;
-    // API Gateway (9000) handles served file routing
-    return `http://14.225.192.37:8085${fileUrl.startsWith("/") ? "" : "/"}${fileUrl}`;
+    return `http://14.225.192.37:9000${fileUrl.startsWith("/") ? "" : "/"}${fileUrl}`;
 };
+
+const NON_MEDIA_CONTENT_TYPES = new Set(["TEXT", "SYSTEM", "POLL", "REVOKED"]);
 
 const dedupeMessages = (items: UiMessage[]) => {
     const seen = new Set<string>();
@@ -149,7 +152,7 @@ const getUniqueVotersCount = (options: any[]) => {
     const uniqueIds = new Set<string>();
     options.forEach((opt) => {
         const optionVoters = Array.isArray(opt.voters) ? opt.voters : [];
-        optionVoters.forEach((voter) => {
+        optionVoters.forEach((voter: any) => {
             const voterId = extractValidId(voter);
             if (voterId) {
                 uniqueIds.add(voterId);
@@ -260,31 +263,31 @@ export default function GroupChatScreen() {
     const [searchLoading, setSearchLoading] = useState(false);
     const [forwardTargets, setForwardTargets] = useState<any[]>([]);
     const [showHeader, setShowHeader] = useState(true);
+    const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
     const scrollViewRef = useRef<ScrollView>(null);
     const messageYOffsets = useRef<Record<string, number>>({});
+    const highlightAnimRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
     const scrollToMessage = (msgId: string) => {
         const yOffset = messageYOffsets.current[msgId];
-        if (yOffset !== undefined) {
-            // Cuộn mượt mà đến vị trí tin nhắn gốc
-            scrollViewRef.current?.scrollTo({ y: yOffset, animated: true });
+        if (yOffset === undefined) return;
 
-            // Hiệu ứng nhấp nháy đổi màu nền 2 lần kiểu Zalo
-            setHighlightedMessageId(msgId);
+        scrollViewRef.current?.scrollTo({ y: yOffset, animated: true });
 
-            setTimeout(() => {
-                setHighlightedMessageId(null);
+        if (highlightAnimRef.current) clearTimeout(highlightAnimRef.current);
 
-                setTimeout(() => {
-                    setHighlightedMessageId(msgId);
-
-                    setTimeout(() => {
-                        setHighlightedMessageId(null);
-                    }, 800);
-                }, 150);
-            }, 350);
-        }
+        setHighlightedMessageId(msgId);
+        highlightAnimRef.current = setTimeout(() => {
+            setHighlightedMessageId(null);
+            highlightAnimRef.current = setTimeout(() => {
+                setHighlightedMessageId(msgId);
+                highlightAnimRef.current = setTimeout(() => {
+                    setHighlightedMessageId(null);
+                    highlightAnimRef.current = null;
+                }, 700);
+            }, 120);
+        }, 400);
     };
 
     const [isDissolved, setIsDissolved] = useState(false);
@@ -303,16 +306,26 @@ export default function GroupChatScreen() {
             const sId = extractValidId({ senderId: item?.senderId });
             const isMe =
                 sId !== "" && sId !== "null" && sId === String(cId).trim();
-            const hasAttachment =
-                !!item?.attachment?.fileUrl || !!item?.attachment?.fileName;
+            const msgType = String(item?.type || "TEXT").toUpperCase();
+            const fileUrlRaw =
+                item?.attachment?.fileUrl ||
+                item?.fileUrl ||
+                (!NON_MEDIA_CONTENT_TYPES.has(msgType) ? item?.content : null);
+            const hasAttachment = !!fileUrlRaw;
             const profile = sId ? profiles[sId] : null;
-
-            // FIX: Lấy fileUrl từ attachment hoặc từ item trực tiếp
-            const fileUrl = item?.attachment?.fileUrl || item?.fileUrl;
 
             return {
                 id: String(item?.id || item?.messageId || `msg-${Date.now()}`),
-                text: item?.content || "",
+                text: ![
+                    "FILE",
+                    "IMAGE",
+                    "GIF",
+                    "VIDEO",
+                    "VOICE",
+                    "REVOKED",
+                ].includes(msgType)
+                    ? item?.content || ""
+                    : "",
                 position: isMe ? "right" : "left",
                 time: item?.createdAt
                     ? new Date(item.createdAt).toLocaleTimeString("vi-VN", {
@@ -321,12 +334,12 @@ export default function GroupChatScreen() {
                       })
                     : "",
                 imageUri: ["IMAGE", "GIF"].includes(String(item?.type || ""))
-                    ? resolveFileUrl(fileUrl)
+                    ? resolveFileUrl(fileUrlRaw)
                     : null,
                 videoUri:
-                    item?.type === "VIDEO" ? resolveFileUrl(fileUrl) : null,
+                    item?.type === "VIDEO" ? resolveFileUrl(fileUrlRaw) : null,
                 voiceUri:
-                    item?.type === "VOICE" ? resolveFileUrl(fileUrl) : null,
+                    item?.type === "VOICE" ? resolveFileUrl(fileUrlRaw) : null,
                 senderId: sId,
                 senderName: item?.system
                     ? "Hệ thống"
@@ -348,10 +361,19 @@ export default function GroupChatScreen() {
                 pending: false,
                 raw: item,
                 isFile:
-                    hasAttachment && !["IMAGE", "VIDEO"].includes(item?.type),
-                fileName:
-                    item?.attachment?.fileName || item?.content || "Tài liệu",
-                fileUrl: resolveFileUrl(fileUrl),
+                    hasAttachment &&
+                    !NON_MEDIA_CONTENT_TYPES.has(msgType) &&
+                    !["IMAGE", "GIF", "VIDEO", "VOICE"].includes(msgType),
+                fileName: (() => {
+                    const raw =
+                        item?.attachment?.fileName || item?.fileName || "";
+                    if (raw) return raw;
+                    return fileUrlRaw
+                        ? fileUrlRaw.split("?")[0].split("/").pop() ||
+                              "Tài liệu"
+                        : "Tài liệu";
+                })(),
+                fileUrl: fileUrlRaw ? resolveFileUrl(fileUrlRaw) : "",
                 reactions: Array.isArray(item?.reactions) ? item.reactions : [],
             };
         },
@@ -503,8 +525,93 @@ export default function GroupChatScreen() {
         mapApiMessageToUi,
     ]);
 
-    const { handlePickMedia, handlePickFile, handlePickVoice, handleOpenFile } =
-        useChatAttachments(conversationId, loadGroupConversation);
+    const {
+        handlePickMedia,
+        handlePickFile,
+        handlePickVoice,
+        handleOpenFile,
+        startRecording,
+        stopRecording,
+        cancelRecording,
+    } = useChatAttachments(conversationId, loadGroupConversation);
+
+    // Recording UI state for group chat
+    const [isRecording, setIsRecording] = useState(false);
+    const [recordingSeconds, setRecordingSeconds] = useState(0);
+    const recordingTimerRef = useRef<ReturnType<typeof setInterval> | null>(
+        null,
+    );
+    const recordingStopTimeoutRef = useRef<ReturnType<
+        typeof setTimeout
+    > | null>(null);
+    const isRecordingRef = useRef(false);
+    const MAX_RECORD_SECONDS = 120;
+
+    const stopRecordingUI = () => {
+        if (recordingTimerRef.current) {
+            clearInterval(recordingTimerRef.current as any);
+            recordingTimerRef.current = null;
+        }
+        if (recordingStopTimeoutRef.current) {
+            clearTimeout(recordingStopTimeoutRef.current as any);
+            recordingStopTimeoutRef.current = null;
+        }
+        isRecordingRef.current = false;
+        setIsRecording(false);
+        setRecordingSeconds(0);
+    };
+
+    const handleVoiceRecordStart = async () => {
+        if (isRecordingRef.current) return;
+        isRecordingRef.current = true;
+        setIsRecording(true);
+        setRecordingSeconds(0);
+        recordingTimerRef.current = setInterval(() => {
+            setRecordingSeconds((s) => s + 1);
+        }, 1000);
+        try {
+            await startRecording?.();
+            recordingStopTimeoutRef.current = setTimeout(() => {
+                stopRecordingUI();
+                void stopRecording?.().catch((e: any) =>
+                    console.error("group auto-stop recording failed:", e),
+                );
+            }, MAX_RECORD_SECONDS * 1000);
+        } catch (e) {
+            console.error("group startRecording failed:", e);
+            stopRecordingUI();
+        }
+    };
+
+    const handleVoiceRecordStop = async () => {
+        if (!isRecordingRef.current) return;
+        stopRecordingUI();
+        try {
+            await stopRecording?.();
+        } catch (e) {
+            console.error("group stopRecording failed:", e);
+        }
+    };
+
+    const handleVoiceRecordCancel = async () => {
+        stopRecordingUI();
+        try {
+            await cancelRecording?.();
+        } catch (e) {
+            console.error("group cancelRecording failed:", e);
+        }
+    };
+
+    useEffect(() => {
+        return () => {
+            if (recordingTimerRef.current)
+                clearInterval(recordingTimerRef.current as any);
+            if (recordingStopTimeoutRef.current)
+                clearTimeout(recordingStopTimeoutRef.current as any);
+            if (highlightAnimRef.current)
+                clearTimeout(highlightAnimRef.current);
+        };
+    }, []);
 
     const refreshMessagesAndPins = useCallback(async () => {
         if (!conversationId) return;
@@ -551,6 +658,13 @@ export default function GroupChatScreen() {
             }
         }, [conversationId, currentUserId, loadGroupConversation]),
     );
+
+    // Reset search + forward-targets when conversation changes (same as chat/[id].tsx)
+    useEffect(() => {
+        setShowSearchSheet(false);
+        setSearchKeyword("");
+        setSearchResults([]);
+    }, [conversationId]);
 
     // Tự động cuộn đến tin nhắn đã ghim khi điều hướng từ màn hình PinMessageScreen
     const scrollToMessageIdParam = paramToString(params.scrollToMessageId);
@@ -941,21 +1055,66 @@ export default function GroupChatScreen() {
         });
     };
 
+    const runSearchMessages = useCallback(
+        async (keyword: string) => {
+            const trimmedKeyword = keyword.trim();
+
+            if (!conversationId || !trimmedKeyword) {
+                setSearchResults([]);
+                return;
+            }
+
+            setSearchLoading(true);
+            try {
+                const result = await chatApi.searchInConversation(
+                    conversationId,
+                    trimmedKeyword,
+                );
+                setSearchResults(Array.isArray(result) ? result : []);
+            } catch {
+                Alert.alert("Lỗi", "Không thể tìm kiếm tin nhắn.");
+            } finally {
+                setSearchLoading(false);
+            }
+        },
+        [conversationId],
+    );
+
     const handleSearchMessages = async () => {
-        if (!conversationId || !searchKeyword.trim()) return;
-        setSearchLoading(true);
-        try {
-            const result = await chatApi.searchInConversation(
-                conversationId,
-                searchKeyword.trim(),
-            );
-            setSearchResults(Array.isArray(result) ? result : []);
-        } catch {
-            Alert.alert("Lỗi", "Không thể tìm kiếm tin nhắn.");
-        } finally {
-            setSearchLoading(false);
-        }
+        await runSearchMessages(searchKeyword);
     };
+
+    useEffect(() => {
+        if (!showSearchSheet) {
+            if (searchTimerRef.current) {
+                clearTimeout(searchTimerRef.current);
+                searchTimerRef.current = null;
+            }
+            return;
+        }
+
+        if (searchTimerRef.current) {
+            clearTimeout(searchTimerRef.current);
+        }
+
+        const keyword = searchKeyword.trim();
+        if (!keyword) {
+            setSearchResults([]);
+            setSearchLoading(false);
+            return;
+        }
+
+        searchTimerRef.current = setTimeout(() => {
+            void runSearchMessages(keyword);
+        }, 350);
+
+        return () => {
+            if (searchTimerRef.current) {
+                clearTimeout(searchTimerRef.current);
+                searchTimerRef.current = null;
+            }
+        };
+    }, [runSearchMessages, searchKeyword, showSearchSheet]);
 
     const handlePinMessage = async () => {
         if (!selectedMessage?.id || !conversationId) return;
@@ -1583,7 +1742,7 @@ export default function GroupChatScreen() {
                                             ) {
                                                 handleOpenFile(
                                                     msg.fileUrl,
-                                                    msg.fileName,
+                                                    msg.fileName || "",
                                                 );
                                             }
                                         }}
@@ -1643,14 +1802,34 @@ export default function GroupChatScreen() {
                                                 resizeMode="cover"
                                             />
                                         ) : msg.voiceUri ? (
+                                            <VoicePlayer
+                                                uri={msg.voiceUri}
+                                                isMe={isMe}
+                                            />
+                                        ) : null}
+
+                                        {msg.isFile && (
                                             <View
-                                                className={`mb-1 p-2 rounded-lg ${isMe ? "bg-blue-100" : "bg-gray-100"}`}
+                                                className={`flex-row items-center mb-1 p-2 rounded-lg ${isMe ? "bg-blue-700" : "bg-gray-100"}`}
                                             >
-                                                <Text className="text-[13px] text-gray-700">
-                                                    Tin nhắn thoại
+                                                <Paperclip
+                                                    size={16}
+                                                    color={
+                                                        isMe
+                                                            ? "white"
+                                                            : "#4b5563"
+                                                    }
+                                                />
+                                                <Text
+                                                    className={`ml-2 font-medium ${isMe ? "text-white" : "text-blue-600"}`}
+                                                    numberOfLines={1}
+                                                >
+                                                    {msg.fileName ||
+                                                        msg.text ||
+                                                        "Tài liệu"}
                                                 </Text>
                                             </View>
-                                        ) : null}
+                                        )}
 
                                         {extractPollData(msg.raw) && (
                                             <View className="mt-2 mb-1 p-2 rounded-lg bg-gray-50 border border-gray-200">
@@ -1751,18 +1930,59 @@ export default function GroupChatScreen() {
                                             </Text>
                                         )}
                                         {Array.isArray(msg.reactions) &&
-                                            msg.reactions.length > 0 && (
-                                                <Text className="text-[11px] mt-1 text-gray-500">
-                                                    {msg.reactions
-                                                        .map(
-                                                            (r: any) =>
-                                                                r?.reaction ||
-                                                                r?.emoji,
-                                                        )
-                                                        .filter(Boolean)
-                                                        .join(" ")}
-                                                </Text>
-                                            )}
+                                            msg.reactions.length > 0 &&
+                                            (() => {
+                                                const counts: Record<
+                                                    string,
+                                                    number
+                                                > = {};
+                                                msg.reactions.forEach(
+                                                    (r: any) => {
+                                                        const e =
+                                                            r?.reaction ||
+                                                            r?.emoji;
+                                                        if (e)
+                                                            counts[e] =
+                                                                (counts[e] ||
+                                                                    0) + 1;
+                                                    },
+                                                );
+                                                return (
+                                                    <View
+                                                        className="flex-row mt-1"
+                                                        style={{ gap: 4 }}
+                                                    >
+                                                        {Object.entries(
+                                                            counts,
+                                                        ).map(
+                                                            ([
+                                                                emoji,
+                                                                count,
+                                                            ]) => (
+                                                                <View
+                                                                    key={emoji}
+                                                                    className="bg-gray-100 rounded-full px-2 py-0.5 flex-row items-center"
+                                                                    style={{
+                                                                        gap: 2,
+                                                                    }}
+                                                                >
+                                                                    <Text className="text-[13px]">
+                                                                        {emoji}
+                                                                    </Text>
+                                                                    {count >
+                                                                        1 && (
+                                                                        <Text className="text-[10px] text-gray-500">
+                                                                            {
+                                                                                count
+                                                                            }
+                                                                        </Text>
+                                                                    )}
+                                                                </View>
+                                                            ),
+                                                        )}
+                                                    </View>
+                                                );
+                                            })()}
                                     </TouchableOpacity>
                                 )}
                             </View>
@@ -1786,6 +2006,11 @@ export default function GroupChatScreen() {
                         onAttachFile={handlePickFile}
                         onPickMedia={handlePickMedia}
                         onPickVoice={handlePickVoice}
+                        onVoiceRecordStart={handleVoiceRecordStart}
+                        onVoiceRecordStop={handleVoiceRecordStop}
+                        onVoiceRecordCancel={handleVoiceRecordCancel}
+                        isRecording={isRecording}
+                        recordingSeconds={recordingSeconds}
                         onEmojiPress={() => setShowEmojiMenu(!showEmojiMenu)}
                         showEmojiMenu={showEmojiMenu}
                         onEmojiSelect={(emoji) => {
@@ -1930,48 +2155,91 @@ export default function GroupChatScreen() {
                 visible={showSearchSheet}
                 transparent
                 animationType="slide"
-                onRequestClose={() => setShowSearchSheet(false)}
+                onRequestClose={() => {
+                    setShowSearchSheet(false);
+                    setSearchKeyword("");
+                    setSearchResults([]);
+                }}
             >
-                <View className="flex-1 bg-black/30 justify-end">
-                    <View className="bg-white rounded-t-3xl px-4 pt-4 pb-7 max-h-[70%]">
-                        <Text className="text-base font-semibold mb-3">
-                            Tìm trong nhóm
-                        </Text>
-                        <View className="flex-row mb-3">
-                            <TextInput
-                                className="flex-1 border border-gray-200 rounded-xl px-3 py-2"
-                                placeholder="Nhập từ khóa"
-                                value={searchKeyword}
-                                onChangeText={setSearchKeyword}
-                            />
-                            <TouchableOpacity
-                                className="ml-2 px-4 py-2 bg-blue-600 rounded-xl"
-                                onPress={handleSearchMessages}
-                                disabled={searchLoading}
-                            >
-                                <Text className="text-white">
-                                    {searchLoading ? "..." : "Tìm"}
-                                </Text>
-                            </TouchableOpacity>
+                <View className="flex-1 bg-black/40 justify-end">
+                    <View className="bg-white rounded-t-3xl pt-3 pb-8 max-h-[75%]">
+                        <View className="items-center mb-3">
+                            <View className="w-10 h-1 rounded-full bg-gray-300" />
                         </View>
-                        <ScrollView>
-                            {searchResults.map((item: any) => (
-                                <View
-                                    key={String(item?.id || Math.random())}
-                                    className="py-2 border-b border-gray-100"
+
+                        <View className="px-4">
+                            <Text className="text-base font-semibold text-gray-900 mb-3">
+                                Tìm tin nhắn trong nhóm
+                            </Text>
+                            <View className="flex-row items-center bg-gray-100 rounded-2xl px-3 mb-3">
+                                <TextInput
+                                    className="flex-1 py-3 text-sm text-gray-900"
+                                    placeholder="Nhập từ khóa tìm kiếm..."
+                                    placeholderTextColor="#9ca3af"
+                                    value={searchKeyword}
+                                    onChangeText={setSearchKeyword}
+                                    autoFocus
+                                    returnKeyType="search"
+                                    onSubmitEditing={handleSearchMessages}
+                                />
+                                {searchLoading && (
+                                    <ActivityIndicator
+                                        size="small"
+                                        color="#2563eb"
+                                    />
+                                )}
+                            </View>
+                        </View>
+
+                        <ScrollView
+                            className="px-4"
+                            keyboardShouldPersistTaps="handled"
+                        >
+                            {searchResults.length === 0 &&
+                                searchKeyword.trim() !== "" &&
+                                !searchLoading && (
+                                    <Text className="text-center text-gray-400 text-sm py-8">
+                                        Không tìm thấy tin nhắn nào
+                                    </Text>
+                                )}
+                            {searchResults.map((item: any, idx: number) => (
+                                <TouchableOpacity
+                                    key={
+                                        item?.id
+                                            ? String(item.id)
+                                            : `search-${idx}`
+                                    }
+                                    className="py-3 border-b border-gray-100"
+                                    onPress={() => {
+                                        setShowSearchSheet(false);
+                                        setSearchKeyword("");
+                                        setSearchResults([]);
+                                        setTimeout(
+                                            () => scrollToMessage(item.id),
+                                            320,
+                                        );
+                                    }}
                                 >
-                                    <Text className="text-sm">
+                                    <Text
+                                        className="text-sm text-gray-800"
+                                        numberOfLines={2}
+                                    >
                                         {item?.content || item?.text || ""}
                                     </Text>
-                                </View>
+                                    <Text className="text-[11px] text-gray-400 mt-1">
+                                        {item.senderName
+                                            ? `${item.senderName} • `
+                                            : ""}
+                                        {item.createdAt
+                                            ? new Date(
+                                                  item.createdAt,
+                                              ).toLocaleString("vi-VN")
+                                            : ""}
+                                    </Text>
+                                </TouchableOpacity>
                             ))}
+                            <View className="h-4" />
                         </ScrollView>
-                        <TouchableOpacity
-                            onPress={() => setShowSearchSheet(false)}
-                            className="mt-4 items-center"
-                        >
-                            <Text className="text-blue-600">Đóng</Text>
-                        </TouchableOpacity>
                     </View>
                 </View>
             </Modal>

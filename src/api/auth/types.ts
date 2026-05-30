@@ -1,5 +1,6 @@
 export interface SignupPayload {
     phone: string;
+    password?: string;
 }
 
 export interface SigninPayload {
@@ -15,7 +16,8 @@ export interface SignupVerifyPayload {
 
 export interface SigninVerifyPayload {
     phone: string;
-    password: string;
+    password?: string;
+    otp?: string;
 }
 
 export interface PasswordResetRequestPayload {

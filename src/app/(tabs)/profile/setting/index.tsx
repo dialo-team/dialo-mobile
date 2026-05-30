@@ -117,7 +117,7 @@ export default function SettingScreen() {
             // Luôn xóa data ở local và đá ra ngoài dù API có lỗi hay không
             await clearAuthData();
             setIsSigningOut(false);
-            router.replace("/" as any); // Trở về trang Welcome ban đầu
+            router.replace("/(auth)/login" as any);
         }
     };
 

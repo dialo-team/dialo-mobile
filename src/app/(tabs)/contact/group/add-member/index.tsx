@@ -77,8 +77,12 @@ const buildProfileDisplay = (profile: any) => ({
 export default function AddMemberToGroup() {
     const router = useRouter();
     // Lấy conversationId từ URL params để biết đang thêm vào nhóm nào
-    const params = useLocalSearchParams<{ conversationId?: string }>();
+    const params = useLocalSearchParams<{
+        conversationId?: string;
+        preselectedUserId?: string;
+    }>();
     const conversationId = params.conversationId as string;
+    const preselectedUserId = params.preselectedUserId as string | undefined;
 
     const [currentUserId, setCurrentUserId] = useState("");
     const [searchText, setSearchText] = useState("");
@@ -88,6 +92,7 @@ export default function AddMemberToGroup() {
     const [contactUsers, setContactUsers] = useState<SelectableUser[]>([]);
     const [selectedUsers, setSelectedUsers] = useState<SelectableUser[]>([]);
     const [isAdding, setIsAdding] = useState(false);
+    const [hasAutoSelected, setHasAutoSelected] = useState(false);
 
     useEffect(() => {
         (async () => {
@@ -266,6 +271,24 @@ export default function AddMemberToGroup() {
     useEffect(() => {
         loadSelectableUsers();
     }, [loadSelectableUsers]);
+
+    useEffect(() => {
+        if (!preselectedUserId || hasAutoSelected || loading) return;
+        const allUsers = [...recentUsers, ...contactUsers];
+        const match = allUsers.find(
+            (u) => u.counterpartId === preselectedUserId,
+        );
+        if (match) {
+            setSelectedUsers([match]);
+            setHasAutoSelected(true);
+        }
+    }, [
+        preselectedUserId,
+        recentUsers,
+        contactUsers,
+        hasAutoSelected,
+        loading,
+    ]);
 
     const toggleSelectUser = (user: SelectableUser) => {
         setSelectedUsers((prev) => {

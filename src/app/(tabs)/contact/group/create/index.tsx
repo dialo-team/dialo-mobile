@@ -3,7 +3,7 @@ import { connectionsApi } from "@/src/api/friend/connectionsApi";
 import { friendApi } from "@/src/api/friend/friendApi";
 import { groupApi } from "@/src/api/group/groupApi";
 import { getInitials, pickBestDisplayName } from "@/src/utils/displayUser";
-import { useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import {
     ArrowRight,
     Camera,
@@ -77,6 +77,15 @@ const buildProfileDisplay = (profile: any) => ({
 
 export default function CreateGroup() {
     const router = useRouter();
+    const params = useLocalSearchParams<{
+        preselectedUserId?: string;
+        preselectedUserName?: string;
+        preselectedUserAvatar?: string;
+    }>();
+
+    const preselectedUserId = params.preselectedUserId || "";
+    const preselectedUserName = params.preselectedUserName || "";
+    const preselectedUserAvatar = params.preselectedUserAvatar || "";
 
     const [groupName, setGroupName] = useState("");
     const [searchText, setSearchText] = useState("");
@@ -338,6 +347,37 @@ export default function CreateGroup() {
             item.counterpartName.toLowerCase().includes(keyword),
         );
     }, [searchText, sourceList]);
+
+    useEffect(() => {
+        if (!preselectedUserId || loading || selectedUsers.length > 0) return;
+
+        const candidate = [...recentUsers, ...contactUsers].find(
+            (user) => user.counterpartId === preselectedUserId,
+        );
+
+        if (candidate) {
+            setSelectedUsers([candidate]);
+            return;
+        }
+
+        if (preselectedUserName || preselectedUserAvatar) {
+            setSelectedUsers([
+                {
+                    counterpartId: preselectedUserId,
+                    counterpartName: preselectedUserName || "Người dùng",
+                    counterpartAvatarUrl: preselectedUserAvatar,
+                },
+            ]);
+        }
+    }, [
+        preselectedUserAvatar,
+        preselectedUserId,
+        preselectedUserName,
+        recentUsers,
+        contactUsers,
+        loading,
+        selectedUsers.length,
+    ]);
 
     const handleCreateGroup = async () => {
         // 1. Kiểm tra điều kiện trước khi gọi API

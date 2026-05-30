@@ -55,16 +55,33 @@ export default function ContactsScreen() {
                     const timestamp = new Date().getTime();
 
                     const [
-                        friendsResRaw,
-                        pendingRes,
-                        blockedUsersList,
-                        conversationsRes,
-                    ] = await Promise.all([
+                        friendsResult,
+                        pendingResult,
+                        blockedResult,
+                        conversationsResult,
+                    ] = await Promise.allSettled([
                         connectionsApi.getFriendsList(),
                         friendApi.getPendingRequests(),
                         friendApi.getBlockedUsers(),
                         chatApi.getConversations(),
                     ]);
+
+                    const friendsResRaw =
+                        friendsResult.status === "fulfilled"
+                            ? friendsResult.value
+                            : [];
+                    const pendingRes =
+                        pendingResult.status === "fulfilled"
+                            ? pendingResult.value
+                            : [];
+                    const blockedUsersList =
+                        blockedResult.status === "fulfilled"
+                            ? blockedResult.value
+                            : [];
+                    const conversationsRes =
+                        conversationsResult.status === "fulfilled"
+                            ? conversationsResult.value
+                            : [];
 
                     if (!isMounted) return;
 

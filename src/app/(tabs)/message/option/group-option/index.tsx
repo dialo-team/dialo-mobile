@@ -58,7 +58,7 @@ const normalizeMembers = (data: any): any[] => {
     if (Array.isArray(data?.data?.members)) return data.data.members;
     return [];
 };
-const CHAT_BASE_URL = "http://14.225.192.37:8085";
+const CHAT_BASE_URL = "http://14.225.192.37:9000";
 
 const resolveFileUrl = (fileUrl?: string | null) => {
     if (!fileUrl) return "";
@@ -762,6 +762,22 @@ export default function GroupChatOptionsScreen() {
                             right={<ChevronRight size={20} color="#ccc" />}
                         />
                         <OptionItem
+                            icon={<MessageSquareX size={20} color="#ef4444" />}
+                            title="Thành viên bị chặn"
+                            titleStyle="text-red-500"
+                            right={<ChevronRight size={20} color="#ccc" />}
+                            onPress={() =>
+                                router.push({
+                                    pathname:
+                                        "/message/option/group-option/members",
+                                    params: {
+                                        conversationId,
+                                        defaultTab: "BLOCKED",
+                                    },
+                                })
+                            }
+                        />
+                        <OptionItem
                             icon={<Link size={20} color="#666" />}
                             title="Link nhóm"
                             description={joiningLink || "Tắt"}
@@ -1069,20 +1085,38 @@ export default function GroupChatOptionsScreen() {
     );
 }
 
-function OptionItem({ icon, title, description, right, onPress }: any) {
+function OptionItem({
+    icon,
+    title,
+    titleStyle,
+    description,
+    right,
+    onPress,
+}: any) {
     return (
         <TouchableOpacity
             className="flex-row items-center px-4 py-4 border-b border-gray-100"
             onPress={onPress}
             disabled={!onPress}
+            activeOpacity={onPress ? 0.6 : 1}
         >
             {icon && <View className="mr-3">{icon}</View>}
 
             <View className="flex-1">
-                <Text className="text-[15px] text-black">{title}</Text>
-
+                {typeof title === "string" ? (
+                    <Text
+                        className={`text-[15px] ${titleStyle || "text-black"}`}
+                    >
+                        {title}
+                    </Text>
+                ) : (
+                    title
+                )}
                 {description ? (
-                    <Text className="text-gray-400 text-xs mt-1">
+                    <Text
+                        className="text-gray-400 text-xs mt-0.5"
+                        numberOfLines={1}
+                    >
                         {description}
                     </Text>
                 ) : null}

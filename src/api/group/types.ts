@@ -6,6 +6,9 @@ export interface GroupMember {
     displayName: string;
     avatarUrl: string | null;
     role: GroupRole;
+    userName?: string;
+    user?: { userName?: string; displayName?: string; [key: string]: any };
+    [key: string]: any;
 }
 
 // 3. Kiểu dữ liệu của tin nhắn (Dựa trên array messages trong log)
@@ -22,8 +25,11 @@ export interface Message {
     system: boolean;
     revoked?: boolean;
     displayPosition?: "CENTER" | "LEFT" | "RIGHT";
-    attachment?: any | null; // Cập nhật type chuẩn nếu bạn có interface Attachment
+    attachment?: any | null;
     forwardedFromMessageId?: string | null;
+    reactions?: any[];
+    closed?: boolean;
+    poll?: any;
     createdAt: string;
     updatedAt: string;
 }
@@ -45,6 +51,9 @@ export interface GroupConversation {
     groupAvatarUrl: string | null;
     dissolved: boolean;
     memberRoles: Record<string, GroupRole>;
+    status?: string;
+    pinnedMessages?: any[];
+    [key: string]: any;
 }
 
 export interface ConversationDetail {

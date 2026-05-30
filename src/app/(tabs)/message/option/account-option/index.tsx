@@ -1,4 +1,4 @@
-import { chatApi } from "@/src/api/chat/chatApi";
+import { chatApi, chatAuthUtils } from "@/src/api/chat/chatApi";
 import { friendApi } from "@/src/api/friend/friendApi";
 import { getInitials } from "@/src/utils/displayUser";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
@@ -21,6 +21,7 @@ import {
 } from "lucide-react-native";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+    ActivityIndicator,
     Alert,
     Animated,
     Easing,
@@ -67,11 +68,19 @@ export default function ChatOptionsScreen() {
     const [isBlocked, setIsBlocked] = useState(false);
     const [loadingBlockState, setLoadingBlockState] = useState(false);
     const [loadingBlockAction, setLoadingBlockAction] = useState(false);
+    const [currentUserId, setCurrentUserId] = useState("");
+    const [mutualGroupCount, setMutualGroupCount] = useState(0);
     const entranceAnim = useRef(new Animated.Value(0)).current;
 
     const [openRename, setOpenRename] = useState(false);
     const [remarkName, setRemarkName] = useState(name || "");
     const [renamingLoading, setRenamingLoading] = useState(false);
+
+    const [showGroupPicker, setShowGroupPicker] = useState(false);
+    const [groupList, setGroupList] = useState<
+        { conversationId: string; name: string; avatar: string }[]
+    >([]);
+    const [loadingGroups, setLoadingGroups] = useState(false);
 
     const [displayName, setDisplayName] = useState(name || "");
 
@@ -141,6 +150,75 @@ export default function ChatOptionsScreen() {
     );
 
     const initials = useMemo(() => getInitials(displayName), [displayName]);
+
+    useEffect(() => {
+        (async () => {
+            try {
+                const sub = await chatAuthUtils.getCurrentUserId();
+                setCurrentUserId(sub || "");
+            } catch {
+                setCurrentUserId("");
+            }
+        })();
+    }, []);
+
+    useEffect(() => {
+        let mounted = true;
+
+        const loadMutualGroupCount = async () => {
+            if (!targetUserId || !currentUserId) {
+                if (mounted) setMutualGroupCount(0);
+                return;
+            }
+
+            try {
+                const conversations = await chatApi.getConversations();
+                const list = Array.isArray(conversations) ? conversations : [];
+
+                const count = list.filter((conversation: any) => {
+                    const isGroup =
+                        conversation?.isGroup === true ||
+                        String(
+                            conversation?.conversationType ||
+                                conversation?.type ||
+                                "",
+                        ).toLowerCase() === "group" ||
+                        !!conversation?.groupName ||
+                        !!conversation?.groupAvatarUrl ||
+                        Array.isArray(conversation?.participants);
+
+                    if (!isGroup) return false;
+
+                    const participants = Array.isArray(
+                        conversation?.participants,
+                    )
+                        ? conversation.participants.map((item: any) =>
+                              String(item),
+                          )
+                        : [];
+
+                    return (
+                        participants.includes(String(currentUserId)) &&
+                        participants.includes(String(targetUserId))
+                    );
+                }).length;
+
+                if (mounted) setMutualGroupCount(count);
+            } catch (error) {
+                console.error(
+                    "[account-option] loadMutualGroupCount error:",
+                    error,
+                );
+                if (mounted) setMutualGroupCount(0);
+            }
+        };
+
+        loadMutualGroupCount();
+
+        return () => {
+            mounted = false;
+        };
+    }, [currentUserId, targetUserId]);
 
     useEffect(() => {
         let mounted = true;
@@ -344,6 +422,53 @@ export default function ChatOptionsScreen() {
         });
     };
 
+    const handleCreateGroupWithUser = () => {
+        if (!targetUserId) return;
+
+        router.push({
+            pathname: "/(tabs)/contact/group/create" as any,
+            params: {
+                preselectedUserId: targetUserId,
+                preselectedUserName: displayName,
+                preselectedUserAvatar: avatarUrl,
+            },
+        });
+    };
+
+    const handleOpenGroupPicker = async () => {
+        if (!targetUserId) return;
+        setShowGroupPicker(true);
+        setLoadingGroups(true);
+        try {
+            const conversations = await chatApi.getConversations();
+            const list = Array.isArray(conversations) ? conversations : [];
+            const groups = list
+                .filter((c: any) => {
+                    const isGroup =
+                        c?.isGroup === true ||
+                        String(
+                            c?.conversationType || c?.type || "",
+                        ).toLowerCase() === "group" ||
+                        !!c?.groupName;
+                    return isGroup && (c?.conversationId || c?.id);
+                })
+                .map((c: any) => ({
+                    conversationId: String(c.conversationId || c.id),
+                    name: c?.groupName || c?.name || "Nhóm không tên",
+                    avatar:
+                        c?.groupAvatarUrl ||
+                        c?.groupAvatar ||
+                        c?.avatarUrl ||
+                        "",
+                }));
+            setGroupList(groups);
+        } catch {
+            Alert.alert("Lỗi", "Không thể tải danh sách nhóm");
+        } finally {
+            setLoadingGroups(false);
+        }
+    };
+
     return (
         <SafeAreaView className="flex-1 bg-gray-100">
             {/* HEADER */}
@@ -391,48 +516,57 @@ export default function ChatOptionsScreen() {
                         </Text>
 
                         {/* ACTIONS */}
-                        <View className="flex-row justify-around w-full mt-6">
-                            <View className="items-center">
-                                <TouchableOpacity
-                                    className="bg-gray-100 p-3 rounded-full"
-                                    onPress={handleOpenProfile}
-                                >
-                                    <Search size={22} />
-                                </TouchableOpacity>
-                                <Text className="text-xs mt-1">
-                                    Tìm tin nhắn
-                                </Text>
-                            </View>
-
-                            <View className="items-center">
-                                <TouchableOpacity
-                                    className="bg-gray-100 p-3 rounded-full"
-                                    onPress={handleOpenProfile}
-                                >
-                                    <User size={22} />
-                                </TouchableOpacity>
-                                <Text className="text-xs mt-1">
-                                    Trang cá nhân
-                                </Text>
-                            </View>
-
-                            <View className="items-center">
-                                <TouchableOpacity className="bg-gray-100 p-3 rounded-full">
-                                    <Pin size={22} />
-                                </TouchableOpacity>
-                                <Text className="text-xs mt-1">
-                                    Đổi hình nền
-                                </Text>
-                            </View>
-
-                            <View className="items-center">
-                                <TouchableOpacity className="bg-gray-100 p-3 rounded-full">
-                                    <Bell size={22} />
-                                </TouchableOpacity>
-                                <Text className="text-xs mt-1">
-                                    Tắt thông báo
-                                </Text>
-                            </View>
+                        <View className="flex-row justify-around w-full mt-6 px-2">
+                            {[
+                                {
+                                    icon: <Search size={22} color="#374151" />,
+                                    label: "Tìm tin nhắn",
+                                    onPress: () => {
+                                        if (!conversationId) return;
+                                        router.replace({
+                                            pathname:
+                                                "/(tabs)/message/chat/[id]" as any,
+                                            params: {
+                                                id: conversationId,
+                                                name: displayName,
+                                                avatar: avatarUrl,
+                                                openSearch: "1",
+                                            },
+                                        });
+                                    },
+                                },
+                                {
+                                    icon: <User size={22} color="#374151" />,
+                                    label: "Trang cá nhân",
+                                    onPress: handleOpenProfile,
+                                },
+                                {
+                                    icon: (
+                                        <FileImage size={22} color="#374151" />
+                                    ),
+                                    label: "Ảnh & File",
+                                    onPress: handleOpenMedia,
+                                },
+                                {
+                                    icon: <Bell size={22} color="#374151" />,
+                                    label: "Thông báo",
+                                    onPress: undefined,
+                                },
+                            ].map(({ icon, label, onPress }) => (
+                                <View key={label} className="items-center">
+                                    <TouchableOpacity
+                                        className="bg-gray-100 p-3 rounded-full"
+                                        onPress={onPress}
+                                        disabled={!onPress}
+                                        activeOpacity={onPress ? 0.6 : 1}
+                                    >
+                                        {icon}
+                                    </TouchableOpacity>
+                                    <Text className="text-xs mt-1 text-gray-600 text-center">
+                                        {label}
+                                    </Text>
+                                </View>
+                            ))}
                         </View>
                     </View>
 
@@ -466,14 +600,16 @@ export default function ChatOptionsScreen() {
                         <OptionItem
                             icon={<Users size={20} />}
                             title={`Tạo nhóm với ${name}`}
+                            onPress={handleCreateGroupWithUser}
                         />
                         <OptionItem
                             icon={<UserPlus size={20} />}
                             title={`Thêm ${name} vào nhóm`}
+                            onPress={handleOpenGroupPicker}
                         />
                         <OptionItem
                             icon={<Users size={20} />}
-                            title="Xem nhóm chung (4)"
+                            title={`Xem nhóm chung (${mutualGroupCount})`}
                         />
                     </View>
 
@@ -549,6 +685,83 @@ export default function ChatOptionsScreen() {
                     <View className="h-10" />
                 </ScrollView>
             </Animated.View>
+
+            {/* GROUP PICKER MODAL */}
+            <Modal
+                visible={showGroupPicker}
+                animationType="slide"
+                transparent
+                onRequestClose={() => setShowGroupPicker(false)}
+            >
+                <View className="flex-1 justify-end bg-black/30">
+                    <View
+                        className="bg-white rounded-t-3xl p-4"
+                        style={{ maxHeight: "70%" }}
+                    >
+                        <View className="flex-row items-center justify-between mb-4">
+                            <View className="w-6" />
+                            <Text className="text-lg font-semibold">
+                                Chọn nhóm để thêm
+                            </Text>
+                            <TouchableOpacity
+                                onPress={() => setShowGroupPicker(false)}
+                            >
+                                <X size={22} />
+                            </TouchableOpacity>
+                        </View>
+
+                        {loadingGroups ? (
+                            <ActivityIndicator
+                                size="small"
+                                color="#2563eb"
+                                style={{ marginVertical: 32 }}
+                            />
+                        ) : groupList.length === 0 ? (
+                            <Text className="text-center text-gray-400 py-10">
+                                Bạn chưa có nhóm nào
+                            </Text>
+                        ) : (
+                            <ScrollView showsVerticalScrollIndicator={false}>
+                                {groupList.map((group) => (
+                                    <TouchableOpacity
+                                        key={group.conversationId}
+                                        className="flex-row items-center px-2 py-3 border-b border-gray-100"
+                                        onPress={() => {
+                                            setShowGroupPicker(false);
+                                            router.push({
+                                                pathname:
+                                                    "/(tabs)/contact/group/add-member" as any,
+                                                params: {
+                                                    conversationId:
+                                                        group.conversationId,
+                                                    preselectedUserId:
+                                                        targetUserId,
+                                                },
+                                            });
+                                        }}
+                                    >
+                                        {group.avatar ? (
+                                            <Image
+                                                source={{ uri: group.avatar }}
+                                                className="w-12 h-12 rounded-full bg-gray-200"
+                                            />
+                                        ) : (
+                                            <View className="w-12 h-12 rounded-full bg-blue-500 items-center justify-center">
+                                                <Text className="text-white font-semibold">
+                                                    {getInitials(group.name)}
+                                                </Text>
+                                            </View>
+                                        )}
+                                        <Text className="ml-3 flex-1 text-base font-medium">
+                                            {group.name}
+                                        </Text>
+                                    </TouchableOpacity>
+                                ))}
+                            </ScrollView>
+                        )}
+                    </View>
+                </View>
+            </Modal>
 
             {/* RENAME MODAL */}
             <Modal visible={openRename} animationType="slide" transparent>

@@ -24,7 +24,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 // Import API và Types
 import { chatApi, chatAuthUtils } from "@/src/api/chat/chatApi";
-import { friendApi } from "@/src/api/friend/friendApi";
+import { friendApi, extractBlockedUserId } from "@/src/api/friend/friendApi";
 import { groupApi } from "@/src/api/group/groupApi";
 import { GroupMember } from "@/src/api/group/types";
 import { userApi } from "@/src/api/user/userApi";
@@ -33,7 +33,7 @@ import { pickBestDisplayName } from "@/src/utils/displayUser";
 // Các tab hiển thị
 type TabType = "ALL" | "ADMINS" | "BLOCKED";
 
-const CHAT_BASE_URL = "http://14.225.192.37:8085";
+const CHAT_BASE_URL = "http://14.225.192.37:9000";
 const resolveFileUrl = (fileUrl?: string | null) => {
     if (!fileUrl) return "";
     if (/^https?:\/\//i.test(fileUrl)) return fileUrl;
@@ -104,8 +104,9 @@ type EnrichedMember = GroupMember & {
 
 export default function GroupMembersPage() {
     const router = useRouter();
-    const { conversationId } = useLocalSearchParams<{
+    const { conversationId, defaultTab } = useLocalSearchParams<{
         conversationId: string;
+        defaultTab?: string;
     }>();
 
     const [currentUserId, setCurrentUserId] = useState<string>("");
@@ -113,8 +114,13 @@ export default function GroupMembersPage() {
     const [enrichedProfiles, setEnrichedProfiles] = useState<
         Record<string, any>
     >({});
+    const [blockedUserIds, setBlockedUserIds] = useState<Set<string>>(
+        new Set(),
+    );
     const [loading, setLoading] = useState<boolean>(true);
-    const [activeTab, setActiveTab] = useState<TabType>("ALL");
+    const [activeTab, setActiveTab] = useState<TabType>(
+        (defaultTab as TabType) || "ALL",
+    );
     const [actionLoadingMemberId, setActionLoadingMemberId] = useState("");
     const [selectedMember, setSelectedMember] = useState<EnrichedMember | null>(
         null,
@@ -215,8 +221,8 @@ export default function GroupMembersPage() {
 
             const membersData = [
                 ...normalizeMembers(membersRes),
-                ...normalizeMembers(detailRes?.data?.participants),
-                ...normalizeMembers(detailRes?.data?.members),
+                ...normalizeMembers((detailRes as any)?.data?.participants),
+                ...normalizeMembers((detailRes as any)?.data?.members),
             ];
 
             membersData.forEach((member: any) => {
@@ -322,6 +328,19 @@ export default function GroupMembersPage() {
             });
 
             setMembers(enrichedMembers);
+
+            // === BƯỚC 7: LOAD BLOCKED USERS (dùng để hiển thị Tab BLOCKED) ===
+            try {
+                const blocked = await friendApi.getBlockedUsers();
+                const blockedSet = new Set<string>();
+                (blocked || []).forEach((item: any) => {
+                    const id = extractBlockedUserId(item);
+                    if (id) blockedSet.add(String(id));
+                });
+                setBlockedUserIds(blockedSet);
+            } catch (e) {
+                console.log("Không lấy được danh sách bị chặn", e);
+            }
         } catch (error) {
             console.error("[GroupMembers] Load members error:", error);
         } finally {
@@ -345,11 +364,11 @@ export default function GroupMembersPage() {
                 return m.role === "OWNER" || m.role === "ADMIN";
             }
             if (activeTab === "BLOCKED") {
-                return false; // Giả định chưa có logic block
+                return blockedUserIds.has(String(m.userId));
             }
             return true; // Tab ALL
         });
-    }, [members, activeTab]);
+    }, [members, activeTab, blockedUserIds]);
 
     // Lọc theo từ khóa tìm kiếm (Local search real-time) + Sắp xếp vai trò lên đầu (OWNER -> ADMIN -> MEMBER)
     const displayedMembers = useMemo(() => {

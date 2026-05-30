@@ -31,8 +31,16 @@ export default function FriendProfileScreen() {
         id,
         name,
         avatar,
+        conversationId: conversationIdParam,
         openRename: openRenameParam,
     } = useLocalSearchParams();
+
+    const conversationId =
+        typeof conversationIdParam === "string"
+            ? conversationIdParam
+            : Array.isArray(conversationIdParam)
+              ? conversationIdParam[0]
+              : "";
 
     // --- STATES ---
     const [openRename, setOpenRename] = useState(false);
