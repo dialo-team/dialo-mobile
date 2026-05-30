@@ -4,7 +4,7 @@ import { getAccessToken } from "../auth/authStorage";
 import { GroupConversation, GroupMember, GroupRole } from "./types";
 
 // Định nghĩa URL cho Chat Service (Cổng 8085)
-const CHAT_SERVICE_URL = "http://14.225.192.37:8085/api/v1/conversations";
+const CHAT_SERVICE_URL = "http://14.225.192.37:9000/api/v1/conversations";
 
 export const groupApi = {
     // Các hàm dùng chung apiClient (Cổng 9000) nếu vẫn hoạt động tốt

@@ -192,7 +192,6 @@ export default function LoginVerifyScreen() {
                         label="Tiếp tục"
                         loadingLabel="Đang xác thực..."
                         isLoading={isSubmitting}
-                        disabled={!isOtpValid}
                         onPress={handleVerifySignin}
                         className="mt-10"
                     />

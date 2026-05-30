@@ -2,7 +2,7 @@ import apiClient from "@/src/api/apiClient";
 import { getAccessToken } from "@/src/api/auth/authStorage";
 import { ChatMediaItem } from "./types";
 
-const MEDIA_BASE_URL = "http://14.225.192.37:8085";
+const MEDIA_BASE_URL = "http://14.225.192.37:9000";
 
 export const mediaApi = {
     // 1. GET Media cập nhật đúng chuẩn Swagger
@@ -39,6 +39,7 @@ export const mediaApi = {
         userId: string,
         conversationId: string,
         fileData: { uri: string; name: string; type: string },
+        messageType?: string,
     ) {
         console.log(
             "=================== [DEBUG MULTIPART SEND] ===================",
@@ -47,6 +48,7 @@ export const mediaApi = {
         console.log(`   - fileData.uri: ${fileData.uri}`);
         console.log(`   - fileData.name: ${fileData.name}`);
         console.log(`   - fileData.type: ${fileData.type}`);
+        console.log(`   - messageType: ${messageType}`);
 
         try {
             // 💎 KHÔNG ĐỌC BASE64 NỮA -> Khởi tạo đối tượng FormData chuẩn native
@@ -71,12 +73,11 @@ export const mediaApi = {
                 {
                     headers: {
                         "X-User-Id": userId,
-                        // BẮT BUỘC: Để trống hoặc set multipart/form-data để Axios tự sinh Boundary chuẩn cho Mobile
-                        "Content-Type": "multipart/form-data",
                         ...(token ? { Authorization: `Bearer ${token}` } : {}),
                     },
                     params: {
                         conversationId,
+                        type: messageType,
                     },
                 },
             );

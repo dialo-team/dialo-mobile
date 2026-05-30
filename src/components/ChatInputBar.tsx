@@ -1,7 +1,9 @@
-import { Image, Mic, Paperclip, Send, Smile } from "lucide-react-native";
-import React, { useCallback, useRef } from "react";
+import { Image, Mic, Paperclip, Send, Smile, X } from "lucide-react-native";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
     Animated,
+    Easing,
+    PanResponder,
     Text,
     TextInput,
     TouchableOpacity,
@@ -9,70 +11,152 @@ import {
 } from "react-native";
 
 export interface ChatInputBarProps {
-    /** Message text value */
     message: string;
-    /** Callback when message changes */
     onMessageChange: (text: string) => void;
-    /** Callback when send button pressed */
     onSend: () => void;
-    /** Callback when attach file pressed */
     onAttachFile?: () => void;
-    /** Callback when pick media pressed */
     onPickMedia?: () => void;
-    /** Callback when pick/send voice pressed */
     onPickVoice?: () => void;
-    /** Callback when emoji button pressed */
+    onVoiceRecordStart?: () => void;
+    onVoiceRecordStop?: () => void;
+    onVoiceRecordCancel?: () => void;
+    isRecording?: boolean;
+    recordingSeconds?: number;
     onEmojiPress?: () => void;
-    /** Show emoji menu state (for controlled emoji menu) */
     showEmojiMenu?: boolean;
-    /** Callback for emoji select */
     onEmojiSelect?: (emoji: string) => void;
-    /** Placeholder text */
     placeholder?: string;
-    /** Is loading/sending */
     isLoading?: boolean;
-    /** Disabled state */
     isDisabled?: boolean;
-    /** For group chat: disable all features */
     isGroupChat?: boolean;
-
-    // Direct chat block features
-    /** Is blocked by current user */
     isBlockedByMe?: boolean;
-    /** Is blocked by the other user */
     isBlockedByThem?: boolean;
-    /** Callback to unblock user */
     onUnblock?: () => void;
-    /** Display name for blocked message */
     displayName?: string;
-
-    // Customization
-    /** Custom container style */
     containerClassName?: string;
-    /** Custom input style */
     inputClassName?: string;
-    /** Show emoji button */
     showEmojiButton?: boolean;
-    /** Show attachment button */
     showAttachButton?: boolean;
-    /** Show media button */
     showMediaButton?: boolean;
-    /** Show more menu button (for group) */
     showMoreButton?: boolean;
-    /** Custom emojis list */
     customEmojis?: string[];
 }
 
-/**
- * ChatInputBar - Reusable text input component for both direct and group chat
- *
- * Features:
- * - Direct chat: Block status handling (isBlockedByMe, isBlockedByThem)
- * - Group chat: Simple input without block features
- * - Customizable buttons and callbacks
- * - Emoji quick select menu
- * - Loading states
- */
+const formatSeconds = (s?: number) => {
+    if (!s || s <= 0) return "00:00";
+    const mm = Math.floor(s / 60)
+        .toString()
+        .padStart(2, "0");
+    const ss = Math.floor(s % 60)
+        .toString()
+        .padStart(2, "0");
+    return `${mm}:${ss}`;
+};
+
+// ─── Recording Bar (shown instead of the normal input row during recording) ──
+function RecordingBar({
+    seconds,
+    isCanceling,
+    onCancel,
+}: {
+    seconds: number;
+    isCanceling: boolean;
+    onCancel: () => void;
+}) {
+    const pulseAnim = useRef(new Animated.Value(1)).current;
+
+    useEffect(() => {
+        const loop = Animated.loop(
+            Animated.sequence([
+                Animated.timing(pulseAnim, {
+                    toValue: 0.3,
+                    duration: 600,
+                    easing: Easing.inOut(Easing.ease),
+                    useNativeDriver: true,
+                }),
+                Animated.timing(pulseAnim, {
+                    toValue: 1,
+                    duration: 600,
+                    easing: Easing.inOut(Easing.ease),
+                    useNativeDriver: true,
+                }),
+            ]),
+        );
+        loop.start();
+        return () => loop.stop();
+    }, [pulseAnim]);
+
+    return (
+        <View
+            style={{
+                flexDirection: "row",
+                alignItems: "center",
+                paddingHorizontal: 12,
+                paddingVertical: 10,
+                backgroundColor: isCanceling ? "#fef2f2" : "#fff",
+                borderTopWidth: 1,
+                borderTopColor: "#e5e7eb",
+            }}
+        >
+            {/* Cancel button */}
+            <TouchableOpacity
+                onPress={onCancel}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                style={{
+                    width: 32,
+                    height: 32,
+                    borderRadius: 16,
+                    backgroundColor: "#f3f4f6",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    marginRight: 10,
+                }}
+            >
+                <X size={16} color="#6b7280" />
+            </TouchableOpacity>
+
+            {/* Waveform + label */}
+            <View
+                style={{ flex: 1, flexDirection: "row", alignItems: "center" }}
+            >
+                <Animated.View
+                    style={{
+                        width: 10,
+                        height: 10,
+                        borderRadius: 5,
+                        backgroundColor: isCanceling ? "#9ca3af" : "#ef4444",
+                        marginRight: 8,
+                        opacity: isCanceling ? 1 : pulseAnim,
+                    }}
+                />
+                <Text
+                    style={{
+                        fontSize: 15,
+                        fontWeight: "600",
+                        color: isCanceling ? "#9ca3af" : "#ef4444",
+                        marginRight: 8,
+                    }}
+                >
+                    {formatSeconds(seconds)}
+                </Text>
+                <Text style={{ fontSize: 13, color: "#9ca3af" }}>
+                    {isCanceling ? "Nhả để hủy" : "Đang ghi âm..."}
+                </Text>
+            </View>
+
+            {/* Swipe hint (only when NOT in cancel mode) */}
+            {!isCanceling && (
+                <Text
+                    style={{ fontSize: 12, color: "#d1d5db", marginRight: 4 }}
+                >
+                    ← Vuốt
+                </Text>
+            )}
+        </View>
+    );
+}
+
+// ─── Main component ─────────────────────────────────────────────────────────
 const ChatInputBar = React.forwardRef<TextInput, ChatInputBarProps>(
     (props, ref) => {
         const {
@@ -88,7 +172,6 @@ const ChatInputBar = React.forwardRef<TextInput, ChatInputBarProps>(
             placeholder = "Nhập tin nhắn",
             isLoading = false,
             isDisabled = false,
-            isGroupChat = false,
             isBlockedByMe = false,
             isBlockedByThem = false,
             onUnblock,
@@ -100,15 +183,19 @@ const ChatInputBar = React.forwardRef<TextInput, ChatInputBarProps>(
             showMediaButton = true,
             showMoreButton = false,
             customEmojis = ["👍", "❤️", "😂", "😮", "😢", "🔥"],
+            onVoiceRecordStart,
+            onVoiceRecordStop,
+            onVoiceRecordCancel,
         } = props;
+
+        // Recording cancel-swipe state — tracked locally for UI feedback only
+        const [isSwipeCanceling, setIsSwipeCanceling] = useState(false);
 
         const scaleAnim = useRef(new Animated.Value(1)).current;
 
-        // Handle emoji select with animation
         const handleEmojiSelect = useCallback(
             (emoji: string) => {
                 onEmojiSelect?.(emoji);
-                // Animate emoji button
                 Animated.sequence([
                     Animated.timing(scaleAnim, {
                         toValue: 0.9,
@@ -125,7 +212,6 @@ const ChatInputBar = React.forwardRef<TextInput, ChatInputBarProps>(
             [onEmojiSelect, scaleAnim],
         );
 
-        // Handle send with visual feedback
         const handleSendPress = useCallback(() => {
             if (message.trim() && !isLoading && !isDisabled) {
                 Animated.sequence([
@@ -145,9 +231,8 @@ const ChatInputBar = React.forwardRef<TextInput, ChatInputBarProps>(
         }, [message, isLoading, isDisabled, onSend, scaleAnim]);
 
         const canSend = message.trim() && !isLoading && !isDisabled;
-        const sendButtonColor = canSend ? "#2563eb" : "#999";
 
-        // Blocked by me state
+        // ── Blocked states ─────────────────────────────────────────────────
         if (isBlockedByMe) {
             return (
                 <View
@@ -169,7 +254,6 @@ const ChatInputBar = React.forwardRef<TextInput, ChatInputBarProps>(
             );
         }
 
-        // Blocked by them state
         if (isBlockedByThem) {
             return (
                 <View
@@ -185,12 +269,44 @@ const ChatInputBar = React.forwardRef<TextInput, ChatInputBarProps>(
             );
         }
 
-        // Normal input bar
+        // ── Recording state → show recording bar instead of normal input ──
+        if (props.isRecording) {
+            return (
+                <View className={containerClassName}>
+                    <RecordingBar
+                        seconds={props.recordingSeconds ?? 0}
+                        isCanceling={isSwipeCanceling}
+                        onCancel={() => {
+                            setIsSwipeCanceling(false);
+                            onVoiceRecordCancel?.();
+                        }}
+                    />
+                    {/* Invisible VoiceRecordControl so gestures still work */}
+                    <View
+                        style={{
+                            position: "absolute",
+                            right: 12,
+                            bottom: 8,
+                        }}
+                    >
+                        <VoiceRecordControl
+                            onStart={onVoiceRecordStart}
+                            onStop={onVoiceRecordStop}
+                            onCancel={onVoiceRecordCancel}
+                            onShortPress={onPickVoice}
+                            onSwipeCancelChange={setIsSwipeCanceling}
+                            disabled={false}
+                        />
+                    </View>
+                </View>
+            );
+        }
+
+        // ── Normal input bar ───────────────────────────────────────────────
         return (
             <View
                 className={`bg-white border-t border-gray-200 px-3 py-2 flex-row items-center ${containerClassName}`}
             >
-                {/* Emoji button with popup menu */}
                 {showEmojiButton && (
                     <View className="relative z-50">
                         {showEmojiMenu && (
@@ -203,7 +319,6 @@ const ChatInputBar = React.forwardRef<TextInput, ChatInputBarProps>(
                                         key={emoji}
                                         onPress={() => handleEmojiSelect(emoji)}
                                         className="mx-2"
-                                        accessibilityLabel={`Select ${emoji} emoji`}
                                     >
                                         <Text className="text-2xl">
                                             {emoji}
@@ -216,7 +331,6 @@ const ChatInputBar = React.forwardRef<TextInput, ChatInputBarProps>(
                             className="mr-2 p-1"
                             onPress={onEmojiPress}
                             disabled={isDisabled}
-                            accessibilityLabel="Emoji menu"
                         >
                             <Smile
                                 size={26}
@@ -226,13 +340,11 @@ const ChatInputBar = React.forwardRef<TextInput, ChatInputBarProps>(
                     </View>
                 )}
 
-                {/* Attach file button */}
                 {showAttachButton && (
                     <TouchableOpacity
                         className="mr-2 p-1"
                         onPress={onAttachFile}
                         disabled={isDisabled}
-                        accessibilityLabel="Attach file"
                     >
                         <Paperclip
                             size={22}
@@ -241,7 +353,6 @@ const ChatInputBar = React.forwardRef<TextInput, ChatInputBarProps>(
                     </TouchableOpacity>
                 )}
 
-                {/* Text input */}
                 <TextInput
                     ref={ref}
                     placeholder={placeholder}
@@ -258,41 +369,36 @@ const ChatInputBar = React.forwardRef<TextInput, ChatInputBarProps>(
                     }}
                 />
 
-                {/* Media button */}
                 {showMediaButton && (
                     <TouchableOpacity
                         className="ml-2 p-1"
                         onPress={onPickMedia}
                         disabled={isDisabled}
-                        accessibilityLabel="Pick media"
                     >
                         <Image size={26} color={isDisabled ? "#ccc" : "#666"} />
                     </TouchableOpacity>
                 )}
 
-                {/* More button (for group chat or other features) */}
                 {showMoreButton && (
-                    <TouchableOpacity
-                        className="ml-2 p-1"
-                        onPress={onPickVoice}
+                    <VoiceRecordControl
+                        onStart={onVoiceRecordStart}
+                        onStop={onVoiceRecordStop}
+                        onCancel={onVoiceRecordCancel}
+                        onShortPress={onPickVoice}
+                        onSwipeCancelChange={setIsSwipeCanceling}
                         disabled={isDisabled}
-                        accessibilityLabel="More options"
-                    >
-                        <Mic size={26} color={isDisabled ? "#ccc" : "#666"} />
-                    </TouchableOpacity>
+                    />
                 )}
 
-                {/* Send button */}
                 <Animated.View style={{ transform: [{ scale: scaleAnim }] }}>
                     <TouchableOpacity
                         className="ml-2 p-1"
                         onPress={handleSendPress}
                         disabled={!canSend || isLoading}
-                        accessibilityLabel="Send message"
                     >
                         <Send
                             size={26}
-                            color={sendButtonColor}
+                            color={canSend ? "#2563eb" : "#999"}
                             strokeWidth={2.5}
                         />
                     </TouchableOpacity>
@@ -303,5 +409,115 @@ const ChatInputBar = React.forwardRef<TextInput, ChatInputBarProps>(
 );
 
 ChatInputBar.displayName = "ChatInputBar";
-
 export default ChatInputBar;
+
+// ─── VoiceRecordControl ──────────────────────────────────────────────────────
+//
+// PanResponder callbacks are created ONCE (inside useRef) and their closures
+// never re-capture React state/props. Every value read inside a callback must
+// live in a ref that is kept in sync on every render.
+//
+const HOLD_THRESHOLD_MS = 350; // shorter than this → short tap → pick file
+
+const VoiceRecordControl: React.FC<{
+    onStart?: () => void;
+    onStop?: () => void;
+    onCancel?: () => void;
+    onShortPress?: () => void;
+    onSwipeCancelChange?: (canceling: boolean) => void;
+    disabled?: boolean;
+}> = ({
+    onStart,
+    onStop,
+    onCancel,
+    onShortPress,
+    onSwipeCancelChange,
+    disabled,
+}) => {
+    const [isRecording, setIsRecording] = useState(false);
+
+    // Refs — updated every render, read safely inside stale PanResponder closures
+    const disabledRef = useRef(disabled);
+    const isRecordingRef = useRef(false);
+    const isCanceledRef = useRef(false);
+    const pressStartRef = useRef(0);
+    const onStartRef = useRef(onStart);
+    const onStopRef = useRef(onStop);
+    const onCancelRef = useRef(onCancel);
+    const onShortPressRef = useRef(onShortPress);
+    const onSwipeCancelChangeRef = useRef(onSwipeCancelChange);
+
+    disabledRef.current = disabled;
+    onStartRef.current = onStart;
+    onStopRef.current = onStop;
+    onCancelRef.current = onCancel;
+    onShortPressRef.current = onShortPress;
+    onSwipeCancelChangeRef.current = onSwipeCancelChange;
+
+    const panResponder = useRef(
+        PanResponder.create({
+            onStartShouldSetPanResponder: () => !disabledRef.current,
+            onMoveShouldSetPanResponder: () => !disabledRef.current,
+
+            onPanResponderGrant: () => {
+                if (disabledRef.current) return;
+                pressStartRef.current = Date.now();
+                isCanceledRef.current = false;
+                isRecordingRef.current = true;
+                setIsRecording(true);
+                onSwipeCancelChangeRef.current?.(false);
+                onStartRef.current?.();
+            },
+
+            onPanResponderMove: (_, gs) => {
+                if (!isRecordingRef.current) return;
+                const nowCanceled = gs.dx < -60;
+                if (nowCanceled !== isCanceledRef.current) {
+                    isCanceledRef.current = nowCanceled;
+                    onSwipeCancelChangeRef.current?.(nowCanceled);
+                }
+            },
+
+            onPanResponderRelease: () => {
+                if (!isRecordingRef.current) return;
+                const holdMs = Date.now() - pressStartRef.current;
+                const wasCanceled = isCanceledRef.current;
+
+                isRecordingRef.current = false;
+                isCanceledRef.current = false;
+                setIsRecording(false);
+                onSwipeCancelChangeRef.current?.(false);
+
+                if (holdMs < HOLD_THRESHOLD_MS) {
+                    // Short tap — cancel the started recording, then open file picker
+                    onCancelRef.current?.();
+                    onShortPressRef.current?.();
+                } else if (wasCanceled) {
+                    onCancelRef.current?.();
+                } else {
+                    onStopRef.current?.();
+                }
+            },
+
+            onPanResponderTerminate: () => {
+                isRecordingRef.current = false;
+                isCanceledRef.current = false;
+                setIsRecording(false);
+                onSwipeCancelChangeRef.current?.(false);
+                onCancelRef.current?.();
+            },
+        }),
+    ).current;
+
+    return (
+        <View
+            style={{ marginLeft: 8, padding: 4 }}
+            {...panResponder.panHandlers}
+        >
+            <Mic
+                size={26}
+                color={disabled ? "#ccc" : isRecording ? "#2563eb" : "#666"}
+            />
+        </View>
+    );
+};

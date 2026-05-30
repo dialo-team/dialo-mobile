@@ -194,7 +194,6 @@ export default function LoginWithPasswordScreen() {
                         label="Tiếp tục"
                         loadingLabel="Đang đăng nhập..."
                         isLoading={isSubmitting}
-                        disabled={!isValid}
                         onPress={handleLogin}
                         className="mt-6"
                     />

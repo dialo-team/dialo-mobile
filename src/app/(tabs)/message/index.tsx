@@ -36,6 +36,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 type Conversation = {
     conversationId: string;
     counterpartId?: string;
+    targetUserId?: string;
     counterpartName?: string;
     counterpartAvatarUrl?: string;
     lastMessage?: string;
@@ -43,6 +44,7 @@ type Conversation = {
     lastMessageType?: string;
     unreadCount?: number;
     dissolved?: boolean;
+    [key: string]: any;
 };
 
 function isGenericDisplayName(value?: string) {
@@ -230,10 +232,10 @@ export default function MessagesScreen() {
             const initScreenData = async () => {
                 if (!currentUserId) return;
 
+                // Lấy danh sách chặn — fail thì dùng set rỗng, không chặn load conversations
+                const freshBlockedIds = new Set<string>();
                 try {
-                    // 1. Lấy danh sách chặn mới nhất (Dùng biến cục bộ)
                     const blockedList = await friendApi.getBlockedUsers();
-                    const freshBlockedIds = new Set<string>();
                     (Array.isArray(blockedList) ? blockedList : []).forEach(
                         (item: any) => {
                             const id =
@@ -243,17 +245,14 @@ export default function MessagesScreen() {
                             if (id) freshBlockedIds.add(String(id));
                         },
                     );
-
-                    if (!isMounted) return;
-
-                    // 2. Cập nhật state để dùng cho các logic khác
-                    setBlockedUserIds(freshBlockedIds);
-
-                    // 3. Gọi loadConversations và truyền trực tiếp IDs vừa lấy được
-                    await loadConversations(freshBlockedIds);
-                } catch (err) {
-                    console.error("Lỗi khởi tạo MessagesScreen:", err);
+                } catch {
+                    // blocked list không tải được, tiếp tục với set rỗng
                 }
+
+                if (!isMounted) return;
+
+                setBlockedUserIds(freshBlockedIds);
+                await loadConversations(freshBlockedIds);
             };
 
             initScreenData();

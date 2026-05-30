@@ -94,7 +94,7 @@ export default function PollDetailScreen() {
 
         options.forEach((opt: any) => {
             const voters = Array.isArray(opt.voters) ? opt.voters : [];
-            voters.forEach((v) => {
+            voters.forEach((v: any) => {
                 const voterId = extractValidId(v);
                 if (voterId) uniqueUserIds.add(voterId);
             });
@@ -181,7 +181,7 @@ export default function PollDetailScreen() {
                 .filter((opt: any) => {
                     const voters = Array.isArray(opt.voters) ? opt.voters : [];
                     return voters.some(
-                        (v) => extractValidId(v) === currentUserId,
+                        (v: any) => extractValidId(v) === currentUserId,
                     );
                 })
                 .map((opt: any) => String(opt.id || opt.optionId || opt.value));
@@ -339,7 +339,7 @@ export default function PollDetailScreen() {
                                                     onPress: async () => {
                                                         try {
                                                             await chatApi.closePoll(
-                                                                messageId,
+                                                                messageId ?? "",
                                                             );
                                                             Alert.alert(
                                                                 "Thành công",
@@ -473,59 +473,73 @@ export default function PollDetailScreen() {
                                                 {voters.length}):
                                             </Text>
                                             <View className="flex-row flex-wrap">
-                                                {voters.map((voter, vIdx) => {
-                                                    const voterId =
-                                                        extractValidId(voter);
-                                                    const profile =
-                                                        memberProfiles[voterId];
-                                                    const displayName =
-                                                        profile?.displayName ||
-                                                        voter?.displayName ||
-                                                        voter?.fullName ||
-                                                        "Thành viên";
-                                                    const rawAvatar =
-                                                        extractAvatar(voter) ||
-                                                        profile?.avatarUrl ||
-                                                        "";
-                                                    const avatarUri = rawAvatar
-                                                        ? resolveFileUrl(
-                                                              rawAvatar,
-                                                          )
-                                                        : "";
+                                                {voters.map(
+                                                    (
+                                                        voter: any,
+                                                        vIdx: number,
+                                                    ) => {
+                                                        const voterId =
+                                                            extractValidId(
+                                                                voter,
+                                                            );
+                                                        const profile =
+                                                            memberProfiles[
+                                                                voterId
+                                                            ];
+                                                        const displayName =
+                                                            profile?.displayName ||
+                                                            voter?.displayName ||
+                                                            voter?.fullName ||
+                                                            "Thành viên";
+                                                        const rawAvatar =
+                                                            extractAvatar(
+                                                                voter,
+                                                            ) ||
+                                                            profile?.avatarUrl ||
+                                                            "";
+                                                        const avatarUri =
+                                                            rawAvatar
+                                                                ? resolveFileUrl(
+                                                                      rawAvatar,
+                                                                  )
+                                                                : "";
 
-                                                    return (
-                                                        <View
-                                                            key={
-                                                                voterId ||
-                                                                `voter-${vIdx}`
-                                                            }
-                                                            className="flex-row items-center bg-gray-50 rounded-full px-2.5 py-1.5 mr-2 mb-2 border border-gray-150 shadow-sm"
-                                                        >
-                                                            {avatarUri ? (
-                                                                <RNImage
-                                                                    source={{
-                                                                        uri: avatarUri,
-                                                                    }}
-                                                                    className="w-5 h-5 rounded-full mr-1.5"
-                                                                />
-                                                            ) : (
-                                                                <View className="w-5 h-5 rounded-full bg-blue-500 items-center justify-center mr-1.5">
-                                                                    <Text className="text-white text-[9px] font-bold">
-                                                                        {getInitials(
-                                                                            displayName,
-                                                                        ).slice(
-                                                                            0,
-                                                                            1,
-                                                                        )}
-                                                                    </Text>
-                                                                </View>
-                                                            )}
-                                                            <Text className="text-[12px] text-gray-700 font-semibold">
-                                                                {displayName}
-                                                            </Text>
-                                                        </View>
-                                                    );
-                                                })}
+                                                        return (
+                                                            <View
+                                                                key={
+                                                                    voterId ||
+                                                                    `voter-${vIdx}`
+                                                                }
+                                                                className="flex-row items-center bg-gray-50 rounded-full px-2.5 py-1.5 mr-2 mb-2 border border-gray-150 shadow-sm"
+                                                            >
+                                                                {avatarUri ? (
+                                                                    <RNImage
+                                                                        source={{
+                                                                            uri: avatarUri,
+                                                                        }}
+                                                                        className="w-5 h-5 rounded-full mr-1.5"
+                                                                    />
+                                                                ) : (
+                                                                    <View className="w-5 h-5 rounded-full bg-blue-500 items-center justify-center mr-1.5">
+                                                                        <Text className="text-white text-[9px] font-bold">
+                                                                            {getInitials(
+                                                                                displayName,
+                                                                            ).slice(
+                                                                                0,
+                                                                                1,
+                                                                            )}
+                                                                        </Text>
+                                                                    </View>
+                                                                )}
+                                                                <Text className="text-[12px] text-gray-700 font-semibold">
+                                                                    {
+                                                                        displayName
+                                                                    }
+                                                                </Text>
+                                                            </View>
+                                                        );
+                                                    },
+                                                )}
                                             </View>
                                         </View>
                                     )}

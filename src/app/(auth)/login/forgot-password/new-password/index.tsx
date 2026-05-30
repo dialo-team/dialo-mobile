@@ -189,21 +189,12 @@ export default function NewPasswordScreen() {
 
                     {/* Nút Tiếp tục */}
                     <TouchableOpacity
-                        disabled={!isFormValid || isSubmitting}
                         onPress={handleSubmit}
                         className={`h-[48px] rounded-full items-center justify-center ${
-                            isFormValid && !isSubmitting
-                                ? "bg-[#0068FF]"
-                                : "bg-[#D1D5DB]"
+                            isSubmitting ? "bg-[#D1D5DB]" : "bg-[#0068FF]"
                         }`}
                     >
-                        <Text
-                            className={`font-medium text-[16px] ${
-                                isFormValid && !isSubmitting
-                                    ? "text-white"
-                                    : "text-white/80"
-                            }`}
-                        >
+                        <Text className={`font-medium text-[16px] text-white`}>
                             {isSubmitting ? "Đang đổi..." : "Tiếp tục"}
                         </Text>
                     </TouchableOpacity>

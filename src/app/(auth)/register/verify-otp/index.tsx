@@ -89,7 +89,7 @@ export default function VerifyOtpScreen() {
 
             const response = await authenticationApi.signupVerify({
                 phone: String(phone),
-                password: password,
+                password: String(password ?? ""),
                 otp: otpString,
             });
 

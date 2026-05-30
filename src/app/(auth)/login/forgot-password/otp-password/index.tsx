@@ -191,7 +191,6 @@ export default function OTPPasswordScreen() {
                         label="Tiếp tục"
                         loadingLabel="Đang xác thực..."
                         isLoading={isSubmitting}
-                        disabled={!isOtpValid}
                         onPress={handleVerifyOtp}
                         className="mt-10"
                     />
