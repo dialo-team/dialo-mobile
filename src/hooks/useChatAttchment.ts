@@ -79,14 +79,15 @@ const getRecordingOptions = () => {
 };
 
 export const useChatAttachments = (
-    conversationId: string,
+    conversationId: string | undefined,
+    targetUserId: string | undefined,
     onSuccess: () => void,
 ) => {
     const recordingRef = useRef<Audio.Recording | null>(null);
 
     // ─── Media ─────────────────────────────────────────────────────────────
     const handlePickMedia = async () => {
-        if (!conversationId) return;
+        if (!conversationId && !targetUserId) return;
 
         const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
         if (!perm.granted) {
@@ -120,6 +121,7 @@ export const useChatAttachments = (
             await mediaApi.sendMediaFile(
                 userId,
                 conversationId,
+                targetUserId,
                 {
                     uri: asset.uri,
                     name:
@@ -143,7 +145,7 @@ export const useChatAttachments = (
 
     // ─── File ──────────────────────────────────────────────────────────────
     const handlePickFile = async () => {
-        if (!conversationId) return;
+        if (!conversationId && !targetUserId) return;
         try {
             const result = await DocumentPicker.getDocumentAsync({
                 type: "*/*",
@@ -161,6 +163,7 @@ export const useChatAttachments = (
             await mediaApi.sendMediaFile(
                 userId,
                 conversationId,
+                targetUserId,
                 {
                     uri: asset.uri,
                     name: asset.name || `file-${Date.now()}`,
@@ -180,7 +183,7 @@ export const useChatAttachments = (
 
     // ─── Voice file picker (pick existing audio) ───────────────────────────
     const handlePickVoice = async () => {
-        if (!conversationId) return;
+        if (!conversationId && !targetUserId) return;
         try {
             const result = await DocumentPicker.getDocumentAsync({
                 type: "*/*",
@@ -202,6 +205,7 @@ export const useChatAttachments = (
             await mediaApi.sendMediaFile(
                 userId,
                 conversationId,
+                targetUserId,
                 {
                     uri: asset.uri,
                     name: asset.name || buildFallbackVoiceName(asset.mimeType),
@@ -266,7 +270,7 @@ export const useChatAttachments = (
     // ─── Native voice recording ─────────────────────────────────────────────
 
     const startRecording = async () => {
-        if (!conversationId) return;
+        if (!conversationId && !targetUserId) return;
 
         // Guard: never start a second recording if one is already active
         if (recordingRef.current) {
@@ -347,6 +351,7 @@ export const useChatAttachments = (
             await mediaApi.sendMediaFile(
                 userId,
                 conversationId,
+                targetUserId,
                 {
                     uri,
                     name: fileName,

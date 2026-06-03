@@ -37,7 +37,8 @@ export const mediaApi = {
     // 2. POST Gửi file - Chuyển hẳn sang Multipart Form Data để giải quyết dứt điểm lỗi mạng trên Mobile
     async sendMediaFile(
         userId: string,
-        conversationId: string,
+        conversationId: string | undefined,
+        targetUserId: string | undefined,
         fileData: { uri: string; name: string; type: string },
         messageType?: string,
     ) {
@@ -77,7 +78,8 @@ export const mediaApi = {
                         ...(token ? { Authorization: `Bearer ${token}` } : {}),
                     },
                     params: {
-                        conversationId,
+                        ...(conversationId ? { conversationId } : {}),
+                        ...(targetUserId ? { targetUserId } : {}),
                         type: messageType,
                     },
                 },

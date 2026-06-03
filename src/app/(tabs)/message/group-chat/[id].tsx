@@ -532,7 +532,7 @@ export default function GroupChatScreen() {
         startRecording,
         stopRecording,
         cancelRecording,
-    } = useChatAttachments(conversationId, loadGroupConversation);
+    } = useChatAttachments(conversationId, undefined, loadGroupConversation);
 
     // Recording UI state for group chat
     const [isRecording, setIsRecording] = useState(false);
