@@ -1,9 +1,10 @@
 import { getAccessToken } from "@/src/api/auth/authStorage";
+import { API_BASE_URL } from "@/src/config/env";
 import { Client, IMessage, StompSubscription } from "@stomp/stompjs";
 import { useCallback, useEffect, useRef, useState } from "react";
 import SockJS from "sockjs-client";
 
-const CHAT_WS_BASE_URL = "http://14.225.192.37:8085";
+const CHAT_WS_BASE_URL = API_BASE_URL.CHAT;
 
 type UseChatRealtimeOptions = {
     currentUserId?: string;

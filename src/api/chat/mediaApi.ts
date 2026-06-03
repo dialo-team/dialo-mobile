@@ -1,8 +1,9 @@
 import apiClient from "@/src/api/apiClient";
 import { getAccessToken } from "@/src/api/auth/authStorage";
+import { API_BASE_URL } from "@/src/config/env";
 import { ChatMediaItem } from "./types";
 
-const MEDIA_BASE_URL = "http://14.225.192.37:8085";
+const MEDIA_BASE_URL = API_BASE_URL.CHAT;
 
 export const mediaApi = {
     // 1. GET Media cập nhật đúng chuẩn Swagger

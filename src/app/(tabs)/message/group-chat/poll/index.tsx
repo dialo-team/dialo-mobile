@@ -1,5 +1,6 @@
 import { chatApi, chatAuthUtils } from "@/src/api/chat/chatApi";
 import { friendApi } from "@/src/api/friend/friendApi";
+import { API_BASE_URL } from "@/src/config/env";
 import { getInitials, pickBestDisplayName } from "@/src/utils/displayUser";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { ArrowLeft, Check, Plus, User, Users } from "lucide-react-native";
@@ -23,7 +24,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 const resolveFileUrl = (fileUrl?: string | null) => {
     if (!fileUrl) return "";
     if (/^https?:\/\//i.test(fileUrl)) return fileUrl;
-    return `http://14.225.192.37:8085${fileUrl.startsWith("/") ? "" : "/"}${fileUrl}`;
+    return `${API_BASE_URL.CHAT}${fileUrl.startsWith("/") ? "" : "/"}${fileUrl}`;
 };
 
 const extractValidId = (item: any) => {

@@ -1,4 +1,12 @@
-import { Image, Mic, Paperclip, Send, Smile, X } from "lucide-react-native";
+import {
+    Image,
+    Mic,
+    Paperclip,
+    Send,
+    SendHorizontal,
+    Smile,
+    X,
+} from "lucide-react-native";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
     Animated,
@@ -58,12 +66,15 @@ function RecordingBar({
     seconds,
     isCanceling,
     onCancel,
+    onStop,
 }: {
     seconds: number;
     isCanceling: boolean;
     onCancel: () => void;
+    onStop: () => void;
 }) {
     const pulseAnim = useRef(new Animated.Value(1)).current;
+    const sendScaleAnim = useRef(new Animated.Value(1)).current;
 
     useEffect(() => {
         const loop = Animated.loop(
@@ -86,6 +97,22 @@ function RecordingBar({
         return () => loop.stop();
     }, [pulseAnim]);
 
+    const handleSendPress = () => {
+        Animated.sequence([
+            Animated.timing(sendScaleAnim, {
+                toValue: 0.82,
+                duration: 80,
+                useNativeDriver: true,
+            }),
+            Animated.timing(sendScaleAnim, {
+                toValue: 1,
+                duration: 100,
+                useNativeDriver: true,
+            }),
+        ]).start();
+        onStop();
+    };
+
     return (
         <View
             style={{
@@ -103,19 +130,19 @@ function RecordingBar({
                 onPress={onCancel}
                 hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
                 style={{
-                    width: 32,
-                    height: 32,
-                    borderRadius: 16,
-                    backgroundColor: "#f3f4f6",
+                    width: 36,
+                    height: 36,
+                    borderRadius: 18,
+                    backgroundColor: isCanceling ? "#fee2e2" : "#f3f4f6",
                     alignItems: "center",
                     justifyContent: "center",
                     marginRight: 10,
                 }}
             >
-                <X size={16} color="#6b7280" />
+                <X size={16} color={isCanceling ? "#ef4444" : "#6b7280"} />
             </TouchableOpacity>
 
-            {/* Waveform + label */}
+            {/* Waveform + timer + label */}
             <View
                 style={{ flex: 1, flexDirection: "row", alignItems: "center" }}
             >
@@ -126,31 +153,59 @@ function RecordingBar({
                         borderRadius: 5,
                         backgroundColor: isCanceling ? "#9ca3af" : "#ef4444",
                         marginRight: 8,
-                        opacity: isCanceling ? 1 : pulseAnim,
+                        opacity: isCanceling ? 0.4 : pulseAnim,
                     }}
                 />
                 <Text
                     style={{
-                        fontSize: 15,
-                        fontWeight: "600",
+                        fontSize: 16,
+                        fontWeight: "700",
                         color: isCanceling ? "#9ca3af" : "#ef4444",
                         marginRight: 8,
+                        fontVariant: ["tabular-nums"],
                     }}
                 >
                     {formatSeconds(seconds)}
                 </Text>
-                <Text style={{ fontSize: 13, color: "#9ca3af" }}>
-                    {isCanceling ? "Nhả để hủy" : "Đang ghi âm..."}
+                <Text
+                    style={{
+                        fontSize: 13,
+                        color: isCanceling ? "#ef4444" : "#9ca3af",
+                        fontStyle: isCanceling ? "italic" : "normal",
+                    }}
+                >
+                    {isCanceling
+                        ? "Vuốt ra xa để hủy"
+                        : "Đang ghi • Vuốt ← hủy"}
                 </Text>
             </View>
 
-            {/* Swipe hint (only when NOT in cancel mode) */}
+            {/* Send button — tap to send, or just release the mic */}
             {!isCanceling && (
-                <Text
-                    style={{ fontSize: 12, color: "#d1d5db", marginRight: 4 }}
+                <Animated.View
+                    style={{ transform: [{ scale: sendScaleAnim }] }}
                 >
-                    ← Vuốt
-                </Text>
+                    <TouchableOpacity
+                        onPress={handleSendPress}
+                        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                        style={{
+                            width: 42,
+                            height: 42,
+                            borderRadius: 21,
+                            backgroundColor: "#2563eb",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            marginLeft: 8,
+                            shadowColor: "#2563eb",
+                            shadowOffset: { width: 0, height: 2 },
+                            shadowOpacity: 0.35,
+                            shadowRadius: 4,
+                            elevation: 4,
+                        }}
+                    >
+                        <SendHorizontal size={20} color="white" />
+                    </TouchableOpacity>
+                </Animated.View>
             )}
         </View>
     );
@@ -188,29 +243,8 @@ const ChatInputBar = React.forwardRef<TextInput, ChatInputBarProps>(
             onVoiceRecordCancel,
         } = props;
 
-        // Recording cancel-swipe state — tracked locally for UI feedback only
         const [isSwipeCanceling, setIsSwipeCanceling] = useState(false);
-
         const scaleAnim = useRef(new Animated.Value(1)).current;
-
-        const handleEmojiSelect = useCallback(
-            (emoji: string) => {
-                onEmojiSelect?.(emoji);
-                Animated.sequence([
-                    Animated.timing(scaleAnim, {
-                        toValue: 0.9,
-                        duration: 100,
-                        useNativeDriver: true,
-                    }),
-                    Animated.timing(scaleAnim, {
-                        toValue: 1,
-                        duration: 100,
-                        useNativeDriver: true,
-                    }),
-                ]).start();
-            },
-            [onEmojiSelect, scaleAnim],
-        );
 
         const handleSendPress = useCallback(() => {
             if (message.trim() && !isLoading && !isDisabled) {
@@ -280,14 +314,24 @@ const ChatInputBar = React.forwardRef<TextInput, ChatInputBarProps>(
                             setIsSwipeCanceling(false);
                             onVoiceRecordCancel?.();
                         }}
+                        onStop={() => {
+                            setIsSwipeCanceling(false);
+                            onVoiceRecordStop?.();
+                        }}
                     />
-                    {/* Invisible VoiceRecordControl so gestures still work */}
+                    {/*
+                     * The VoiceRecordControl sits invisibly over the Send button area
+                     * so the PanResponder can still detect finger release and trigger
+                     * send/cancel via gesture. Opacity 0 hides it visually.
+                     */}
                     <View
                         style={{
                             position: "absolute",
                             right: 12,
                             bottom: 8,
+                            opacity: 0,
                         }}
+                        pointerEvents="box-none"
                     >
                         <VoiceRecordControl
                             onStart={onVoiceRecordStart}
@@ -417,6 +461,11 @@ export default ChatInputBar;
 // never re-capture React state/props. Every value read inside a callback must
 // live in a ref that is kept in sync on every render.
 //
+// KEY FIX: onStart (native recording) is only called after the user has held
+// for at least HOLD_THRESHOLD_MS. This prevents the "only one Recording object
+// can be prepared at a time" error that occurred when a short-tap would start
+// and immediately cancel the native audio recorder.
+//
 const HOLD_THRESHOLD_MS = 350; // shorter than this → short tap → pick file
 
 const VoiceRecordControl: React.FC<{
@@ -439,8 +488,11 @@ const VoiceRecordControl: React.FC<{
     // Refs — updated every render, read safely inside stale PanResponder closures
     const disabledRef = useRef(disabled);
     const isRecordingRef = useRef(false);
+    // Whether onStart was actually called (recording has begun)
+    const recordingStartedRef = useRef(false);
     const isCanceledRef = useRef(false);
     const pressStartRef = useRef(0);
+    const holdTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const onStartRef = useRef(onStart);
     const onStopRef = useRef(onStop);
     const onCancelRef = useRef(onCancel);
@@ -463,10 +515,19 @@ const VoiceRecordControl: React.FC<{
                 if (disabledRef.current) return;
                 pressStartRef.current = Date.now();
                 isCanceledRef.current = false;
+                recordingStartedRef.current = false;
                 isRecordingRef.current = true;
                 setIsRecording(true);
                 onSwipeCancelChangeRef.current?.(false);
-                onStartRef.current?.();
+
+                // Delay calling onStart until we're sure it's a genuine hold
+                holdTimerRef.current = setTimeout(() => {
+                    holdTimerRef.current = null;
+                    if (isRecordingRef.current && !isCanceledRef.current) {
+                        recordingStartedRef.current = true;
+                        onStartRef.current?.();
+                    }
+                }, HOLD_THRESHOLD_MS);
             },
 
             onPanResponderMove: (_, gs) => {
@@ -480,18 +541,25 @@ const VoiceRecordControl: React.FC<{
 
             onPanResponderRelease: () => {
                 if (!isRecordingRef.current) return;
-                const holdMs = Date.now() - pressStartRef.current;
+
+                // Cancel the hold timer if it hasn't fired yet (short tap)
+                if (holdTimerRef.current) {
+                    clearTimeout(holdTimerRef.current);
+                    holdTimerRef.current = null;
+                }
+
                 const wasCanceled = isCanceledRef.current;
+                const wasStarted = recordingStartedRef.current;
 
                 isRecordingRef.current = false;
+                recordingStartedRef.current = false;
                 isCanceledRef.current = false;
                 setIsRecording(false);
                 onSwipeCancelChangeRef.current?.(false);
 
-                if (holdMs < HOLD_THRESHOLD_MS) {
-                    // Short tap — cancel the started recording, then open file picker
-                    onCancelRef.current?.();
-                    onShortPressRef.current?.();
+                if (!wasStarted) {
+                    // Short tap: ignore. File picking should happen from the attach UI,
+                    // not from the voice-record control.
                 } else if (wasCanceled) {
                     onCancelRef.current?.();
                 } else {
@@ -500,11 +568,21 @@ const VoiceRecordControl: React.FC<{
             },
 
             onPanResponderTerminate: () => {
+                if (holdTimerRef.current) {
+                    clearTimeout(holdTimerRef.current);
+                    holdTimerRef.current = null;
+                }
+                // Capture wasStarted BEFORE resetting the ref
+                const wasStarted = recordingStartedRef.current;
                 isRecordingRef.current = false;
                 isCanceledRef.current = false;
+                recordingStartedRef.current = false;
                 setIsRecording(false);
                 onSwipeCancelChangeRef.current?.(false);
-                onCancelRef.current?.();
+                // Only cancel if recording actually started
+                if (wasStarted) {
+                    onCancelRef.current?.();
+                }
             },
         }),
     ).current;

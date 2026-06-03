@@ -1,10 +1,11 @@
 import axios from "axios";
+import { API_BASE_URL } from "../../config/env";
 import apiClient from "../apiClient";
 import { getAccessToken } from "../auth/authStorage";
 import { GroupConversation, GroupMember, GroupRole } from "./types";
 
-// Định nghĩa URL cho Chat Service (Cổng 8085)
-const CHAT_SERVICE_URL = "http://14.225.192.37:8085/api/v1/conversations";
+// Định nghĩa URL cho Chat Service
+const CHAT_SERVICE_URL = `${API_BASE_URL.CHAT}/api/v1/conversations`;
 
 export const groupApi = {
     // Các hàm dùng chung apiClient (Cổng 9000) nếu vẫn hoạt động tốt

@@ -1,4 +1,6 @@
-export const MEDIA_BASE_URL = "http://14.225.192.37:8085";
+import { API_BASE_URL } from "../config/env";
+
+export const MEDIA_BASE_URL = API_BASE_URL.CHAT;
 
 // encodeURI is not idempotent — calling it on an already-encoded string double-encodes
 // percent sequences (%20 → %2520). Only encode when we are constructing the URL ourselves.

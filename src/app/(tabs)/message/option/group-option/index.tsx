@@ -1,6 +1,7 @@
 import { chatApi, chatAuthUtils } from "@/src/api/chat/chatApi";
 import { friendApi } from "@/src/api/friend/friendApi";
 import { groupApi } from "@/src/api/group/groupApi";
+import { API_BASE_URL } from "@/src/config/env";
 import { getInitials } from "@/src/utils/displayUser";
 import * as ImagePicker from "expo-image-picker";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
@@ -58,7 +59,7 @@ const normalizeMembers = (data: any): any[] => {
     if (Array.isArray(data?.data?.members)) return data.data.members;
     return [];
 };
-const CHAT_BASE_URL = "http://14.225.192.37:8085";
+const CHAT_BASE_URL = API_BASE_URL.CHAT;
 
 const resolveFileUrl = (fileUrl?: string | null) => {
     if (!fileUrl) return "";

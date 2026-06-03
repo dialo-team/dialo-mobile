@@ -1,5 +1,6 @@
 // src/api/chat/chatApi.ts
 
+import { API_BASE_URL } from "@/src/config/env";
 import { pickBestDisplayName } from "@/src/utils/displayUser";
 import axios, { AxiosRequestConfig } from "axios";
 import { getAccessToken } from "../auth/authStorage";
@@ -12,7 +13,7 @@ import {
     SendMessagePayload,
 } from "./types";
 
-const CHAT_BASE_URL = "http://14.225.192.37:8085";
+const CHAT_BASE_URL = API_BASE_URL.CHAT;
 
 const chatClient = axios.create({
     baseURL: CHAT_BASE_URL,

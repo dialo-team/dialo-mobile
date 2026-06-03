@@ -1,7 +1,8 @@
 import axios from "axios";
+import { API_BASE_URL } from "../config/env";
 import { getAccessToken } from "./auth/authStorage";
 
-const BASE_URL = "http://14.225.192.37:9000";
+const BASE_URL = API_BASE_URL.AUTH;
 
 // Danh sách các API không cần gửi Token và không xử lý Logout khi gặp 401
 const PUBLIC_ENDPOINTS = [

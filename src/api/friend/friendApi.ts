@@ -1,10 +1,11 @@
+import { API_BASE_URL } from "../../config/env";
 import apiClient from "../apiClient";
 import { getAccessToken } from "../auth/authStorage";
 import { UserProfileResponse } from "./types";
 
 import axios from "axios";
 
-const CHAT_SERVICE_URL = "http://14.225.192.37:8084";
+const CHAT_SERVICE_URL = API_BASE_URL.FRIEND;
 
 const chatServiceClient = axios.create({
     baseURL: CHAT_SERVICE_URL,

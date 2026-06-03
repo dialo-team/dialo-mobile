@@ -7,6 +7,7 @@ import VoicePlayer from "@/src/components/VoicePlayer";
 import { useChatAttachments } from "@/src/hooks/useChatAttchment";
 import { useChatRealtime } from "@/src/hooks/useChatRealtime";
 import { getInitials, pickBestDisplayName } from "@/src/utils/displayUser";
+import { getFullUrl } from "@/src/utils/url";
 import { Video as AVVideo, ResizeMode } from "expo-av";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import {
@@ -26,6 +27,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import {
     ActivityIndicator,
     Alert,
+    BackHandler,
     KeyboardAvoidingView,
     Modal,
     Platform,
@@ -65,11 +67,13 @@ const paramToString = (value: string | string[] | undefined) => {
     return "";
 };
 
-const resolveFileUrl = (fileUrl?: string | null) => {
-    if (!fileUrl) return "";
-    if (/^https?:\/\//i.test(fileUrl)) return fileUrl;
-    return `http://14.225.192.37:8085${fileUrl.startsWith("/") ? "" : "/"}${fileUrl}`;
-};
+// resolveFileUrl — dùng getFullUrl từ utils để xử lý đúng:
+// - URL tuyệt đối (https://...) → giữ nguyên
+// - Path /uploads/... → thêm host CHAT
+// - Bare filename (e.g. uuid.m4a) → thêm host + /uploads/
+// Trước đây group-chat chỉ ghép host + path nên URL ghi âm bị sai → không phát được.
+const resolveFileUrl = (fileUrl?: string | null) =>
+    fileUrl ? getFullUrl(fileUrl) : "";
 
 const NON_MEDIA_CONTENT_TYPES = new Set(["TEXT", "SYSTEM", "POLL", "REVOKED"]);
 
@@ -540,6 +544,7 @@ export default function GroupChatScreen() {
         typeof setTimeout
     > | null>(null);
     const isRecordingRef = useRef(false);
+    const voiceFinalizeRef = useRef<"stop" | "cancel" | null>(null);
     const MAX_RECORD_SECONDS = 120;
 
     const stopRecordingUI = () => {
@@ -557,7 +562,7 @@ export default function GroupChatScreen() {
     };
 
     const handleVoiceRecordStart = async () => {
-        if (isRecordingRef.current) return;
+        if (isRecordingRef.current || voiceFinalizeRef.current) return;
         isRecordingRef.current = true;
         setIsRecording(true);
         setRecordingSeconds(0);
@@ -566,6 +571,7 @@ export default function GroupChatScreen() {
         }, 1000);
         try {
             await startRecording?.();
+            if (voiceFinalizeRef.current) return;
             recordingStopTimeoutRef.current = setTimeout(() => {
                 stopRecordingUI();
                 void stopRecording?.().catch((e: any) =>
@@ -579,21 +585,28 @@ export default function GroupChatScreen() {
     };
 
     const handleVoiceRecordStop = async () => {
-        if (!isRecordingRef.current) return;
+        if (!isRecordingRef.current || voiceFinalizeRef.current) return;
+        voiceFinalizeRef.current = "stop";
         stopRecordingUI();
         try {
             await stopRecording?.();
         } catch (e) {
             console.error("group stopRecording failed:", e);
+        } finally {
+            voiceFinalizeRef.current = null;
         }
     };
 
     const handleVoiceRecordCancel = async () => {
+        if (voiceFinalizeRef.current) return;
+        voiceFinalizeRef.current = "cancel";
         stopRecordingUI();
         try {
             await cancelRecording?.();
         } catch (e) {
             console.error("group cancelRecording failed:", e);
+        } finally {
+            voiceFinalizeRef.current = null;
         }
     };
 
@@ -688,6 +701,29 @@ export default function GroupChatScreen() {
             }
         };
     }, []);
+
+    // ── Safe back navigation ─────────────────────────────────────────────────
+    // router.back() throws "GO_BACK was not handled" when the stack is empty
+    // (e.g. opened from a push notification or deep link).
+    const handleHeaderBack = useCallback(() => {
+        if (router.canGoBack()) {
+            router.back();
+        } else {
+            router.replace("/(tabs)/message" as any);
+        }
+    }, [router]);
+
+    // Handle Android hardware back button
+    useEffect(() => {
+        const subscription = BackHandler.addEventListener(
+            "hardwareBackPress",
+            () => {
+                handleHeaderBack();
+                return true; // prevent default behaviour
+            },
+        );
+        return () => subscription.remove();
+    }, [handleHeaderBack]);
 
     const handleRealtimePayload = useCallback(
         (payload: any) => {
@@ -1155,7 +1191,7 @@ export default function GroupChatScreen() {
             >
                 <View className="bg-blue-600 flex-row items-center px-4 py-4 justify-between">
                     <View className="flex-row items-center">
-                        <TouchableOpacity onPress={() => router.back()}>
+                        <TouchableOpacity onPress={handleHeaderBack}>
                             <MoveLeft size={26} color="white" />
                         </TouchableOpacity>
 

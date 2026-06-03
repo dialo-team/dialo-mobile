@@ -19,12 +19,14 @@ import {
     Video,
     X,
 } from "lucide-react-native";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
     ActivityIndicator,
     Alert,
     Animated,
+    BackHandler,
     Easing,
+    FlatList,
     KeyboardAvoidingView,
     Modal,
     Platform,
@@ -181,6 +183,7 @@ export default function ChatScreen() {
     const typingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const entranceAnim = useRef(new Animated.Value(0)).current;
 
+    const flatListRef = useRef<FlatList>(null);
     const scrollViewRef = useRef<ScrollView>(null);
     const messageYOffsets = useRef<Record<string, number>>({});
     const realNameRef = useRef<string>("");
@@ -192,10 +195,20 @@ export default function ChatScreen() {
     const highlightAnimRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
     const scrollToMessage = (msgId: string) => {
-        const yOffset = messageYOffsets.current[msgId];
-        if (yOffset === undefined) return;
-
-        scrollViewRef.current?.scrollTo({ y: yOffset, animated: true });
+        // For FlatList (inverted), we find the index and scroll to it
+        const index = messages.findIndex(
+            (m: any) => (m?.id || m?.raw?.id) === msgId,
+        );
+        if (index !== -1) {
+            // In an inverted list, index 0 is the last message.
+            // messages array is newest-last, so we invert the index.
+            const invertedIndex = messages.length - 1 - index;
+            flatListRef.current?.scrollToIndex({
+                index: invertedIndex,
+                animated: true,
+                viewPosition: 0.5,
+            });
+        }
 
         // Cancel any in-progress highlight
         if (highlightAnimRef.current) clearTimeout(highlightAnimRef.current);
@@ -731,6 +744,7 @@ export default function ChatScreen() {
         typeof setTimeout
     > | null>(null);
     const isRecordingRef = useRef(false); // synchronous guard — prevents double-start race
+    const voiceFinalizeRef = useRef<"stop" | "cancel" | null>(null);
     const MAX_RECORD_SECONDS = 120;
 
     const stopRecordingUI = () => {
@@ -749,7 +763,7 @@ export default function ChatScreen() {
 
     const handleVoiceRecordStart = async () => {
         // Use ref (not state) to avoid race when called twice before a re-render
-        if (isRecordingRef.current) return;
+        if (isRecordingRef.current || voiceFinalizeRef.current) return;
         isRecordingRef.current = true;
         setIsRecording(true);
         setRecordingSeconds(0);
@@ -758,6 +772,7 @@ export default function ChatScreen() {
         }, 1000);
         try {
             await startRecording?.();
+            if (voiceFinalizeRef.current) return;
             // Inline stop to avoid stale closure — handleVoiceRecordStop captures
             // isRecording=false from the render before setIsRecording(true) committed.
             recordingStopTimeoutRef.current = setTimeout(() => {
@@ -773,23 +788,30 @@ export default function ChatScreen() {
     };
 
     const handleVoiceRecordStop = async () => {
-        if (!isRecordingRef.current) return; // use ref, not stale state
+        if (!isRecordingRef.current || voiceFinalizeRef.current) return; // use ref, not stale state
+        voiceFinalizeRef.current = "stop";
         stopRecordingUI();
         try {
             await stopRecording?.();
         } catch (e) {
             console.error("stopRecording failed:", e);
+        } finally {
+            voiceFinalizeRef.current = null;
         }
     };
 
     // Called by VoiceRecordControl on cancel or short-tap.
     // Must reset UI state AND stop the native recording.
     const handleVoiceRecordCancel = async () => {
+        if (voiceFinalizeRef.current) return;
+        voiceFinalizeRef.current = "cancel";
         stopRecordingUI();
         try {
             await cancelRecording?.();
         } catch (e) {
             console.error("cancelRecording failed:", e);
+        } finally {
+            voiceFinalizeRef.current = null;
         }
     };
 
@@ -1254,6 +1276,23 @@ export default function ChatScreen() {
         router.replace("/(tabs)/message" as any);
     };
 
+    // Handle Android hardware back button — same safe fallback as header button
+    useEffect(() => {
+        const subscription = BackHandler.addEventListener(
+            "hardwareBackPress",
+            () => {
+                handleHeaderBack();
+                return true;
+            },
+        );
+        return () => subscription.remove();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [from, router]);
+
+    // Reverse messages for FlatList inverted mode (newest at bottom = index 0)
+
+    const reversedMessages = useMemo(() => [...messages].reverse(), [messages]);
+
     return (
         <SafeAreaView className="flex-1 bg-[#e9edf2]">
             <KeyboardAvoidingView
@@ -1330,38 +1369,26 @@ export default function ChatScreen() {
                     </View>
                 </View>
 
-                {/* Messages List */}
-                <ScrollView
-                    className="flex-1 px-3 pt-4"
+                {/* Messages List — FlatList (inverted) for virtualized rendering */}
+                {/* Inverted list: newest messages are at the bottom (index 0 is bottom) */}
+                <FlatList
+                    ref={flatListRef}
+                    data={reversedMessages}
+                    keyExtractor={(item: any, index: number) =>
+                        getMessageKey(item, index)
+                    }
+                    inverted
+                    style={{ flex: 1, paddingHorizontal: 12 }}
+                    contentContainerStyle={{ paddingTop: 16, paddingBottom: 8 }}
                     showsVerticalScrollIndicator={false}
-                    ref={scrollViewRef}
-                    onContentSizeChange={() => {
-                        // Only auto-scroll when we're near the bottom (user hasn't scrolled up)
-                        scrollViewRef.current?.scrollToEnd({ animated: true });
-                    }}
-                >
-                    <Animated.View
-                        style={{
-                            opacity: entranceAnim,
-                            transform: [
-                                {
-                                    translateY: entranceAnim.interpolate({
-                                        inputRange: [0, 1],
-                                        outputRange: [8, 0],
-                                    }),
-                                },
-                            ],
-                        }}
-                    >
-                        {loading && (
-                            <View className="py-8 items-center">
-                                <ActivityIndicator
-                                    size="small"
-                                    color="#2563eb"
-                                />
-                            </View>
-                        )}
-                        {remoteTyping && (
+                    removeClippedSubviews
+                    initialNumToRender={20}
+                    maxToRenderPerBatch={10}
+                    windowSize={10}
+                    keyboardShouldPersistTaps="handled"
+                    onScrollToIndexFailed={() => {}}
+                    ListHeaderComponent={
+                        remoteTyping ? (
                             <View className="flex-row items-center mb-3 ml-1">
                                 <View
                                     className="bg-white px-4 py-2 rounded-2xl shadow-sm flex-row items-center"
@@ -1380,242 +1407,218 @@ export default function ChatScreen() {
                                     ))}
                                 </View>
                             </View>
-                        )}
-                        {messages.map((msg, index) => {
-                            const messageKey = getMessageKey(msg, index);
-                            const messageSide = getMessageSide(msg);
+                        ) : null
+                    }
+                    ListFooterComponent={
+                        loading ? (
+                            <View className="py-8 items-center">
+                                <ActivityIndicator
+                                    size="small"
+                                    color="#2563eb"
+                                />
+                            </View>
+                        ) : null
+                    }
+                    renderItem={({ item: msg, index }) => {
+                        const messageSide = getMessageSide(msg);
 
-                            // CENTER MESSAGE
-                            if (messageSide === "center") {
-                                return (
-                                    <View
-                                        key={messageKey}
-                                        onLayout={(event) => {
-                                            messageYOffsets.current[msg.id] =
-                                                event.nativeEvent.layout.y;
-                                        }}
-                                        className="flex-row justify-center mb-3"
-                                    >
-                                        <View className="bg-gray-200 px-3 py-2 rounded-full max-w-[85%]">
-                                            <Text className="text-[13px] text-gray-700 text-center">
-                                                {msg.text}
-                                            </Text>
-                                        </View>
-                                    </View>
-                                );
-                            }
-
-                            // LEFT & RIGHT MESSAGE
-                            const isMe = messageSide === "right";
+                        // CENTER MESSAGE
+                        if (messageSide === "center") {
                             return (
-                                <View
-                                    key={messageKey}
-                                    onLayout={(event) => {
-                                        messageYOffsets.current[msg.id] =
-                                            event.nativeEvent.layout.y;
-                                    }}
-                                    className={`flex-row mb-3 ${isMe ? "justify-end" : ""}`}
-                                >
-                                    {!isMe &&
-                                        (avatarUrl ? (
-                                            <RNImage
-                                                source={{ uri: avatarUrl }}
-                                                className="w-8 h-8 rounded-full mr-2"
-                                            />
-                                        ) : (
-                                            <View className="w-8 h-8 rounded-full bg-blue-500 mr-2 items-center justify-center">
-                                                <Text className="text-white text-xs font-semibold">
-                                                    {getInitials(displayName)}
-                                                </Text>
-                                            </View>
-                                        ))}
-                                    <TouchableOpacity
-                                        activeOpacity={0.8}
-                                        onLongPress={() =>
-                                            !msg.system &&
-                                            handleSelectMessage(msg)
-                                        }
-                                        onPress={() => {
-                                            if (msg.imageUri || msg.videoUri) {
-                                                setViewingMediaMessage(msg);
-                                            } else if (
-                                                msg.isFile ||
-                                                msg.raw?.type === "FILE" ||
-                                                msg.raw?.attachment
-                                            ) {
-                                                const url = resolveFileUrl(
-                                                    msg.fileUrl ||
-                                                        msg.raw?.attachment
-                                                            ?.fileUrl,
-                                                );
-                                                handleOpenFile(
-                                                    url,
-                                                    msg.fileName ||
-                                                        msg.text ||
-                                                        "Tài liệu",
-                                                );
-                                            }
-                                        }}
-                                        className={`${
-                                            highlightedMessageId === msg.id
-                                                ? "bg-[#FFF9C4] border border-[#FBC02D]"
-                                                : isMe
-                                                  ? "bg-blue-500"
-                                                  : "bg-white"
-                                        } px-4 py-2 rounded-2xl max-w-[70%] ${msg.pending ? "opacity-70" : ""}`}
-                                    >
-                                        {!isMe && msg.senderName && (
-                                            <Text className="mb-1 text-[11px] font-medium text-gray-400">
-                                                {msg.senderName}
-                                            </Text>
-                                        )}
-
-                                        {/* FILE BLOCK */}
-                                        {msg.isFile && (
-                                            <View
-                                                className={`flex-row items-center mb-1 p-2 rounded-lg ${isMe ? "bg-blue-700" : "bg-gray-100"}`}
-                                            >
-                                                <Paperclip
-                                                    size={16}
-                                                    color={
-                                                        isMe
-                                                            ? "white"
-                                                            : "#4b5563"
-                                                    }
-                                                />
-                                                <Text
-                                                    className={`ml-2 font-medium ${isMe ? "text-white" : "text-blue-600"}`}
-                                                    numberOfLines={1}
-                                                >
-                                                    {msg.fileName ||
-                                                        msg.text ||
-                                                        "Tài liệu"}
-                                                </Text>
-                                            </View>
-                                        )}
-
-                                        {/* MEDIA BLOCK */}
-                                        {msg.videoUri ? (
-                                            <View
-                                                style={{
-                                                    width: 150,
-                                                    height: 150,
-                                                    borderRadius: 10,
-                                                    marginBottom: 4,
-                                                    overflow: "hidden",
-                                                    backgroundColor: "black",
-                                                }}
-                                            >
-                                                <AVVideo
-                                                    source={{
-                                                        uri: msg.videoUri,
-                                                    }}
-                                                    style={{
-                                                        width: "100%",
-                                                        height: "100%",
-                                                    }}
-                                                    resizeMode={
-                                                        ResizeMode.COVER
-                                                    }
-                                                    shouldPlay={false}
-                                                />
-                                            </View>
-                                        ) : msg.imageUri ? (
-                                            <RNImage
-                                                source={{
-                                                    uri: msg.imageUri,
-                                                }}
-                                                style={{
-                                                    width: 150,
-                                                    height: 150,
-                                                    borderRadius: 10,
-                                                    marginBottom: 4,
-                                                }}
-                                                resizeMode="cover"
-                                            />
-                                        ) : msg.voiceUri ? (
-                                            <VoicePlayer
-                                                uri={msg.voiceUri}
-                                                isMe={isMe}
-                                            />
-                                        ) : null}
-
-                                        {/* TEXT */}
-                                        {msg.text !== "" &&
-                                            !(msg.raw?.type === "FILE") && (
-                                                <Text
-                                                    className={`text-[15px] ${isMe ? "text-white" : "text-black"}`}
-                                                >
-                                                    {msg.text}
-                                                </Text>
-                                            )}
-                                        <Text
-                                            className={`text-[11px] mt-1 ${isMe ? "text-blue-100 text-right" : "text-gray-500"}`}
-                                        >
-                                            {isMe
-                                                ? getMessageStatusLabel(msg)
-                                                : msg.time}
+                                <View className="flex-row justify-center mb-3">
+                                    <View className="bg-gray-200 px-3 py-2 rounded-full max-w-[85%]">
+                                        <Text className="text-[13px] text-gray-700 text-center">
+                                            {msg.text}
                                         </Text>
-                                        {Array.isArray(msg.reactions) &&
-                                            msg.reactions.length > 0 &&
-                                            (() => {
-                                                const counts: Record<
-                                                    string,
-                                                    number
-                                                > = {};
-                                                msg.reactions.forEach(
-                                                    (r: any) => {
-                                                        const e =
-                                                            r?.reaction ||
-                                                            r?.emoji;
-                                                        if (e)
-                                                            counts[e] =
-                                                                (counts[e] ||
-                                                                    0) + 1;
-                                                    },
-                                                );
-                                                return (
-                                                    <View
-                                                        className="flex-row mt-1"
-                                                        style={{ gap: 4 }}
-                                                    >
-                                                        {Object.entries(
-                                                            counts,
-                                                        ).map(
-                                                            ([
-                                                                emoji,
-                                                                count,
-                                                            ]) => (
-                                                                <View
-                                                                    key={emoji}
-                                                                    className="bg-gray-100 rounded-full px-2 py-0.5 flex-row items-center"
-                                                                    style={{
-                                                                        gap: 2,
-                                                                    }}
-                                                                >
-                                                                    <Text className="text-[13px]">
-                                                                        {emoji}
-                                                                    </Text>
-                                                                    {count >
-                                                                        1 && (
-                                                                        <Text className="text-[10px] text-gray-500">
-                                                                            {
-                                                                                count
-                                                                            }
-                                                                        </Text>
-                                                                    )}
-                                                                </View>
-                                                            ),
-                                                        )}
-                                                    </View>
-                                                );
-                                            })()}
-                                    </TouchableOpacity>
+                                    </View>
                                 </View>
                             );
-                        })}
-                    </Animated.View>
-                </ScrollView>
+                        }
+
+                        // LEFT & RIGHT MESSAGE
+                        const isMe = messageSide === "right";
+                        return (
+                            <View
+                                className={`flex-row mb-3 ${isMe ? "justify-end" : ""}`}
+                            >
+                                {!isMe &&
+                                    (avatarUrl ? (
+                                        <RNImage
+                                            source={{ uri: avatarUrl }}
+                                            className="w-8 h-8 rounded-full mr-2"
+                                        />
+                                    ) : (
+                                        <View className="w-8 h-8 rounded-full bg-blue-500 mr-2 items-center justify-center">
+                                            <Text className="text-white text-xs font-semibold">
+                                                {getInitials(displayName)}
+                                            </Text>
+                                        </View>
+                                    ))}
+                                <TouchableOpacity
+                                    activeOpacity={0.8}
+                                    onLongPress={() =>
+                                        !msg.system && handleSelectMessage(msg)
+                                    }
+                                    onPress={() => {
+                                        if (msg.imageUri || msg.videoUri) {
+                                            setViewingMediaMessage(msg);
+                                        } else if (
+                                            msg.isFile ||
+                                            msg.raw?.type === "FILE" ||
+                                            msg.raw?.attachment
+                                        ) {
+                                            const url = resolveFileUrl(
+                                                msg.fileUrl ||
+                                                    msg.raw?.attachment
+                                                        ?.fileUrl,
+                                            );
+                                            handleOpenFile(
+                                                url,
+                                                msg.fileName ||
+                                                    msg.text ||
+                                                    "Tài liệu",
+                                            );
+                                        }
+                                    }}
+                                    className={`${
+                                        highlightedMessageId === msg.id
+                                            ? "bg-[#FFF9C4] border border-[#FBC02D]"
+                                            : isMe
+                                              ? "bg-blue-500"
+                                              : "bg-white"
+                                    } px-4 py-2 rounded-2xl max-w-[70%] ${msg.pending ? "opacity-70" : ""}`}
+                                >
+                                    {!isMe && msg.senderName && (
+                                        <Text className="mb-1 text-[11px] font-medium text-gray-400">
+                                            {msg.senderName}
+                                        </Text>
+                                    )}
+
+                                    {/* FILE BLOCK */}
+                                    {msg.isFile && (
+                                        <View
+                                            className={`flex-row items-center mb-1 p-2 rounded-lg ${isMe ? "bg-blue-700" : "bg-gray-100"}`}
+                                        >
+                                            <Paperclip
+                                                size={16}
+                                                color={
+                                                    isMe ? "white" : "#4b5563"
+                                                }
+                                            />
+                                            <Text
+                                                className={`ml-2 font-medium ${isMe ? "text-white" : "text-blue-600"}`}
+                                                numberOfLines={1}
+                                            >
+                                                {msg.fileName ||
+                                                    msg.text ||
+                                                    "Tài liệu"}
+                                            </Text>
+                                        </View>
+                                    )}
+
+                                    {/* MEDIA BLOCK */}
+                                    {msg.videoUri ? (
+                                        <View
+                                            style={{
+                                                width: 150,
+                                                height: 150,
+                                                borderRadius: 10,
+                                                marginBottom: 4,
+                                                overflow: "hidden",
+                                                backgroundColor: "black",
+                                            }}
+                                        >
+                                            <AVVideo
+                                                source={{ uri: msg.videoUri }}
+                                                style={{
+                                                    width: "100%",
+                                                    height: "100%",
+                                                }}
+                                                resizeMode={ResizeMode.COVER}
+                                                shouldPlay={false}
+                                            />
+                                        </View>
+                                    ) : msg.imageUri ? (
+                                        <RNImage
+                                            source={{ uri: msg.imageUri }}
+                                            style={{
+                                                width: 150,
+                                                height: 150,
+                                                borderRadius: 10,
+                                                marginBottom: 4,
+                                            }}
+                                            resizeMode="cover"
+                                        />
+                                    ) : msg.voiceUri ? (
+                                        <VoicePlayer
+                                            uri={msg.voiceUri}
+                                            isMe={isMe}
+                                        />
+                                    ) : null}
+
+                                    {/* TEXT */}
+                                    {msg.text !== "" &&
+                                        !(msg.raw?.type === "FILE") && (
+                                            <Text
+                                                className={`text-[15px] ${isMe ? "text-white" : "text-black"}`}
+                                            >
+                                                {msg.text}
+                                            </Text>
+                                        )}
+                                    <Text
+                                        className={`text-[11px] mt-1 ${isMe ? "text-blue-100 text-right" : "text-gray-500"}`}
+                                    >
+                                        {isMe
+                                            ? getMessageStatusLabel(msg)
+                                            : msg.time}
+                                    </Text>
+                                    {Array.isArray(msg.reactions) &&
+                                        msg.reactions.length > 0 &&
+                                        (() => {
+                                            const counts: Record<
+                                                string,
+                                                number
+                                            > = {};
+                                            msg.reactions.forEach((r: any) => {
+                                                const e =
+                                                    r?.reaction || r?.emoji;
+                                                if (e)
+                                                    counts[e] =
+                                                        (counts[e] || 0) + 1;
+                                            });
+                                            return (
+                                                <View
+                                                    className="flex-row mt-1"
+                                                    style={{ gap: 4 }}
+                                                >
+                                                    {Object.entries(counts).map(
+                                                        ([emoji, count]) => (
+                                                            <View
+                                                                key={emoji}
+                                                                className="bg-gray-100 rounded-full px-2 py-0.5 flex-row items-center"
+                                                                style={{
+                                                                    gap: 2,
+                                                                }}
+                                                            >
+                                                                <Text className="text-[13px]">
+                                                                    {emoji}
+                                                                </Text>
+                                                                {count > 1 && (
+                                                                    <Text className="text-[10px] text-gray-500">
+                                                                        {count}
+                                                                    </Text>
+                                                                )}
+                                                            </View>
+                                                        ),
+                                                    )}
+                                                </View>
+                                            );
+                                        })()}
+                                </TouchableOpacity>
+                            </View>
+                        );
+                    }}
+                />
 
                 {/* --- HIỂN THỊ CẢNH BÁO KHI BỊ CHẶN (ẢNH 1) --- */}
                 {isBlockedByThem && !isBlockedByMe && (

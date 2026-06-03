@@ -1,5 +1,6 @@
 import { chatApi } from "@/src/api/chat/chatApi";
 import { friendApi } from "@/src/api/friend/friendApi";
+import { API_BASE_URL } from "@/src/config/env";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { ChevronLeft, Pin, PinOff } from "lucide-react-native";
 import React, { useEffect, useState } from "react";
@@ -20,7 +21,7 @@ interface PinnedMessage {
     senderName?: string;
     senderAvatarUrl?: string | null;
 }
-const CHAT_BASE_URL = "http://14.225.192.37:8085";
+const CHAT_BASE_URL = API_BASE_URL.CHAT;
 const resolveFileUrl = (fileUrl?: string | null) => {
     if (!fileUrl) return "";
     if (/^https?:\/\//i.test(fileUrl)) return fileUrl;

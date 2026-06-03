@@ -84,6 +84,10 @@ export const useChatAttachments = (
     onSuccess: () => void,
 ) => {
     const recordingRef = useRef<Audio.Recording | null>(null);
+    // Tracks whether prepareToRecordAsync has been called but startAsync hasn't finished yet
+    const preparingRef = useRef(false);
+    // Guard: only one DocumentPicker dialog at a time
+    const documentPickerOpenRef = useRef(false);
 
     // ─── Media ─────────────────────────────────────────────────────────────
     const handlePickMedia = async () => {
@@ -146,6 +150,16 @@ export const useChatAttachments = (
     // ─── File ──────────────────────────────────────────────────────────────
     const handlePickFile = async () => {
         if (!conversationId && !targetUserId) return;
+
+        // Guard: prevent opening a second picker while one is already open
+        if (documentPickerOpenRef.current) {
+            console.warn(
+                "[useChatAttachments] DocumentPicker already open — ignored",
+            );
+            return;
+        }
+        documentPickerOpenRef.current = true;
+
         try {
             const result = await DocumentPicker.getDocumentAsync({
                 type: "*/*",
@@ -178,12 +192,24 @@ export const useChatAttachments = (
                 error?.response?.data ?? error?.message,
             );
             Alert.alert("Lỗi", "Không thể gửi tài liệu.");
+        } finally {
+            documentPickerOpenRef.current = false;
         }
     };
 
     // ─── Voice file picker (pick existing audio) ───────────────────────────
     const handlePickVoice = async () => {
         if (!conversationId && !targetUserId) return;
+
+        // Guard: prevent opening a second picker while one is already open
+        if (documentPickerOpenRef.current) {
+            console.warn(
+                "[useChatAttachments] DocumentPicker already open — ignored",
+            );
+            return;
+        }
+        documentPickerOpenRef.current = true;
+
         try {
             const result = await DocumentPicker.getDocumentAsync({
                 type: "*/*",
@@ -220,6 +246,8 @@ export const useChatAttachments = (
                 error?.response?.data ?? error?.message,
             );
             Alert.alert("Lỗi", "Không thể gửi tin nhắn thoại.");
+        } finally {
+            documentPickerOpenRef.current = false;
         }
     };
 
@@ -272,18 +300,21 @@ export const useChatAttachments = (
     const startRecording = async () => {
         if (!conversationId && !targetUserId) return;
 
-        // Guard: never start a second recording if one is already active
-        if (recordingRef.current) {
+        // Guard: never start a second recording if one is already active or being prepared
+        if (recordingRef.current || preparingRef.current) {
             console.warn(
-                "[useChatAttachments] startRecording called while already recording — ignored",
+                "[useChatAttachments] startRecording called while already recording/preparing — ignored",
             );
             return;
         }
+
+        preparingRef.current = true;
 
         try {
             const perm = await Audio.requestPermissionsAsync();
             if (!perm.granted) {
                 Alert.alert("Cần quyền", "Vui lòng cấp quyền micro.");
+                preparingRef.current = false;
                 return;
             }
 
@@ -307,6 +338,8 @@ export const useChatAttachments = (
         } catch (error) {
             console.error("startRecording error:", error);
             Alert.alert("Lỗi", "Không thể bắt đầu ghi âm.");
+        } finally {
+            preparingRef.current = false;
         }
     };
 
@@ -369,6 +402,38 @@ export const useChatAttachments = (
 
     const cancelRecording = async () => {
         const recording = recordingRef.current;
+
+        // If there's no recording ref but we're still preparing, wait briefly
+        // then try again (the native object may not be assigned yet)
+        if (!recording && preparingRef.current) {
+            // Schedule cleanup after preparation finishes — prepareToRecordAsync
+            // will eventually assign recordingRef.current, and we need to clean it up
+            const checkInterval = setInterval(async () => {
+                if (!preparingRef.current) {
+                    clearInterval(checkInterval);
+                    // Re-check if recording was assigned during preparation
+                    const rec = recordingRef.current;
+                    if (rec) {
+                        recordingRef.current = null;
+                        try {
+                            await rec.stopAndUnloadAsync();
+                            await Audio.setAudioModeAsync({
+                                allowsRecordingIOS: false,
+                                playsInSilentModeIOS: true,
+                            }).catch(() => {});
+                            const uri = rec.getURI();
+                            if (uri) {
+                                await FileSystem.deleteAsync(uri, {
+                                    idempotent: true,
+                                }).catch(() => {});
+                            }
+                        } catch {}
+                    }
+                }
+            }, 50);
+            return;
+        }
+
         if (!recording) return;
 
         recordingRef.current = null;

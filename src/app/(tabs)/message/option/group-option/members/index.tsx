@@ -1,3 +1,4 @@
+import { API_BASE_URL } from "@/src/config/env";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import {
     ChevronLeft,
@@ -33,7 +34,7 @@ import { pickBestDisplayName } from "@/src/utils/displayUser";
 // Các tab hiển thị
 type TabType = "ALL" | "ADMINS" | "BLOCKED";
 
-const CHAT_BASE_URL = "http://14.225.192.37:8085";
+const CHAT_BASE_URL = API_BASE_URL.CHAT;
 const resolveFileUrl = (fileUrl?: string | null) => {
     if (!fileUrl) return "";
     if (/^https?:\/\//i.test(fileUrl)) return fileUrl;
