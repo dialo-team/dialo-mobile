@@ -20,7 +20,7 @@ import {
     Search,
     Trash2,
     Undo,
-    UserPlus,
+    Video,
 } from "lucide-react-native";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
@@ -161,11 +161,6 @@ const getUniqueVotersCount = (options: any[]) => {
     });
     return uniqueIds.size;
 };
-
-type UserProfileDict = Record<
-    string,
-    { displayName: string; avatarUrl: string | null }
->;
 
 const extractValidId = (item: any) => {
     if (!item) return "";
@@ -1141,6 +1136,7 @@ export default function GroupChatScreen() {
         if (!conversationId) return;
         try {
             await chatApi.unpinMessage(conversationId, msgId);
+            setSelectedMessage(null);
             await loadGroupConversation();
         } catch (error) {
             console.error("[GroupChat] Unpin error:", error);
@@ -1183,15 +1179,8 @@ export default function GroupChatScreen() {
                     </View>
 
                     <View className="flex-row items-center ml-9">
-                        <TouchableOpacity
-                            onPress={() => {
-                                router.push({
-                                    pathname: "/contact/group/add-member",
-                                    params: { conversationId },
-                                });
-                            }}
-                        >
-                            <UserPlus size={22} color="white" />
+                        <TouchableOpacity>
+                            <Video size={22} color="white" />
                         </TouchableOpacity>
                         <TouchableOpacity
                             style={{ marginLeft: 10 }}
