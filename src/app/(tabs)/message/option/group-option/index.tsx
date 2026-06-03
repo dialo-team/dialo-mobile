@@ -58,7 +58,7 @@ const normalizeMembers = (data: any): any[] => {
     if (Array.isArray(data?.data?.members)) return data.data.members;
     return [];
 };
-const CHAT_BASE_URL = "http://14.225.192.37:9000";
+const CHAT_BASE_URL = "http://14.225.192.37:8085";
 
 const resolveFileUrl = (fileUrl?: string | null) => {
     if (!fileUrl) return "";

@@ -24,7 +24,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 // Import API và Types
 import { chatApi, chatAuthUtils } from "@/src/api/chat/chatApi";
-import { friendApi, extractBlockedUserId } from "@/src/api/friend/friendApi";
+import { extractBlockedUserId, friendApi } from "@/src/api/friend/friendApi";
 import { groupApi } from "@/src/api/group/groupApi";
 import { GroupMember } from "@/src/api/group/types";
 import { userApi } from "@/src/api/user/userApi";
@@ -33,7 +33,7 @@ import { pickBestDisplayName } from "@/src/utils/displayUser";
 // Các tab hiển thị
 type TabType = "ALL" | "ADMINS" | "BLOCKED";
 
-const CHAT_BASE_URL = "http://14.225.192.37:9000";
+const CHAT_BASE_URL = "http://14.225.192.37:8085";
 const resolveFileUrl = (fileUrl?: string | null) => {
     if (!fileUrl) return "";
     if (/^https?:\/\//i.test(fileUrl)) return fileUrl;

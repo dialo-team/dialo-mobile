@@ -1,7 +1,7 @@
 import { chatApi, chatAuthUtils } from "@/src/api/chat/chatApi";
-import VoicePlayer from "@/src/components/VoicePlayer";
 import { friendApi } from "@/src/api/friend/friendApi";
 import ChatInputBar from "@/src/components/ChatInputBar";
+import VoicePlayer from "@/src/components/VoicePlayer";
 import { useChatAttachments } from "@/src/hooks/useChatAttchment";
 import { useChatRealtime } from "@/src/hooks/useChatRealtime";
 import { getInitials, pickBestDisplayName } from "@/src/utils/displayUser";
@@ -9,7 +9,6 @@ import { getFullUrl } from "@/src/utils/url";
 import { Video as AVVideo, ResizeMode } from "expo-av";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import {
-    Image,
     MoreHorizontal,
     MoveLeft,
     Paperclip,
@@ -408,7 +407,14 @@ export default function ChatScreen() {
                         : null,
                 voiceUri:
                     type === "VOICE" && fileUrlRaw
-                        ? getFullUrl(fileUrlRaw)
+                        ? (() => {
+                              const base = getFullUrl(fileUrlRaw);
+                              // Check if there is an extension after the last slash
+                              const lastPart = base.split("/").pop() || "";
+                              return lastPart.includes(".")
+                                  ? base
+                                  : `${base}#.m4a`;
+                          })()
                         : null,
                 isFile,
                 fileName,
@@ -709,7 +715,11 @@ export default function ChatScreen() {
         startRecording,
         stopRecording,
         cancelRecording,
-    } = useChatAttachments(normalizedConversationId, loadConversationDetail);
+    } = useChatAttachments(
+        normalizedConversationId || undefined,
+        targetUserId || undefined,
+        loadConversationDetail,
+    );
 
     // Recording UI state
     const [isRecording, setIsRecording] = useState(false);

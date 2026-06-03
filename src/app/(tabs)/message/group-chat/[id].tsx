@@ -3,7 +3,6 @@ import { friendApi } from "@/src/api/friend/friendApi";
 import { groupApi } from "@/src/api/group/groupApi";
 import { Message } from "@/src/api/group/types";
 import ChatInputBar from "@/src/components/ChatInputBar";
-import { PinnedMessageBar } from "@/src/components/PinnedMessageBar";
 import VoicePlayer from "@/src/components/VoicePlayer";
 import { useChatAttachments } from "@/src/hooks/useChatAttchment";
 import { useChatRealtime } from "@/src/hooks/useChatRealtime";
@@ -17,10 +16,11 @@ import {
     MoveLeft,
     Paperclip,
     Pin,
+    PinOff,
     Search,
     Trash2,
     Undo,
-    UserPlus,
+    Video,
 } from "lucide-react-native";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
@@ -68,7 +68,7 @@ const paramToString = (value: string | string[] | undefined) => {
 const resolveFileUrl = (fileUrl?: string | null) => {
     if (!fileUrl) return "";
     if (/^https?:\/\//i.test(fileUrl)) return fileUrl;
-    return `http://14.225.192.37:9000${fileUrl.startsWith("/") ? "" : "/"}${fileUrl}`;
+    return `http://14.225.192.37:8085${fileUrl.startsWith("/") ? "" : "/"}${fileUrl}`;
 };
 
 const NON_MEDIA_CONTENT_TYPES = new Set(["TEXT", "SYSTEM", "POLL", "REVOKED"]);
@@ -161,11 +161,6 @@ const getUniqueVotersCount = (options: any[]) => {
     });
     return uniqueIds.size;
 };
-
-type UserProfileDict = Record<
-    string,
-    { displayName: string; avatarUrl: string | null }
->;
 
 const extractValidId = (item: any) => {
     if (!item) return "";
@@ -533,7 +528,7 @@ export default function GroupChatScreen() {
         startRecording,
         stopRecording,
         cancelRecording,
-    } = useChatAttachments(conversationId, loadGroupConversation);
+    } = useChatAttachments(conversationId, undefined, loadGroupConversation);
 
     // Recording UI state for group chat
     const [isRecording, setIsRecording] = useState(false);
@@ -1141,6 +1136,7 @@ export default function GroupChatScreen() {
         if (!conversationId) return;
         try {
             await chatApi.unpinMessage(conversationId, msgId);
+            setSelectedMessage(null);
             await loadGroupConversation();
         } catch (error) {
             console.error("[GroupChat] Unpin error:", error);
@@ -1183,15 +1179,8 @@ export default function GroupChatScreen() {
                     </View>
 
                     <View className="flex-row items-center ml-9">
-                        <TouchableOpacity
-                            onPress={() => {
-                                router.push({
-                                    pathname: "/contact/group/add-member",
-                                    params: { conversationId },
-                                });
-                            }}
-                        >
-                            <UserPlus size={22} color="white" />
+                        <TouchableOpacity>
+                            <Video size={22} color="white" />
                         </TouchableOpacity>
                         <TouchableOpacity
                             style={{ marginLeft: 10 }}
@@ -2086,15 +2075,48 @@ export default function GroupChatScreen() {
                                         Xóa phía mình
                                     </Text>
                                 </TouchableOpacity>
-                                <TouchableOpacity
-                                    className="py-3 flex-row items-center border-b border-gray-100"
-                                    onPress={handlePinMessage}
-                                >
-                                    <Pin size={20} color="#2563eb" />
-                                    <Text className="ml-3 text-[15px] text-blue-600">
-                                        Ghim tin nhắn
-                                    </Text>
-                                </TouchableOpacity>
+                                {(() => {
+                                    const isPinned = pinnedMessages.some(
+                                        (pm: any) =>
+                                            pm.messageId ===
+                                            selectedMessage?.id,
+                                    );
+                                    return (
+                                        <TouchableOpacity
+                                            className="py-3 flex-row items-center border-b border-gray-100"
+                                            onPress={() =>
+                                                isPinned
+                                                    ? handleUnpinMessage(
+                                                          selectedMessage!.id,
+                                                      )
+                                                    : handlePinMessage()
+                                            }
+                                        >
+                                            {isPinned ? (
+                                                <PinOff
+                                                    size={20}
+                                                    color="#ef4444"
+                                                />
+                                            ) : (
+                                                <Pin
+                                                    size={20}
+                                                    color="#2563eb"
+                                                />
+                                            )}
+                                            <Text
+                                                className={`ml-3 text-[15px] ${
+                                                    isPinned
+                                                        ? "text-red-500"
+                                                        : "text-blue-600"
+                                                }`}
+                                            >
+                                                {isPinned
+                                                    ? "Bỏ ghim"
+                                                    : "Ghim tin nhắn"}
+                                            </Text>
+                                        </TouchableOpacity>
+                                    );
+                                })()}
                                 <View className="mt-2 border-t border-gray-100 pt-3">
                                     <Text className="text-sm font-semibold mb-2">
                                         Chuyển tiếp tới
