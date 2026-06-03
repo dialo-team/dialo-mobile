@@ -56,16 +56,16 @@ const getRecordingOptions = () => {
         av.RECORDING_OPTIONS_PRESET_HIGH_QUALITY ?? {
             android: {
                 extension: ".m4a",
-                outputFormat: 2, // MPEG_4
-                audioEncoder: 3, // AAC
+                outputFormat: av.AndroidOutputFormat?.MPEG_4 ?? 2,
+                audioEncoder: av.AndroidAudioEncoder?.AAC ?? 3,
                 sampleRate: 44100,
                 numberOfChannels: 2,
                 bitRate: 128000,
             },
             ios: {
                 extension: ".m4a",
-                outputFormat: ".mp4",
-                audioQuality: 127, // HIGH
+                outputFormat: av.IOSOutputFormat?.MPEG4AAC ?? "aac ",
+                audioQuality: av.IOSAudioQuality?.MAX ?? 127,
                 sampleRate: 44100,
                 numberOfChannels: 2,
                 bitRate: 128000,
@@ -335,14 +335,22 @@ export const useChatAttachments = (
                 return;
             }
 
+            const fileName = uri.split("/").pop() || `voice-${Date.now()}.m4a`;
+            let mimeType = "audio/m4a";
+            if (fileName.endsWith(".mp4")) mimeType = "audio/mp4";
+            else if (fileName.endsWith(".wav")) mimeType = "audio/wav";
+            else if (fileName.endsWith(".aac")) mimeType = "audio/aac";
+            else if (fileName.endsWith(".webm")) mimeType = "audio/webm";
+            else if (fileName.endsWith(".3gp")) mimeType = "audio/3gpp";
+
             const userId = await chatAuthUtils.getCurrentUserId();
             await mediaApi.sendMediaFile(
                 userId,
                 conversationId,
                 {
                     uri,
-                    name: `voice-${Date.now()}.m4a`,
-                    type: "audio/m4a",
+                    name: fileName,
+                    type: mimeType,
                 },
                 "VOICE",
             );

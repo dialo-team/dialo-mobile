@@ -3,7 +3,6 @@ import { friendApi } from "@/src/api/friend/friendApi";
 import { groupApi } from "@/src/api/group/groupApi";
 import { Message } from "@/src/api/group/types";
 import ChatInputBar from "@/src/components/ChatInputBar";
-import { PinnedMessageBar } from "@/src/components/PinnedMessageBar";
 import VoicePlayer from "@/src/components/VoicePlayer";
 import { useChatAttachments } from "@/src/hooks/useChatAttchment";
 import { useChatRealtime } from "@/src/hooks/useChatRealtime";
@@ -68,7 +67,7 @@ const paramToString = (value: string | string[] | undefined) => {
 const resolveFileUrl = (fileUrl?: string | null) => {
     if (!fileUrl) return "";
     if (/^https?:\/\//i.test(fileUrl)) return fileUrl;
-    return `http://14.225.192.37:9000${fileUrl.startsWith("/") ? "" : "/"}${fileUrl}`;
+    return `http://14.225.192.37:8085${fileUrl.startsWith("/") ? "" : "/"}${fileUrl}`;
 };
 
 const NON_MEDIA_CONTENT_TYPES = new Set(["TEXT", "SYSTEM", "POLL", "REVOKED"]);

@@ -2,7 +2,7 @@ import apiClient from "@/src/api/apiClient";
 import { getAccessToken } from "@/src/api/auth/authStorage";
 import { ChatMediaItem } from "./types";
 
-const MEDIA_BASE_URL = "http://14.225.192.37:9000";
+const MEDIA_BASE_URL = "http://14.225.192.37:8085";
 
 export const mediaApi = {
     // 1. GET Media cập nhật đúng chuẩn Swagger
@@ -73,6 +73,7 @@ export const mediaApi = {
                 {
                     headers: {
                         "X-User-Id": userId,
+                        "Content-Type": "multipart/form-data",
                         ...(token ? { Authorization: `Bearer ${token}` } : {}),
                     },
                     params: {

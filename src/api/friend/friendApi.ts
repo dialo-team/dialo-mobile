@@ -4,7 +4,7 @@ import { UserProfileResponse } from "./types";
 
 import axios from "axios";
 
-const CHAT_SERVICE_URL = "http://14.225.192.37:9000";
+const CHAT_SERVICE_URL = "http://14.225.192.37:8084";
 
 const chatServiceClient = axios.create({
     baseURL: CHAT_SERVICE_URL,

@@ -408,7 +408,14 @@ export default function ChatScreen() {
                         : null,
                 voiceUri:
                     type === "VOICE" && fileUrlRaw
-                        ? getFullUrl(fileUrlRaw)
+                        ? (() => {
+                              const base = getFullUrl(fileUrlRaw);
+                              // Check if there is an extension after the last slash
+                              const lastPart = base.split("/").pop() || "";
+                              return lastPart.includes(".")
+                                  ? base
+                                  : `${base}#.m4a`;
+                          })()
                         : null,
                 isFile,
                 fileName,

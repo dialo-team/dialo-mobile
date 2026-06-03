@@ -58,6 +58,8 @@ export default function VoicePlayer({ uri, isMe }: VoicePlayerProps) {
         try {
             await Audio.setAudioModeAsync({ playsInSilentModeIOS: true });
 
+            console.log("[VoicePlayer] Đang chuẩn bị phát audio từ URI:", uri);
+
             const { sound } = await Audio.Sound.createAsync(
                 { uri },
                 { shouldPlay: true },

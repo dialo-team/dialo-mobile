@@ -12,7 +12,7 @@ import {
     SendMessagePayload,
 } from "./types";
 
-const CHAT_BASE_URL = "http://14.225.192.37:9000";
+const CHAT_BASE_URL = "http://14.225.192.37:8085";
 
 const chatClient = axios.create({
     baseURL: CHAT_BASE_URL,
