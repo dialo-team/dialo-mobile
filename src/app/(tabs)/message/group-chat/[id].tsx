@@ -16,6 +16,7 @@ import {
     MoveLeft,
     Paperclip,
     Pin,
+    PinOff,
     Search,
     Trash2,
     Undo,
@@ -2085,15 +2086,48 @@ export default function GroupChatScreen() {
                                         Xóa phía mình
                                     </Text>
                                 </TouchableOpacity>
-                                <TouchableOpacity
-                                    className="py-3 flex-row items-center border-b border-gray-100"
-                                    onPress={handlePinMessage}
-                                >
-                                    <Pin size={20} color="#2563eb" />
-                                    <Text className="ml-3 text-[15px] text-blue-600">
-                                        Ghim tin nhắn
-                                    </Text>
-                                </TouchableOpacity>
+                                {(() => {
+                                    const isPinned = pinnedMessages.some(
+                                        (pm: any) =>
+                                            pm.messageId ===
+                                            selectedMessage?.id,
+                                    );
+                                    return (
+                                        <TouchableOpacity
+                                            className="py-3 flex-row items-center border-b border-gray-100"
+                                            onPress={() =>
+                                                isPinned
+                                                    ? handleUnpinMessage(
+                                                          selectedMessage!.id,
+                                                      )
+                                                    : handlePinMessage()
+                                            }
+                                        >
+                                            {isPinned ? (
+                                                <PinOff
+                                                    size={20}
+                                                    color="#ef4444"
+                                                />
+                                            ) : (
+                                                <Pin
+                                                    size={20}
+                                                    color="#2563eb"
+                                                />
+                                            )}
+                                            <Text
+                                                className={`ml-3 text-[15px] ${
+                                                    isPinned
+                                                        ? "text-red-500"
+                                                        : "text-blue-600"
+                                                }`}
+                                            >
+                                                {isPinned
+                                                    ? "Bỏ ghim"
+                                                    : "Ghim tin nhắn"}
+                                            </Text>
+                                        </TouchableOpacity>
+                                    );
+                                })()}
                                 <View className="mt-2 border-t border-gray-100 pt-3">
                                     <Text className="text-sm font-semibold mb-2">
                                         Chuyển tiếp tới
