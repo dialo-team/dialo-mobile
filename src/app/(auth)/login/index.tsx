@@ -5,7 +5,6 @@ import { useRouter } from "expo-router";
 import { useState } from "react";
 import { Text, TextInput, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { QrCode } from "lucide-react-native";
 
 export default function LoginScreen() {
     const router = useRouter();
@@ -64,39 +63,6 @@ export default function LoginScreen() {
                     }
                     className="mt-8"
                 />
-
-                <View className="flex-row items-center mt-6 mb-4">
-                    <View className="flex-1 h-px bg-gray-200" />
-                    <Text className="text-gray-400 text-xs mx-3">hoặc</Text>
-                    <View className="flex-1 h-px bg-gray-200" />
-                </View>
-
-                <TouchableOpacity
-                    style={{
-                        flexDirection: "row",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        borderWidth: 1,
-                        borderColor: "#d1d5db",
-                        borderRadius: 14,
-                        paddingVertical: 14,
-                        columnGap: 8,
-                        backgroundColor: "#f9fafb",
-                    }}
-                    onPress={() => router.push("/(auth)/login/scan-qr" as any)}
-                    activeOpacity={0.7}
-                >
-                    <QrCode size={20} color="#2563eb" />
-                    <Text
-                        style={{
-                            color: "#2563eb",
-                            fontWeight: "600",
-                            fontSize: 15,
-                        }}
-                    >
-                        Đăng nhập bằng mã QR
-                    </Text>
-                </TouchableOpacity>
 
                 {/* Register link */}
                 <View className="flex-1 justify-end items-center pb-10">
