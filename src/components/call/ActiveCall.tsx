@@ -17,19 +17,30 @@ import {
     VideoOff,
 } from "lucide-react-native";
 import React, { useEffect, useState } from "react";
-import { Modal, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import {
+    Modal,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View,
+    Image,
+} from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { videoApi } from "../../api/video/videoApi";
 import { useCall } from "../../providers/CallProvider";
 
 const CallRoomContent = () => {
-    const { endActiveCall, activeRoomId } = useCall();
+    const { endActiveCall, activeRoomId, currentUser, incomingCall } =
+        useCall();
     const participants = useParticipants();
     const { localParticipant } = useLocalParticipant();
 
     // Khởi tạo trạng thái tắt camera và mic ban đầu
     const [isMicOn, setIsMicOn] = useState(false);
     const [isCamOn, setIsCamOn] = useState(false);
+    const [facingMode, setFacingMode] = useState<"user" | "environment">(
+        "user",
+    );
 
     const handleEndCall = async () => {
         if (activeRoomId) {
@@ -62,23 +73,23 @@ const CallRoomContent = () => {
         }
     };
 
-    const switchCamera = () => {
+    const switchCamera = async () => {
+        const nextMode = facingMode === "user" ? "environment" : "user";
+        setFacingMode(nextMode);
         const trackPub = localParticipant?.getTrackPublication(
             Track.Source.Camera,
         );
-        if (
-            trackPub &&
-            trackPub.videoTrack &&
-            trackPub.videoTrack.mediaStreamTrack
-        ) {
-            // react-native-webrtc cung cấp hàm _switchCamera() trên MediaStreamTrack để đổi camera trước/sau mượt mà
-            if (
-                typeof (trackPub.videoTrack.mediaStreamTrack as any)
-                    ._switchCamera === "function"
-            ) {
-                (trackPub.videoTrack.mediaStreamTrack as any)._switchCamera();
-            }
+        if (trackPub?.videoTrack) {
+            // Sử dụng restartTrack của LiveKit để đổi camera chuẩn xác
+            await trackPub.videoTrack.restartTrack({ facingMode: nextMode });
         }
+    };
+
+    const getAvatarUrl = (identity: string) => {
+        if (identity === currentUser?.id) return currentUser?.avatar;
+        if (identity === incomingCall?.callerId)
+            return incomingCall?.callerAvatar;
+        return null;
     };
 
     return (
@@ -105,6 +116,7 @@ const CallRoomContent = () => {
                         const isLocal =
                             p.identity === localParticipant?.identity;
                         const showVideo = isLocal ? isCamOn : isVideoEnabled;
+                        const avatarUrl = getAvatarUrl(p.identity);
 
                         return (
                             <View
@@ -122,12 +134,22 @@ const CallRoomContent = () => {
                                     />
                                 ) : (
                                     <View className="absolute bottom-0 left-0 right-0 top-0 items-center justify-center bg-black">
-                                        <View className="h-20 w-20 items-center justify-center rounded-full bg-[#333]">
-                                            <Text className="text-3xl text-white">
-                                                {(p.name || p.identity)
-                                                    .charAt(0)
-                                                    .toUpperCase()}
-                                            </Text>
+                                        <View className="h-20 w-20 items-center justify-center rounded-full bg-[#333] overflow-hidden">
+                                            {avatarUrl ? (
+                                                <Image
+                                                    source={{ uri: avatarUrl }}
+                                                    style={{
+                                                        width: 80,
+                                                        height: 80,
+                                                    }}
+                                                />
+                                            ) : (
+                                                <Text className="text-3xl text-white">
+                                                    {(p.name || p.identity)
+                                                        .charAt(0)
+                                                        .toUpperCase()}
+                                                </Text>
+                                            )}
                                         </View>
                                     </View>
                                 )}
