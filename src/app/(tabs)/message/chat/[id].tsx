@@ -1450,6 +1450,24 @@ export default function ChatScreen() {
                     renderItem={({ item: msg, index }) => {
                         const messageSide = getMessageSide(msg);
 
+                        // SYSTEM CALL MESSAGE
+                        if (
+                            msg.raw?.type === "SYSTEM" &&
+                            (msg.text?.includes("cuộc gọi") ||
+                                msg.text?.includes("không phản hồi"))
+                        ) {
+                            return (
+                                <View className="flex-row justify-center mb-3">
+                                    <View className="bg-gray-200 px-4 py-2 rounded-full flex-row items-center max-w-[85%]">
+                                        <Phone size={14} color="#4b5563" />
+                                        <Text className="text-[12px] text-gray-700 ml-2 font-medium">
+                                            {msg.text}
+                                        </Text>
+                                    </View>
+                                </View>
+                            );
+                        }
+
                         // CENTER MESSAGE
                         if (messageSide === "center") {
                             return (
