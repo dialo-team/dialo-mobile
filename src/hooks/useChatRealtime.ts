@@ -85,27 +85,6 @@ export function useChatRealtime({
             (frame) => {
                 const payload = parseFrameBody(frame);
 
-                if (payload) {
-                    console.log("\n========== CONVERSATION MESSAGE ==========");
-                    console.log(
-                        "[Payload Full]:",
-                        JSON.stringify(payload, null, 2),
-                    );
-                    console.log("[Payload Summary]:", {
-                        type: payload?.type,
-                        action: payload?.action,
-                        status: payload?.status,
-                        messageId: payload?.id || payload?.messageId,
-                        conversationId: payload?.conversationId,
-                        readAt: payload?.readAt,
-                        seenAt: payload?.seenAt,
-                        isRead: payload?.isRead,
-                        senderId: payload?.senderId,
-                        senderName: payload?.senderName,
-                    });
-                    console.log("==========================================\n");
-                }
-
                 if (payload && onConversationMessageRef.current) {
                     onConversationMessageRef.current(payload);
                 }
@@ -128,8 +107,6 @@ export function useChatRealtime({
 
             // Một số Backend code cứng việc lấy token từ query param khi xài SockJS. Nếu code dưới không chạy, bạn thử mở comment dòng này:
             // const finalWsUrl = token ? `${wsUrl}?token=${token}` : wsUrl;
-
-            console.log("[useChatRealtime] Connecting to", wsUrl);
 
             const client = new Client({
                 webSocketFactory: () => {
@@ -159,11 +136,8 @@ export function useChatRealtime({
                 reconnectDelay: 1000,
                 heartbeatIncoming: 2000,
                 heartbeatOutgoing: 2000,
-                debug: (msg) => {
-                    console.log("[STOMP]", msg);
-                },
+                debug: () => {},
                 onConnect: () => {
-                    console.log("[useChatRealtime] Connected");
                     setConnected(true);
 
                     try {
@@ -172,39 +146,10 @@ export function useChatRealtime({
                             (frame) => {
                                 const payload = parseFrameBody(frame);
 
-                                if (payload) {
-                                    console.log(
-                                        "\n========== INBOX MESSAGE ==========",
-                                    );
-                                    console.log(
-                                        "[Payload Full]:",
-                                        JSON.stringify(payload, null, 2),
-                                    );
-                                    console.log("[Payload Summary]:", {
-                                        type: payload?.type,
-                                        action: payload?.action,
-                                        status: payload?.status,
-                                        messageId:
-                                            payload?.id || payload?.messageId,
-                                        conversationId: payload?.conversationId,
-                                        readAt: payload?.readAt,
-                                        seenAt: payload?.seenAt,
-                                        isRead: payload?.isRead,
-                                        senderId: payload?.senderId,
-                                    });
-                                    console.log(
-                                        "===================================\n",
-                                    );
-                                }
-
                                 if (payload && onInboxPayloadRef.current) {
                                     onInboxPayloadRef.current(payload);
                                 }
                             },
-                        );
-                        console.log(
-                            "[useChatRealtime] Subscribed to inbox:",
-                            currentUserId,
                         );
                     } catch (error) {
                         console.error(
@@ -216,7 +161,6 @@ export function useChatRealtime({
                     subscribeConversation(conversationId);
                 },
                 onDisconnect: (frame) => {
-                    console.log("[useChatRealtime] Disconnected", frame?.body);
                     setConnected(false);
                 },
                 onStompError: (frame) => {
@@ -231,7 +175,6 @@ export function useChatRealtime({
 
             client.activate();
             clientRef.current = client;
-            console.log("[useChatRealtime] Client activated");
         } catch (error) {
             console.error("[useChatRealtime] Activate error:", error);
             setConnected(false);

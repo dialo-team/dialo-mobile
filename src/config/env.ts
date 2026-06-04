@@ -10,4 +10,6 @@ export const API_BASE_URL = {
     CHAT: `${HOST}:8085`,
     // Friend service
     FRIEND: `${HOST}:8084`,
+    // Video service
+    VIDEO: "https://dialo-video-service-production.up.railway.app",
 } as const;

@@ -180,10 +180,7 @@ export default function GroupChatOptionsScreen() {
 
                     try {
                         const userRes = await friendApi.getUserById(userId);
-                        console.log(
-                            `[GroupOption] Fetched user data for ${userId}:`,
-                            userRes,
-                        );
+
                         const userData = userRes?.data || userRes;
 
                         return {
@@ -214,7 +211,7 @@ export default function GroupChatOptionsScreen() {
             );
 
             setMembersList(enrichedMembers);
-            console.log(enrichedMembers);
+
             setMemberCount(enrichedMembers.length);
 
             const me = enrichedMembers.find(
@@ -225,9 +222,7 @@ export default function GroupChatOptionsScreen() {
             setGroupName(detail?.groupName || initialName);
             setGroupAvatar(detail?.groupAvatarUrl || initialAvatar);
             setGroupDescription(detail?.groupDescription || "");
-        } catch (error) {
-            console.log("[GroupOption] loadGroupData error:", error);
-        }
+        } catch (error) {}
     }, [conversationId, currentUserId, initialAvatar, initialName]);
 
     const handleUpdateGroupDescription = async () => {
@@ -272,10 +267,6 @@ export default function GroupChatOptionsScreen() {
 
         // Nếu là Trưởng nhóm và có người khác trong nhóm -> Bật Modal chuyển quyền
         if (currentUserRole === "OWNER" && membersList.length > 1) {
-            console.log("[GroupOption] Owner leaving with other members", {
-                currentUserRole,
-                memberCount: membersList.length,
-            });
             setIsTransferModalVisible(true);
             return;
         }
@@ -289,16 +280,8 @@ export default function GroupChatOptionsScreen() {
                 onPress: async () => {
                     setLoadingLeave(true);
                     try {
-                        console.log("[GroupOption] leaveGroup request:", {
-                            conversationId,
-                        });
-
                         const response =
                             await groupApi.leaveGroup(conversationId);
-
-                        console.log("[GroupOption] leaveGroup response:", {
-                            status: response?.status,
-                        });
 
                         router.replace("/(tabs)/message" as any);
                     } catch (error: any) {
@@ -306,14 +289,6 @@ export default function GroupChatOptionsScreen() {
                             error?.response?.data?.message ||
                             error?.message ||
                             "Không thể rời nhóm lúc này.";
-                        console.log(
-                            "[GroupOption] leaveGroup error:",
-                            errorMsg,
-                            {
-                                status: error?.response?.status,
-                                url: error?.config?.url,
-                            },
-                        );
                         Alert.alert("Lỗi", errorMsg);
                     } finally {
                         setLoadingLeave(false);
@@ -347,10 +322,6 @@ export default function GroupChatOptionsScreen() {
                             // Gọi API 2: Rời nhóm
                             await groupApi.leaveGroup(conversationId as string);
 
-                            console.log(
-                                "[GroupOption] leaveGroup success, redirecting",
-                            );
-
                             setIsTransferModalVisible(false);
                             router.replace("/(tabs)/message" as any);
                         } catch (error: any) {
@@ -358,14 +329,6 @@ export default function GroupChatOptionsScreen() {
                                 error?.response?.data?.message ||
                                 error?.message ||
                                 "Không thể thực hiện chuyển quyền hoặc rời nhóm.";
-                            console.log(
-                                "[GroupOption] Transfer & Leave error:",
-                                errorMsg,
-                                {
-                                    status: error?.response?.status,
-                                    url: error?.config?.url,
-                                },
-                            );
                             Alert.alert("Lỗi", errorMsg);
                         } finally {
                             setTransferringId(null);
@@ -380,9 +343,6 @@ export default function GroupChatOptionsScreen() {
     const handleUpdateGroupName = async () => {
         const newName = tempGroupName;
 
-        console.log("DEBUG: newName value =", newName);
-        console.log("DEBUG: newName type =", typeof newName);
-        console.log("DEBUG: Thực hiện đổi tên cho ID:", conversationId);
         if (
             !newName ||
             newName === groupName ||
@@ -395,12 +355,6 @@ export default function GroupChatOptionsScreen() {
 
         setUpdatingName(true);
         try {
-            console.log("[GroupOption] updateGroupName request:", {
-                conversationId,
-                currentUserId,
-                newName,
-            });
-
             if (conversationId === currentUserId) {
                 Alert.alert(
                     "Lỗi dữ liệu",
@@ -415,12 +369,6 @@ export default function GroupChatOptionsScreen() {
                 newName,
             );
 
-            console.log("[GroupOption] updateGroupName response:", {
-                status: response?.status,
-                groupName: response?.groupName,
-                fields: Object.keys(response || {}),
-            });
-
             // Verify response contains updated group name
             const updatedName = response?.groupName || newName;
             setGroupName(updatedName);
@@ -431,16 +379,6 @@ export default function GroupChatOptionsScreen() {
                 error?.response?.data?.message ||
                 error?.message ||
                 "Không thể cập nhật tên nhóm.";
-            console.log(
-                "[GroupOption] updateGroupName error:",
-                error?.response?.status,
-                errorMsg,
-                {
-                    url: error?.config?.url,
-                    method: error?.config?.method,
-                    data: error?.config?.data,
-                },
-            );
             Alert.alert("Lỗi", errorMsg);
         } finally {
             setUpdatingName(false);
@@ -481,24 +419,11 @@ export default function GroupChatOptionsScreen() {
 
                 const base64String = `data:${mimeType};base64,${asset.base64}`;
 
-                console.log("[GroupOption] updateGroupAvatar request:", {
-                    conversationId,
-                    currentUserId,
-                    mimeType,
-                    base64Length: asset.base64.length,
-                });
-
                 const response = await groupApi.updateGroupAvatar(
                     conversationId,
                     currentUserId,
                     base64String,
                 );
-
-                console.log("[GroupOption] updateGroupAvatar response:", {
-                    status: response?.status,
-                    groupAvatarUrl: response?.groupAvatarUrl,
-                    fields: Object.keys(response || {}),
-                });
 
                 // Use response avatar URL if available, otherwise fallback to local URI
                 const updatedAvatarUrl = response?.groupAvatarUrl || asset.uri;
@@ -510,12 +435,6 @@ export default function GroupChatOptionsScreen() {
                 error?.response?.data?.message ||
                 error?.message ||
                 "Không thể cập nhật ảnh nhóm.";
-            console.log("[GroupOption] updateGroupAvatar error:", errorMsg, {
-                status: error?.response?.status,
-                url: error?.config?.url,
-                method: error?.config?.method,
-                fullError: error,
-            });
             Alert.alert("Lỗi", errorMsg);
         } finally {
             setUpdatingAvatar(false);
@@ -536,18 +455,8 @@ export default function GroupChatOptionsScreen() {
                     onPress: async () => {
                         try {
                             setLoadingLeave(true);
-                            console.log(
-                                "[GroupOption] dissolveGroup request:",
-                                { conversationId },
-                            );
-
                             const response =
                                 await groupApi.dissolveGroup(conversationId);
-
-                            console.log(
-                                "[GroupOption] dissolveGroup response:",
-                                response,
-                            );
 
                             Alert.alert("Thành công", "Đã giải tán nhóm.");
                             router.replace("/(tabs)/message" as any);
@@ -556,14 +465,6 @@ export default function GroupChatOptionsScreen() {
                                 error?.response?.data?.message ||
                                 error?.message ||
                                 "Không thể giải tán nhóm lúc này.";
-                            console.log(
-                                "[GroupOption] dissolveGroup error:",
-                                errorMsg,
-                                {
-                                    status: error?.response?.status,
-                                    url: error?.config?.url,
-                                },
-                            );
                             Alert.alert("Lỗi", errorMsg);
                         } finally {
                             setLoadingLeave(false);

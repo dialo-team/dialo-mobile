@@ -80,10 +80,6 @@ export default function ChangePasswordScreen() {
 
         try {
             setIsSubmitting(true);
-            console.log("=== THÔNG TIN GỬI LÊN BE ===");
-            console.log("Body Data:", { oldPass, newPass, refreshToken });
-            console.log("Header AccessToken:", accessToken);
-            console.log("============================");
             const response = await authenticationApi.changePassword(
                 {
                     oldPass,
@@ -93,14 +89,9 @@ export default function ChangePasswordScreen() {
                 accessToken,
             );
 
-            console.log("Change password response:", response);
             Alert.alert("Thành công", "Đổi mật khẩu thành công");
             router.back();
         } catch (error: any) {
-            console.error(
-                "Lỗi đổi mật khẩu:",
-                error.response?.data || error.message,
-            );
             Alert.alert(
                 "Lỗi",
                 error.response?.data?.message || "Không thể đổi mật khẩu",

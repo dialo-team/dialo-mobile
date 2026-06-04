@@ -281,9 +281,7 @@ export default function GroupMembersPage() {
                                     : null),
                         };
                     }
-                } catch (e) {
-                    console.log(`[GroupMembers] skip user ${userId}`);
-                }
+                } catch (e) {}
             }
 
             // === BƯỚC 5: OVERRIDE CURRENT USER ===
@@ -301,9 +299,7 @@ export default function GroupMembersPage() {
                             : null,
                     };
                 }
-            } catch {
-                console.log("Không lấy được profile của mình");
-            }
+            } catch {}
 
             // === SET STATE ===
             setEnrichedProfiles(nextEnrichedProfiles);
@@ -339,11 +335,8 @@ export default function GroupMembersPage() {
                     if (id) blockedSet.add(String(id));
                 });
                 setBlockedUserIds(blockedSet);
-            } catch (e) {
-                console.log("Không lấy được danh sách bị chặn", e);
-            }
+            } catch (e) {}
         } catch (error) {
-            console.error("[GroupMembers] Load members error:", error);
         } finally {
             setLoading(false);
         }
@@ -458,7 +451,6 @@ export default function GroupMembersPage() {
 
             setMemberSearchResults(merged as any[]);
         } catch (error) {
-            console.log("Lỗi tìm kiếm thành viên từ API:", error);
             // Gặp lỗi API thì fallback dùng local search cực kỳ mượt mà, không gián đoạn trải nghiệm
             setMemberSearchResults(null);
         } finally {
@@ -544,10 +536,6 @@ export default function GroupMembersPage() {
                         );
                         await loadMembers();
                     } catch (error) {
-                        console.error(
-                            "[GroupMembers] assign OWNER error:",
-                            error,
-                        );
                     } finally {
                         setActionLoadingMemberId("");
                     }
@@ -568,10 +556,6 @@ export default function GroupMembersPage() {
                         );
                         await loadMembers();
                     } catch (error) {
-                        console.error(
-                            "[GroupMembers] assign ADMIN error:",
-                            error,
-                        );
                     } finally {
                         setActionLoadingMemberId("");
                     }
@@ -592,10 +576,6 @@ export default function GroupMembersPage() {
                         );
                         await loadMembers();
                     } catch (error) {
-                        console.error(
-                            "[GroupMembers] assign MEMBER error:",
-                            error,
-                        );
                     } finally {
                         setActionLoadingMemberId("");
                     }
@@ -612,7 +592,6 @@ export default function GroupMembersPage() {
                     await groupApi.removeMember(conversationId, member.userId);
                     await loadMembers();
                 } catch (error) {
-                    console.error("[GroupMembers] remove member error:", error);
                 } finally {
                     setActionLoadingMemberId("");
                 }

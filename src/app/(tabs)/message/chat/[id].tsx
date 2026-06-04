@@ -476,7 +476,6 @@ export default function ChatScreen() {
         (incomingMessage: any) => {
             try {
                 if (!incomingMessage?.id) {
-                    console.warn("[ChatScreen] Incoming message has no ID");
                     return;
                 }
 
@@ -501,12 +500,8 @@ export default function ChatScreen() {
                     };
                     return next;
                 });
-            } catch (error) {
-                console.error(
-                    "[ChatScreen] mergeIncomingMessage error:",
-                    error,
-                );
-            }
+                // eslint-disable-next-line @typescript-eslint/no-unused-vars
+            } catch (error) {}
         },
         [mapApiMessageToUi],
     );
@@ -604,11 +599,8 @@ export default function ChatScreen() {
                         profile?.avatarUrl ||
                         profile?.avatar ||
                         "";
-                } catch (error) {
-                    console.log(
-                        "[ChatScreen] counterpart lookup failed (User might be blocked)",
-                    );
-                }
+                    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+                } catch (error) {}
             }
 
             realNameRef.current = counterpartDisplayName;
@@ -623,10 +615,6 @@ export default function ChatScreen() {
                                   blockStatus.blockedByMe &&
                                   msg.senderId === counterpartId
                               ) {
-                                  console.log(
-                                      "[ChatScreen] Filtering out message from blocked user:",
-                                      msg.id,
-                                  );
                                   return false;
                               }
                               return true;
