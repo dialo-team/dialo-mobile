@@ -2,7 +2,7 @@ import {
     AudioSession,
     LiveKitRoom,
     useLocalParticipant,
-    useTracks,
+    useParticipants,
     VideoTrack,
 } from "@livekit/react-native";
 import { Audio } from "expo-av";
@@ -12,9 +12,9 @@ import {
     Mic,
     MicOff,
     PhoneOff,
+    SwitchCamera,
     Video,
     VideoOff,
-    SwitchCamera,
 } from "lucide-react-native";
 import React, { useEffect, useState } from "react";
 import { Modal, StyleSheet, Text, TouchableOpacity, View } from "react-native";
@@ -24,7 +24,7 @@ import { useCall } from "../../providers/CallProvider";
 
 const CallRoomContent = () => {
     const { endActiveCall, activeRoomId } = useCall();
-    const tracks = useTracks([Track.Source.Camera, Track.Source.ScreenShare]);
+    const participants = useParticipants();
     const { localParticipant } = useLocalParticipant();
 
     // Khởi tạo trạng thái tắt camera và mic ban đầu
@@ -82,36 +82,69 @@ const CallRoomContent = () => {
     };
 
     return (
-        <SafeAreaView style={styles.container}>
-            <View style={styles.videoContainer}>
-                {tracks.length === 0 ? (
-                    <View style={styles.waitingContainer}>
-                        <Text style={styles.waitingText}>
+        <SafeAreaView className="flex-1 bg-[#111]">
+            <View className="flex-1 flex-row flex-wrap items-center justify-center">
+                {participants.length === 0 ? (
+                    <View className="flex-1 items-center justify-center">
+                        <Text className="text-base text-[#aaa]">
                             Đang chờ người khác tham gia...
                         </Text>
                     </View>
                 ) : (
-                    // Hiển thị Grid các video tracks (đơn giản hoá, hiển thị video đầu tiên lớn nhất)
-                    tracks.map((trackRef, index) => (
-                        <View
-                            key={trackRef.participant.identity + index}
-                            style={styles.participantVideo}
-                        >
-                            <VideoTrack trackRef={trackRef} />
-                            <Text style={styles.participantName}>
-                                {trackRef.participant.name ||
-                                    trackRef.participant.identity}
-                            </Text>
-                        </View>
-                    ))
+                    // Hiển thị Grid các thành viên
+                    participants.map((p, index) => {
+                        const trackPub = p.getTrackPublication(
+                            Track.Source.Camera,
+                        );
+                        const isVideoEnabled =
+                            trackPub &&
+                            trackPub.isSubscribed &&
+                            trackPub.track &&
+                            !trackPub.isMuted;
+                        // Đối với local participant, track luôn có sẵn nếu đang bật (isCamOn)
+                        const isLocal =
+                            p.identity === localParticipant?.identity;
+                        const showVideo = isLocal ? isCamOn : isVideoEnabled;
+
+                        return (
+                            <View
+                                key={p.identity + index}
+                                className="relative h-1/2 w-full bg-[#222]"
+                            >
+                                {showVideo && trackPub?.track ? (
+                                    <VideoTrack
+                                        trackRef={{
+                                            participant: p,
+                                            publication: trackPub,
+                                            source: Track.Source.Camera,
+                                        }}
+                                        style={StyleSheet.absoluteFillObject}
+                                    />
+                                ) : (
+                                    <View className="absolute bottom-0 left-0 right-0 top-0 items-center justify-center bg-black">
+                                        <View className="h-20 w-20 items-center justify-center rounded-full bg-[#333]">
+                                            <Text className="text-3xl text-white">
+                                                {(p.name || p.identity)
+                                                    .charAt(0)
+                                                    .toUpperCase()}
+                                            </Text>
+                                        </View>
+                                    </View>
+                                )}
+                                <Text className="absolute bottom-2.5 left-2.5 rounded bg-black/50 px-2 py-1 text-white">
+                                    {p.name || p.identity}
+                                </Text>
+                            </View>
+                        );
+                    })
                 )}
             </View>
 
-            <View style={styles.controlsContainer}>
+            <View className="flex-row items-center justify-evenly bg-black pb-10 pt-5">
                 {/* Nút Flip Camera hiển thị khi đang bật camera */}
                 {isCamOn && (
                     <TouchableOpacity
-                        style={styles.controlButton}
+                        className="h-[60px] w-[60px] items-center justify-center rounded-full bg-[#333]"
                         onPress={switchCamera}
                     >
                         <SwitchCamera color="white" size={24} />
@@ -119,10 +152,7 @@ const CallRoomContent = () => {
                 )}
 
                 <TouchableOpacity
-                    style={[
-                        styles.controlButton,
-                        !isMicOn && styles.controlButtonOff,
-                    ]}
+                    className={`h-[60px] w-[60px] items-center justify-center rounded-full ${isMicOn ? "bg-[#333]" : "bg-[#555]"}`}
                     onPress={toggleMic}
                 >
                     {isMicOn ? (
@@ -133,17 +163,14 @@ const CallRoomContent = () => {
                 </TouchableOpacity>
 
                 <TouchableOpacity
-                    style={[styles.controlButton, styles.endButton]}
+                    className="h-[70px] w-[70px] items-center justify-center rounded-full bg-red-500"
                     onPress={handleEndCall}
                 >
                     <PhoneOff color="white" size={28} />
                 </TouchableOpacity>
 
                 <TouchableOpacity
-                    style={[
-                        styles.controlButton,
-                        !isCamOn && styles.controlButtonOff,
-                    ]}
+                    className={`h-[60px] w-[60px] items-center justify-center rounded-full ${isCamOn ? "bg-[#333]" : "bg-[#555]"}`}
                     onPress={toggleCam}
                 >
                     {isCamOn ? (
@@ -210,67 +237,3 @@ export const ActiveCall = () => {
         </Modal>
     );
 };
-
-const styles = StyleSheet.create({
-    container: {
-        flex: 1,
-        backgroundColor: "#111",
-    },
-    videoContainer: {
-        flex: 1,
-        flexDirection: "row",
-        flexWrap: "wrap",
-        justifyContent: "center",
-        alignItems: "center",
-    },
-    participantVideo: {
-        width: "100%",
-        height: "50%", // Giả sử hiển thị 2 người chia đôi màn hình
-        backgroundColor: "#222",
-        position: "relative",
-    },
-    participantName: {
-        position: "absolute",
-        bottom: 10,
-        left: 10,
-        color: "white",
-        backgroundColor: "rgba(0,0,0,0.5)",
-        paddingHorizontal: 8,
-        paddingVertical: 4,
-        borderRadius: 4,
-    },
-    waitingContainer: {
-        flex: 1,
-        justifyContent: "center",
-        alignItems: "center",
-    },
-    waitingText: {
-        color: "#aaa",
-        fontSize: 16,
-    },
-    controlsContainer: {
-        flexDirection: "row",
-        justifyContent: "space-evenly",
-        alignItems: "center",
-        paddingBottom: 40,
-        paddingTop: 20,
-        backgroundColor: "#000",
-    },
-    controlButton: {
-        width: 60,
-        height: 60,
-        borderRadius: 30,
-        backgroundColor: "#333",
-        justifyContent: "center",
-        alignItems: "center",
-    },
-    controlButtonOff: {
-        backgroundColor: "#555",
-    },
-    endButton: {
-        backgroundColor: "#EF4444",
-        width: 70,
-        height: 70,
-        borderRadius: 35,
-    },
-});

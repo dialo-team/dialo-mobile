@@ -296,7 +296,7 @@ export default function GroupChatScreen() {
             // 2. Lấy token và URL để join LiveKit
             const tokenResponse = await videoApi.generateToken({
                 roomId: conversationId,
-                participantName: currentUserId,
+                participantName: callerName,
             });
 
             // 3. Chuyển sang màn hình gọi

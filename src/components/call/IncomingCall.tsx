@@ -43,7 +43,7 @@ export const IncomingCall = () => {
             // 2. Generate token to join LiveKit
             const tokenResponse = await videoApi.generateToken({
                 roomId: id,
-                participantName: currentUser.id,
+                participantName: currentUser.name || currentUser.id,
             });
 
             // 3. Update state to active and pass token and url
@@ -76,29 +76,35 @@ export const IncomingCall = () => {
 
     return (
         <Modal visible={true} transparent={true} animationType="slide">
-            <View style={styles.container}>
-                <View style={styles.content}>
-                    <Text style={styles.title}>Cuộc gọi đến</Text>
+            <View className="flex-1 items-center justify-center bg-black/90">
+                <View className="w-full items-center">
+                    <Text className="mb-10 text-lg text-white">
+                        Cuộc gọi đến
+                    </Text>
                     {incomingCall.callerAvatar ? (
                         <Image
                             source={{ uri: incomingCall.callerAvatar }}
-                            style={styles.avatar}
+                            className="mb-5 h-[120px] w-[120px] rounded-full"
                         />
                     ) : (
-                        <View style={styles.avatarPlaceholder} />
+                        <View className="mb-5 h-[120px] w-[120px] rounded-full bg-[#555]" />
                     )}
-                    <Text style={styles.name}>{incomingCall.callerName}</Text>
-                    <Text style={styles.subtitle}>Đang gọi cho bạn...</Text>
+                    <Text className="mb-2.5 text-2xl font-bold text-white">
+                        {incomingCall.callerName}
+                    </Text>
+                    <Text className="mb-14 text-base text-[#ccc]">
+                        Đang gọi cho bạn...
+                    </Text>
 
-                    <View style={styles.buttonContainer}>
+                    <View className="w-[60%] flex-row justify-around">
                         <TouchableOpacity
-                            style={[styles.button, styles.declineButton]}
+                            className="h-[70px] w-[70px] items-center justify-center rounded-full bg-red-500"
                             onPress={handleDecline}
                         >
                             <PhoneOff color="white" size={32} />
                         </TouchableOpacity>
                         <TouchableOpacity
-                            style={[styles.button, styles.acceptButton]}
+                            className="h-[70px] w-[70px] items-center justify-center rounded-full bg-green-500"
                             onPress={handleAccept}
                         >
                             <Phone color="white" size={32} />
@@ -109,63 +115,3 @@ export const IncomingCall = () => {
         </Modal>
     );
 };
-
-const styles = StyleSheet.create({
-    container: {
-        flex: 1,
-        backgroundColor: "rgba(0,0,0,0.9)",
-        justifyContent: "center",
-        alignItems: "center",
-    },
-    content: {
-        alignItems: "center",
-        width: "100%",
-    },
-    title: {
-        color: "white",
-        fontSize: 18,
-        marginBottom: 40,
-    },
-    avatar: {
-        width: 120,
-        height: 120,
-        borderRadius: 60,
-        marginBottom: 20,
-    },
-    avatarPlaceholder: {
-        width: 120,
-        height: 120,
-        borderRadius: 60,
-        backgroundColor: "#555",
-        marginBottom: 20,
-    },
-    name: {
-        color: "white",
-        fontSize: 24,
-        fontWeight: "bold",
-        marginBottom: 10,
-    },
-    subtitle: {
-        color: "#ccc",
-        fontSize: 16,
-        marginBottom: 60,
-    },
-    buttonContainer: {
-        flexDirection: "row",
-        justifyContent: "space-around",
-        width: "60%",
-    },
-    button: {
-        width: 70,
-        height: 70,
-        borderRadius: 35,
-        justifyContent: "center",
-        alignItems: "center",
-    },
-    declineButton: {
-        backgroundColor: "#EF4444", // Red
-    },
-    acceptButton: {
-        backgroundColor: "#22C55E", // Green
-    },
-});
