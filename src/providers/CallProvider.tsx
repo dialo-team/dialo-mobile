@@ -39,6 +39,7 @@ interface CallContextProps {
     declineIncomingCall: () => void;
     endActiveCall: () => void;
     startActiveCall: (roomId: string, token: string, url: string) => void;
+    isCaller?: boolean;
 }
 
 const CallContext = createContext<CallContextProps | undefined>(undefined);
@@ -118,6 +119,8 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
         };
     }, []);
 
+    const [isCaller, setIsCaller] = useState(false);
+
     const acceptIncomingCall = (token: string, url: string) => {
         if (incomingCall) {
             const id =
@@ -130,6 +133,7 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
             setActiveLivekitUrl(url);
             setCallState("active");
             setIncomingCall(null);
+            setIsCaller(false);
         }
     };
 
@@ -143,6 +147,7 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
         setActiveRoomId(null);
         setActiveToken(null);
         setActiveLivekitUrl(null);
+        setIsCaller(false);
     };
 
     const startActiveCall = (roomId: string, token: string, url: string) => {
@@ -150,6 +155,7 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
         setActiveToken(token);
         setActiveLivekitUrl(url);
         setCallState("active");
+        setIsCaller(true);
     };
 
     return (
@@ -163,6 +169,7 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
                 activeToken,
                 activeLivekitUrl,
                 currentUser,
+                isCaller,
                 acceptIncomingCall,
                 declineIncomingCall,
                 endActiveCall,

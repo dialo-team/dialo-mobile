@@ -10,6 +10,7 @@ import {
 import { Phone, PhoneOff } from "lucide-react-native";
 import { useCall } from "../../providers/CallProvider";
 import { videoApi } from "../../api/video/videoApi";
+import { chatApi } from "../../api/chat/chatApi";
 
 export const IncomingCall = () => {
     const {
@@ -62,6 +63,15 @@ export const IncomingCall = () => {
                 incomingCall.groupId ||
                 "";
             const caller = incomingCall.callerId || "";
+
+            if (currentUser && currentUser.id) {
+                await chatApi.sendMessage({
+                    conversationId: id,
+                    senderId: currentUser.id,
+                    type: "SYSTEM",
+                    content: "Đối phương đã huỷ cuộc gọi",
+                });
+            }
 
             await videoApi.declineCall({
                 conversationId: id,

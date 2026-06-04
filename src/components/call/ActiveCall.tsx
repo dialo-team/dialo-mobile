@@ -5,6 +5,7 @@ import {
     useParticipants,
     VideoTrack,
 } from "@livekit/react-native";
+import { chatApi } from "@/src/api/chat/chatApi";
 import { Audio } from "expo-av";
 import { Camera } from "expo-camera";
 import { Track } from "livekit-client";
@@ -15,10 +16,13 @@ import {
     SwitchCamera,
     Video,
     VideoOff,
+    Volume2,
+    VolumeX,
 } from "lucide-react-native";
 import React, { useEffect, useState } from "react";
 import {
     Modal,
+    Platform,
     StyleSheet,
     Text,
     TouchableOpacity,
@@ -30,21 +34,52 @@ import { videoApi } from "../../api/video/videoApi";
 import { useCall } from "../../providers/CallProvider";
 
 const CallRoomContent = () => {
-    const { endActiveCall, activeRoomId, currentUser, incomingCall } =
+    const { endActiveCall, activeRoomId, currentUser, isCaller, incomingCall } =
         useCall();
     const participants = useParticipants();
     const { localParticipant } = useLocalParticipant();
 
     // Khởi tạo trạng thái tắt camera và mic ban đầu
-    const [isMicOn, setIsMicOn] = useState(false);
+    const [isMicOn, setIsMicOn] = useState(true);
     const [isCamOn, setIsCamOn] = useState(false);
+    const [isSpeaker, setIsSpeaker] = useState(true);
     const [facingMode, setFacingMode] = useState<"user" | "environment">(
         "user",
     );
 
+    const toggleSpeaker = async () => {
+        const next = !isSpeaker;
+        setIsSpeaker(next);
+        try {
+            const deviceId =
+                Platform.OS === "ios"
+                    ? next
+                        ? "force_speaker"
+                        : "default"
+                    : next
+                      ? "speaker"
+                      : "earpiece";
+            await AudioSession.selectAudioOutput(deviceId);
+        } catch (e) {
+            console.log("Error setting audio output:", e);
+        }
+    };
+
     const handleEndCall = async () => {
         if (activeRoomId) {
             try {
+                if (
+                    participants.length === 1 &&
+                    duration === 0 &&
+                    currentUser
+                ) {
+                    await chatApi.sendMessage({
+                        conversationId: activeRoomId,
+                        senderId: currentUser.id,
+                        type: "SYSTEM",
+                        content: "Bạn đã huỷ cuộc gọi",
+                    });
+                }
                 // Bạn có thể cần truyền danh sách recipientIds nếu có
                 await videoApi.endCall({
                     conversationId: activeRoomId,
@@ -92,86 +127,191 @@ const CallRoomContent = () => {
         return null;
     };
 
+    const renderParticipant = (
+        p: any,
+        customClassName: string,
+        avatarSize: number = 80,
+    ) => {
+        if (!p) return null;
+        const trackPub = p.getTrackPublication(Track.Source.Camera);
+        const isVideoEnabled =
+            trackPub &&
+            trackPub.isSubscribed &&
+            trackPub.track &&
+            !trackPub.isMuted;
+        const isLocal = p.identity === localParticipant?.identity;
+        const showVideo = isLocal ? isCamOn : isVideoEnabled;
+        const avatarUrl = getAvatarUrl(p.identity);
+
+        return (
+            <View key={p.identity} className={customClassName}>
+                {showVideo && trackPub?.track ? (
+                    <VideoTrack
+                        trackRef={{
+                            participant: p,
+                            publication: trackPub,
+                            source: Track.Source.Camera,
+                        }}
+                        style={StyleSheet.absoluteFillObject}
+                        mirror={isLocal && facingMode === "user"}
+                    />
+                ) : (
+                    <View className="absolute bottom-0 left-0 right-0 top-0 items-center justify-center bg-[#222]">
+                        <View
+                            style={{
+                                width: avatarSize,
+                                height: avatarSize,
+                                borderRadius: avatarSize / 2,
+                            }}
+                            className="items-center justify-center bg-[#444] overflow-hidden"
+                        >
+                            {avatarUrl ? (
+                                <Image
+                                    source={{ uri: avatarUrl }}
+                                    style={{
+                                        width: avatarSize,
+                                        height: avatarSize,
+                                    }}
+                                />
+                            ) : (
+                                <Text
+                                    style={{ fontSize: avatarSize * 0.4 }}
+                                    className="text-white font-bold"
+                                >
+                                    {(p.name || p.identity)
+                                        .charAt(0)
+                                        .toUpperCase()}
+                                </Text>
+                            )}
+                        </View>
+                    </View>
+                )}
+                <Text className="absolute bottom-2.5 left-2.5 rounded bg-black/60 px-2 py-1 text-xs text-white">
+                    {p.name || p.identity}
+                    {isLocal ? " (Bạn)" : ""}
+                </Text>
+            </View>
+        );
+    };
+
+    const me =
+        participants.find((p) => p.identity === localParticipant?.identity) ||
+        participants[0];
+    const others = participants.filter((p) => p.identity !== me?.identity);
+
+    // Logic đếm thời gian
+    const [duration, setDuration] = useState(0);
+
+    useEffect(() => {
+        // Chỉ đếm thời gian khi có từ 2 người trở lên
+        if (participants.length > 1) {
+            const interval = setInterval(() => {
+                setDuration((prev) => prev + 1);
+            }, 1000);
+            return () => clearInterval(interval);
+        }
+    }, [participants.length]);
+
+    // Auto-hangup for caller if no answer in 10s
+    useEffect(() => {
+        let timeout: NodeJS.Timeout;
+        if (isCaller && participants.length === 1 && duration === 0) {
+            timeout = setTimeout(async () => {
+                if (activeRoomId && currentUser) {
+                    await chatApi.sendMessage({
+                        conversationId: activeRoomId,
+                        senderId: currentUser.id,
+                        type: "SYSTEM",
+                        content: "Đối phương không phản hồi",
+                    });
+                    await videoApi.endCall({
+                        conversationId: activeRoomId,
+                        recipientIds: [],
+                    });
+                }
+                endActiveCall();
+            }, 10000);
+        }
+        return () => clearTimeout(timeout);
+    }, [
+        isCaller,
+        participants.length,
+        duration,
+        activeRoomId,
+        currentUser,
+        endActiveCall,
+    ]);
+
+    const formatDuration = (seconds: number) => {
+        const h = Math.floor(seconds / 3600);
+        const m = Math.floor((seconds % 3600) / 60);
+        const s = seconds % 60;
+        if (h > 0) {
+            return `${h}:${m.toString().padStart(2, "0")}:${s.toString().padStart(2, "0")}`;
+        }
+        return `${m.toString().padStart(2, "0")}:${s.toString().padStart(2, "0")}`;
+    };
+
     return (
         <SafeAreaView className="flex-1 bg-[#111]">
-            <View className="flex-1 flex-row flex-wrap items-center justify-center">
+            <View className="flex-1 bg-black relative">
+                {/* Hiển thị thời gian cuộc gọi */}
+                {participants.length > 1 && (
+                    <View className="absolute top-4 self-center rounded-full bg-black/60 px-4 py-1.5 z-20">
+                        <Text className="text-sm font-medium text-white">
+                            {formatDuration(duration)}
+                        </Text>
+                    </View>
+                )}
+
                 {participants.length === 0 ? (
                     <View className="flex-1 items-center justify-center">
                         <Text className="text-base text-[#aaa]">
-                            Đang chờ người khác tham gia...
+                            Đang chờ kết nối...
                         </Text>
                     </View>
+                ) : participants.length === 1 ? (
+                    // Chỉ có mình -> Full screen
+                    renderParticipant(me, "flex-1 w-full relative", 120)
+                ) : participants.length === 2 ? (
+                    // 2 người -> PIP: Người kia Full Screen, mình góc trên phải
+                    <>
+                        {renderParticipant(
+                            others[0],
+                            "flex-1 w-full relative",
+                            120,
+                        )}
+                        {renderParticipant(
+                            me,
+                            "absolute top-5 right-4 w-28 h-40 rounded-xl overflow-hidden border border-gray-600 shadow-lg z-10",
+                            50,
+                        )}
+                    </>
                 ) : (
-                    // Hiển thị Grid các thành viên
-                    participants.map((p, index) => {
-                        const trackPub = p.getTrackPublication(
-                            Track.Source.Camera,
-                        );
-                        const isVideoEnabled =
-                            trackPub &&
-                            trackPub.isSubscribed &&
-                            trackPub.track &&
-                            !trackPub.isMuted;
-                        // Đối với local participant, track luôn có sẵn nếu đang bật (isCamOn)
-                        const isLocal =
-                            p.identity === localParticipant?.identity;
-                        const showVideo = isLocal ? isCamOn : isVideoEnabled;
-                        const avatarUrl = getAvatarUrl(p.identity);
-
-                        return (
-                            <View
-                                key={p.identity + index}
-                                className="relative h-1/2 w-full bg-[#222]"
-                            >
-                                {showVideo && trackPub?.track ? (
-                                    <VideoTrack
-                                        trackRef={{
-                                            participant: p,
-                                            publication: trackPub,
-                                            source: Track.Source.Camera,
-                                        }}
-                                        style={StyleSheet.absoluteFillObject}
-                                    />
-                                ) : (
-                                    <View className="absolute bottom-0 left-0 right-0 top-0 items-center justify-center bg-black">
-                                        <View className="h-20 w-20 items-center justify-center rounded-full bg-[#333] overflow-hidden">
-                                            {avatarUrl ? (
-                                                <Image
-                                                    source={{ uri: avatarUrl }}
-                                                    style={{
-                                                        width: 80,
-                                                        height: 80,
-                                                    }}
-                                                />
-                                            ) : (
-                                                <Text className="text-3xl text-white">
-                                                    {(p.name || p.identity)
-                                                        .charAt(0)
-                                                        .toUpperCase()}
-                                                </Text>
-                                            )}
-                                        </View>
-                                    </View>
-                                )}
-                                <Text className="absolute bottom-2.5 left-2.5 rounded bg-black/50 px-2 py-1 text-white">
-                                    {p.name || p.identity}
-                                </Text>
-                            </View>
-                        );
-                    })
+                    // Group > 2 người -> Grid
+                    <View className="flex-1 flex-row flex-wrap">
+                        {participants.map((p) =>
+                            renderParticipant(
+                                p,
+                                "relative w-1/2 h-1/2 border border-black",
+                                60,
+                            ),
+                        )}
+                    </View>
                 )}
             </View>
 
             <View className="flex-row items-center justify-evenly bg-black pb-10 pt-5">
-                {/* Nút Flip Camera hiển thị khi đang bật camera */}
-                {isCamOn && (
-                    <TouchableOpacity
-                        className="h-[60px] w-[60px] items-center justify-center rounded-full bg-[#333]"
-                        onPress={switchCamera}
-                    >
-                        <SwitchCamera color="white" size={24} />
-                    </TouchableOpacity>
-                )}
+                <TouchableOpacity
+                    className={`h-[60px] w-[60px] items-center justify-center rounded-full ${isSpeaker ? "bg-[#333]" : "bg-[#555]"}`}
+                    onPress={toggleSpeaker}
+                >
+                    {isSpeaker ? (
+                        <Volume2 color="white" size={24} />
+                    ) : (
+                        <VolumeX color="white" size={24} />
+                    )}
+                </TouchableOpacity>
 
                 <TouchableOpacity
                     className={`h-[60px] w-[60px] items-center justify-center rounded-full ${isMicOn ? "bg-[#333]" : "bg-[#555]"}`}
@@ -201,6 +341,16 @@ const CallRoomContent = () => {
                         <VideoOff color="white" size={24} />
                     )}
                 </TouchableOpacity>
+
+                {/* Nút Flip Camera hiển thị khi đang bật camera */}
+                {isCamOn && (
+                    <TouchableOpacity
+                        className="absolute right-6 top-[-70px] h-[50px] w-[50px] items-center justify-center rounded-full bg-[#333]"
+                        onPress={switchCamera}
+                    >
+                        <SwitchCamera color="white" size={20} />
+                    </TouchableOpacity>
+                )}
             </View>
         </SafeAreaView>
     );

@@ -1,9 +1,12 @@
 import { chatApi, chatAuthUtils } from "@/src/api/chat/chatApi";
 import { friendApi } from "@/src/api/friend/friendApi";
+import { userApi } from "@/src/api/user/userApi";
+import { videoApi } from "@/src/api/video/videoApi";
 import ChatInputBar from "@/src/components/ChatInputBar";
 import VoicePlayer from "@/src/components/VoicePlayer";
 import { useChatAttachments } from "@/src/hooks/useChatAttchment";
 import { useChatRealtime } from "@/src/hooks/useChatRealtime";
+import { useCall } from "@/src/providers/CallProvider";
 import { getInitials, pickBestDisplayName } from "@/src/utils/displayUser";
 import { getFullUrl } from "@/src/utils/url";
 import { Video as AVVideo, ResizeMode } from "expo-av";
@@ -16,7 +19,6 @@ import {
     Search,
     Trash2,
     Undo2,
-    Video,
     X,
 } from "lucide-react-native";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -193,6 +195,44 @@ export default function ChatScreen() {
     >(null);
 
     const highlightAnimRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+    const { startActiveCall } = useCall();
+
+    const handleVideoCall = async () => {
+        if (!normalizedConversationId || !currentUserId || !counterpartId)
+            return;
+        try {
+            const profile = await userApi.getProfile();
+            const callerName =
+                profile?.userName || profile?.fullName || "Thành viên";
+            const callerAvatar = profile?.avatarUrl || "";
+
+            // 1. Gửi lời mời gọi
+            await videoApi.inviteCall({
+                conversationId: normalizedConversationId,
+                callerId: currentUserId,
+                callerName,
+                callerAvatar,
+                recipientIds: [counterpartId],
+            });
+
+            // 2. Lấy token và URL để join LiveKit
+            const tokenResponse = await videoApi.generateToken({
+                roomId: normalizedConversationId,
+                participantName: callerName,
+            });
+
+            // 3. Chuyển sang màn hình gọi
+            startActiveCall(
+                normalizedConversationId,
+                tokenResponse.token,
+                tokenResponse.url,
+            );
+        } catch (error) {
+            console.error("Lỗi khi bắt đầu cuộc gọi video:", error);
+            Alert.alert("Lỗi", "Không thể bắt đầu cuộc gọi video.");
+        }
+    };
 
     const scrollToMessage = (msgId: string) => {
         // For FlatList (inverted), we find the index and scroll to it
@@ -1330,11 +1370,11 @@ export default function ChatScreen() {
                         >
                             <Search size={22} color="white" />
                         </TouchableOpacity>
-                        <TouchableOpacity style={{ marginLeft: 10 }}>
+                        <TouchableOpacity
+                            style={{ marginLeft: 10 }}
+                            onPress={handleVideoCall}
+                        >
                             <Phone size={22} color="white" />
-                        </TouchableOpacity>
-                        <TouchableOpacity style={{ marginLeft: 10 }}>
-                            <Video size={26} color="white" />
                         </TouchableOpacity>
                         <TouchableOpacity
                             style={{ marginLeft: 10 }}
