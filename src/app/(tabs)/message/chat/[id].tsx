@@ -440,7 +440,10 @@ export default function ChatScreen() {
 
             return {
                 id: item?.id,
-                text: type === "TEXT" ? item?.content || "" : "",
+                text:
+                    type === "TEXT" || type === "SYSTEM"
+                        ? item?.content || ""
+                        : "",
                 type: isMe ? "right" : "left",
                 time: item?.createdAt
                     ? new Date(item.createdAt).toLocaleTimeString("vi-VN", {

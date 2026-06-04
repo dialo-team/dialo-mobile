@@ -1,3 +1,4 @@
+import { chatApi } from "@/src/api/chat/chatApi";
 import {
     AudioSession,
     LiveKitRoom,
@@ -5,7 +6,6 @@ import {
     useParticipants,
     VideoTrack,
 } from "@livekit/react-native";
-import { chatApi } from "@/src/api/chat/chatApi";
 import { Audio } from "expo-av";
 import { Camera } from "expo-camera";
 import { Track } from "livekit-client";
@@ -21,13 +21,13 @@ import {
 } from "lucide-react-native";
 import React, { useEffect, useState } from "react";
 import {
+    Image,
     Modal,
     Platform,
     StyleSheet,
     Text,
     TouchableOpacity,
     View,
-    Image,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { videoApi } from "../../api/video/videoApi";
