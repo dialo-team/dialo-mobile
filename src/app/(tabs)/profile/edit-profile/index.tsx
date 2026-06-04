@@ -98,8 +98,8 @@ export default function EditProfile() {
                         }
                     }
                 }
+                // eslint-disable-next-line @typescript-eslint/no-unused-vars
             } catch (error) {
-                console.log("Lỗi tải thông tin:", error);
                 Alert.alert("Lỗi", "Không thể tải thông tin người dùng.");
             } finally {
                 setIsLoading(false);
@@ -131,6 +131,7 @@ export default function EditProfile() {
                     try {
                         await userApi.updateAvatar(uri);
                         setAvatar(uri);
+                        // eslint-disable-next-line @typescript-eslint/no-unused-vars
                     } catch (error) {
                         Alert.alert("Lỗi", "Không thể lưu ảnh đại diện.");
                     } finally {
@@ -141,6 +142,7 @@ export default function EditProfile() {
                     try {
                         await userApi.updateBackground(uri); //
                         setBackground(uri);
+                        // eslint-disable-next-line @typescript-eslint/no-unused-vars
                     } catch (error) {
                         Alert.alert("Lỗi", "Không thể lưu ảnh bìa.");
                     } finally {
@@ -148,8 +150,9 @@ export default function EditProfile() {
                     }
                 }
             }
+            // eslint-disable-next-line @typescript-eslint/no-unused-vars
         } catch (error) {
-            console.log("Lỗi thư viện ảnh:", error);
+            Alert.alert("Lỗi", "Không thể chọn ảnh.");
         }
     };
 
@@ -175,6 +178,7 @@ export default function EditProfile() {
                 gender: genderEnum,
             });
             setModalVisible(false);
+            // eslint-disable-next-line @typescript-eslint/no-unused-vars
         } catch (error: any) {
             Alert.alert("Lỗi", "Cập nhật thông tin thất bại.");
         } finally {
@@ -189,6 +193,7 @@ export default function EditProfile() {
             await userApi.updateBio(bio.trim()); //
             setBioModalVisible(false);
             Alert.alert("Thành công", "Đã cập nhật giới thiệu bản thân.");
+            // eslint-disable-next-line @typescript-eslint/no-unused-vars
         } catch (error) {
             Alert.alert("Lỗi", "Cập nhật giới thiệu thất bại.");
         } finally {

@@ -4,6 +4,13 @@ import storage from "@/src/api/auth/storage";
 import { Stack, useRouter } from "expo-router";
 import { useEffect } from "react";
 import { SafeAreaProvider } from "react-native-safe-area-context";
+import { registerGlobals } from "@livekit/react-native";
+
+registerGlobals();
+
+if (typeof global.Event === "undefined") {
+    global.Event = class Event {} as any;
+}
 
 export default function RootLayout() {
     const router = useRouter();

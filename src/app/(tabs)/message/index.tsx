@@ -175,6 +175,7 @@ export default function MessagesScreen() {
                 );
 
                 setConversations(enriched);
+                // eslint-disable-next-line @typescript-eslint/no-unused-vars
             } catch (e: any) {
                 setError("Không thể tải danh sách cuộc trò chuyện");
             } finally {
@@ -189,17 +190,12 @@ export default function MessagesScreen() {
             if (payload) {
                 const senderId = payload?.senderId;
                 if (senderId && blockedUserIds.has(String(senderId))) {
-                    console.log(
-                        "[MessagesScreen] Ignoring realtime update from blocked sender:",
-                        senderId,
-                    );
                     return;
                 }
             }
             if (refreshTimerRef.current) {
                 clearTimeout(refreshTimerRef.current);
             }
-            console.log("[MessagesScreen] Debounced refresh scheduled");
             refreshTimerRef.current = setTimeout(() => {
                 loadConversations();
             }, 1000);
@@ -217,8 +213,8 @@ export default function MessagesScreen() {
                     setCurrentUserId("");
                     setError("Bạn chưa đăng nhập hoặc phiên đã hết hạn.");
                 }
+                // eslint-disable-next-line @typescript-eslint/no-unused-vars
             } catch (error) {
-                console.error("Error getting current user ID:", error);
                 setCurrentUserId("");
                 setError("Không thể xác thực người dùng hiện tại.");
             }

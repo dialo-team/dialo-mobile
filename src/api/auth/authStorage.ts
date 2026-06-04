@@ -6,12 +6,9 @@ export const saveAuthData = async (
     refreshToken: string,
 ) => {
     try {
-        console.log("[AuthStorage] Saving auth data");
         await storage.setItem("accessToken", accessToken);
         await storage.setItem("refreshToken", refreshToken);
-        console.log("[AuthStorage] Auth data saved successfully");
     } catch (error) {
-        console.error("[AuthStorage] Error saving auth data:", error);
         throw error;
     }
 };
@@ -19,10 +16,6 @@ export const saveAuthData = async (
 export const getAccessToken = async (): Promise<string | null> => {
     try {
         const token = await storage.getItem("accessToken");
-        console.log(
-            "[AuthStorage] Access token retrieved:",
-            token ? "exists" : "null",
-        );
         return token;
     } catch (error) {
         console.error("[AuthStorage] Error getting access token:", error);
@@ -33,10 +26,6 @@ export const getAccessToken = async (): Promise<string | null> => {
 export const getRefreshToken = async (): Promise<string | null> => {
     try {
         const token = await storage.getItem("refreshToken");
-        console.log(
-            "[AuthStorage] Refresh token retrieved:",
-            token ? "exists" : "null",
-        );
         return token;
     } catch (error) {
         console.error("[AuthStorage] Error getting refresh token:", error);
@@ -46,13 +35,11 @@ export const getRefreshToken = async (): Promise<string | null> => {
 
 export const clearAuthData = async () => {
     try {
-        console.log("[AuthStorage] Clearing auth data");
         await storage.removeItem("accessToken");
         await storage.removeItem("refreshToken");
         await storage.removeItem("loginPhone");
-        console.log("[AuthStorage] Auth data cleared");
     } catch (error) {
-        console.error("[AuthStorage] Error clearing auth data:", error);
+        throw error;
     }
 };
 
@@ -60,7 +47,7 @@ export const savePhone = async (phone: string) => {
     try {
         await storage.setItem("loginPhone", phone);
     } catch (error) {
-        console.error("[AuthStorage] Error saving phone number:", error);
+        throw error;
     }
 };
 

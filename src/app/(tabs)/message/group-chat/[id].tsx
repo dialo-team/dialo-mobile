@@ -2,10 +2,13 @@ import { chatApi, chatAuthUtils } from "@/src/api/chat/chatApi";
 import { friendApi } from "@/src/api/friend/friendApi";
 import { groupApi } from "@/src/api/group/groupApi";
 import { Message } from "@/src/api/group/types";
+import { userApi } from "@/src/api/user/userApi";
+import { videoApi } from "@/src/api/video/videoApi";
 import ChatInputBar from "@/src/components/ChatInputBar";
 import VoicePlayer from "@/src/components/VoicePlayer";
 import { useChatAttachments } from "@/src/hooks/useChatAttchment";
 import { useChatRealtime } from "@/src/hooks/useChatRealtime";
+import { useCall } from "@/src/providers/CallProvider";
 import { getInitials, pickBestDisplayName } from "@/src/utils/displayUser";
 import { getFullUrl } from "@/src/utils/url";
 import { Video as AVVideo, ResizeMode } from "expo-av";
@@ -16,6 +19,7 @@ import {
     MoreHorizontal,
     MoveLeft,
     Paperclip,
+    Phone,
     Pin,
     PinOff,
     Search,
@@ -268,6 +272,46 @@ export default function GroupChatScreen() {
     const messageYOffsets = useRef<Record<string, number>>({});
     const highlightAnimRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+    const { startActiveCall } = useCall();
+
+    const handleVideoCall = async () => {
+        if (!conversationId || !currentUserId) return;
+        try {
+            const profile = await userApi.getProfile();
+            const callerName =
+                profile?.userName || profile?.fullName || "Thành viên";
+            const callerAvatar = profile?.avatarUrl || "";
+            const recipientIds = Object.keys(memberProfiles).filter(
+                (id) => id !== currentUserId,
+            );
+
+            // 1. Gửi lời mời gọi
+            await videoApi.inviteCall({
+                conversationId,
+                callerId: currentUserId,
+                callerName,
+                callerAvatar,
+                recipientIds,
+            });
+
+            // 2. Lấy token và URL để join LiveKit
+            const tokenResponse = await videoApi.generateToken({
+                roomId: conversationId,
+                participantName: callerName,
+            });
+
+            // 3. Chuyển sang màn hình gọi
+            startActiveCall(
+                conversationId,
+                tokenResponse.token,
+                tokenResponse.url,
+            );
+        } catch (error) {
+            console.error("Lỗi khi bắt đầu cuộc gọi video:", error);
+            Alert.alert("Lỗi", "Không thể bắt đầu cuộc gọi video.");
+        }
+    };
+
     const scrollToMessage = (msgId: string) => {
         const yOffset = messageYOffsets.current[msgId];
         if (yOffset === undefined) return;
@@ -388,10 +432,6 @@ export default function GroupChatScreen() {
                 groupApi
                     .getGroupMembers(conversationId, currentUserId)
                     .catch((err) => {
-                        console.log(
-                            "[GroupChat] Lỗi getGroupMembers, vẫn tiếp tục:",
-                            err?.message,
-                        );
                         return [];
                     }),
             ]);
@@ -426,8 +466,6 @@ export default function GroupChatScreen() {
                     const userRes = await friendApi.getUserById(userId);
                     const userData = userRes?.data || userRes;
 
-                    console.log("[GroupChat] fetched user:", userId, userData);
-
                     enrichedProfiles[userId] = {
                         displayName:
                             userData?.userName ||
@@ -441,9 +479,8 @@ export default function GroupChatScreen() {
                                 userData?.profilePictureUrl,
                         ),
                     };
+                    // eslint-disable-next-line @typescript-eslint/no-unused-vars
                 } catch (e) {
-                    console.log("[GroupChat] fallback user:", userId);
-
                     enrichedProfiles[userId] = {
                         displayName: member.displayName || "Thành viên",
                         avatarUrl: resolveFileUrl(member.avatarUrl),
@@ -470,9 +507,6 @@ export default function GroupChatScreen() {
             });
 
             if (missingUserIds.size > 0) {
-                console.log(
-                    `[GroupChat] Cần fetch bổ sung ${missingUserIds.size} người...`,
-                );
                 for (const userId of Array.from(missingUserIds)) {
                     try {
                         const userRes = await friendApi.getUserById(userId);
@@ -488,6 +522,7 @@ export default function GroupChatScreen() {
                                     : null,
                             };
                         }
+                        // eslint-disable-next-line @typescript-eslint/no-unused-vars
                     } catch (e) {
                         console.log(
                             `[GroupChat] Bỏ qua user ${userId} do lỗi API`,
@@ -512,8 +547,8 @@ export default function GroupChatScreen() {
 
             setMessages(dedupeMessages(mapped));
             await chatApi.markRead(conversationId);
+            // eslint-disable-next-line @typescript-eslint/no-unused-vars
         } catch (error) {
-            console.log("[GroupChat] load error", error);
             Alert.alert("Lỗi", "Không thể tải cuộc trò chuyện.");
         }
     }, [
@@ -1033,12 +1068,8 @@ export default function GroupChatScreen() {
                                 profile?.avatarUrl ||
                                 profile?.avatar ||
                                 "";
-                        } catch (error) {
-                            console.log(
-                                "[handleSelectMessage] User lookup failed for",
-                                targetUserId,
-                            );
-                        }
+                            // eslint-disable-next-line @typescript-eslint/no-unused-vars
+                        } catch (error) {}
                     }
 
                     return {
@@ -1050,11 +1081,8 @@ export default function GroupChatScreen() {
             );
 
             setForwardTargets(targets);
+            // eslint-disable-next-line @typescript-eslint/no-unused-vars
         } catch (error) {
-            console.error(
-                "[GroupChatScreen] Error fetching forward targets:",
-                error,
-            );
             setForwardTargets([]);
         }
     };
@@ -1160,10 +1188,9 @@ export default function GroupChatScreen() {
         try {
             await chatApi.pinMessage(conversationId, selectedMessage.id);
             setSelectedMessage(null);
-            // Cập nhật state ngay lập tức để hiển thị kết quả
             await loadGroupConversation();
+            // eslint-disable-next-line @typescript-eslint/no-unused-vars
         } catch (error) {
-            console.error("[GroupChat] Pin error:", error);
             Alert.alert("Lỗi", "Không thể ghim tin nhắn này.");
         }
     };
@@ -1174,8 +1201,8 @@ export default function GroupChatScreen() {
             await chatApi.unpinMessage(conversationId, msgId);
             setSelectedMessage(null);
             await loadGroupConversation();
+            // eslint-disable-next-line @typescript-eslint/no-unused-vars
         } catch (error) {
-            console.error("[GroupChat] Unpin error:", error);
             Alert.alert("Lỗi", "Không thể bỏ ghim.");
         }
     };
@@ -1215,7 +1242,7 @@ export default function GroupChatScreen() {
                     </View>
 
                     <View className="flex-row items-center ml-9">
-                        <TouchableOpacity>
+                        <TouchableOpacity onPress={handleVideoCall}>
                             <Video size={22} color="white" />
                         </TouchableOpacity>
                         <TouchableOpacity
@@ -1367,6 +1394,26 @@ export default function GroupChatScreen() {
                 >
                     {messages.map((msg) => {
                         const isMe = msg.position === "right";
+
+                        if (
+                            msg.raw?.type === "SYSTEM" &&
+                            (msg.text?.includes("cuộc gọi") ||
+                                msg.text?.includes("không phản hồi"))
+                        ) {
+                            return (
+                                <View
+                                    key={msg.id}
+                                    className="flex-row justify-center mb-3"
+                                >
+                                    <View className="bg-gray-200 px-4 py-2 rounded-full flex-row items-center max-w-[85%]">
+                                        <Phone size={14} color="#4b5563" />
+                                        <Text className="text-[12px] text-gray-700 ml-2 font-medium">
+                                            {msg.text}
+                                        </Text>
+                                    </View>
+                                </View>
+                            );
+                        }
 
                         return (
                             <View

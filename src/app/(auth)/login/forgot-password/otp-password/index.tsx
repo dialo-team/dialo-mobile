@@ -23,9 +23,6 @@ export default function OTPPasswordScreen() {
     const [isSubmitting, setIsSubmitting] = useState(false);
     const inputs = useRef<TextInput[]>([]);
 
-    // Check OTP valid
-    const isOtpValid = otp.every((digit) => digit !== "");
-
     // Handle OTP input
     const handleChange = (text: string, index: number) => {
         if (!/^\d?$/.test(text)) return;
