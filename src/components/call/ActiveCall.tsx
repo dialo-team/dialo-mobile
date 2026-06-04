@@ -214,7 +214,7 @@ const CallRoomContent = () => {
 
     // Auto-hangup for caller if no answer in 10s
     useEffect(() => {
-        let timeout: NodeJS.Timeout;
+        let timeout: number;
         if (isCaller && participants.length === 1 && duration === 0) {
             timeout = setTimeout(async () => {
                 if (activeRoomId && currentUser) {

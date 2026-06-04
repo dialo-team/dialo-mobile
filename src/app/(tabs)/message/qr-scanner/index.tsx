@@ -4,8 +4,11 @@ import { CameraView, useCameraPermissions } from "expo-camera";
 import { useRouter } from "expo-router";
 import { useEffect, useState } from "react";
 import {
+    Alert,
+    Platform,
     StyleSheet,
     Text,
+    ToastAndroid,
     TouchableOpacity,
     useWindowDimensions,
     View,
@@ -251,6 +254,7 @@ export default function QRScanner() {
                                           },
                                       });
                                       return;
+                                      // eslint-disable-next-line @typescript-eslint/no-unused-vars
                                   } catch (err) {
                                       // ❌ không phải friend
                                   }
@@ -258,13 +262,81 @@ export default function QRScanner() {
                                   // 🔵 2. CHỈ login khi chắc chắn là challengeId hợp lệ
                                   if (parsed.type === "login") {
                                       try {
-                                          await authenticationApi.qrApprove(
-                                              parsed.challengeId,
+                                          // Trạng thái 2: Xác nhận Đã quét (Exchange)
+                                          const exchangeRes =
+                                              await authenticationApi.qrExchange(
+                                                  parsed.challengeId,
+                                              );
+
+                                          // Bóc tách thông tin thiết bị (nếu Server có trả về trong response)
+                                          const deviceStr = [
+                                              exchangeRes?.browser ||
+                                                  exchangeRes?.clientInfo
+                                                      ?.browser,
+                                              exchangeRes?.os ||
+                                                  exchangeRes?.platform ||
+                                                  exchangeRes?.clientInfo?.os,
+                                              exchangeRes?.deviceName ||
+                                                  exchangeRes?.device,
+                                          ]
+                                              .filter(Boolean)
+                                              .join(" - ");
+
+                                          const deviceDisplay = deviceStr
+                                              ? `thiết bị: ${deviceStr}`
+                                              : "một thiết bị khác";
+
+                                          // Trạng thái 3: Hiển thị UI Ủy quyền trên Mobile
+                                          Alert.alert(
+                                              "Xác nhận đăng nhập",
+                                              `Bạn đang yêu cầu đăng nhập Dialo trên ${deviceDisplay}. Có phải là bạn không?`,
+                                              [
+                                                  {
+                                                      text: "Từ chối",
+                                                      style: "cancel",
+                                                      onPress: () =>
+                                                          setScanned(false),
+                                                  },
+                                                  {
+                                                      text: "Đăng nhập",
+                                                      onPress: async () => {
+                                                          try {
+                                                              // Trạng thái 4: Chốt Ủy quyền (Approve)
+                                                              await authenticationApi.qrApprove(
+                                                                  parsed.challengeId,
+                                                              );
+
+                                                              if (
+                                                                  Platform.OS ===
+                                                                  "android"
+                                                              ) {
+                                                                  ToastAndroid.show(
+                                                                      "Đăng nhập thành công",
+                                                                      ToastAndroid.SHORT,
+                                                                  );
+                                                              } else {
+                                                                  alert(
+                                                                      "Đăng nhập thành công",
+                                                                  );
+                                                              }
+                                                              router.back();
+                                                              // eslint-disable-next-line @typescript-eslint/no-unused-vars
+                                                          } catch (err) {
+                                                              alert(
+                                                                  "Ủy quyền thất bại. Vui lòng thử lại.",
+                                                              );
+                                                              setScanned(false);
+                                                          }
+                                                      },
+                                                  },
+                                              ],
+                                              { cancelable: false },
                                           );
-                                          alert("Đăng nhập web thành công");
-                                          router.back();
+                                          // eslint-disable-next-line @typescript-eslint/no-unused-vars
                                       } catch (err) {
-                                          alert("QR login không hợp lệ");
+                                          alert(
+                                              "Mã QR đã hết hạn hoặc không hợp lệ",
+                                          );
                                           setScanned(false);
                                       }
                                       return;
