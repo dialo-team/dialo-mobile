@@ -31,11 +31,12 @@ interface CallContextProps {
     incomingCall: IncomingCallData | null;
     activeRoomId: string | null;
     activeToken: string | null;
+    activeLivekitUrl: string | null;
     currentUser: CallUser | null;
-    acceptIncomingCall: (token: string) => void;
+    acceptIncomingCall: (token: string, url: string) => void;
     declineIncomingCall: () => void;
     endActiveCall: () => void;
-    startActiveCall: (roomId: string, token: string) => void;
+    startActiveCall: (roomId: string, token: string, url: string) => void;
 }
 
 const CallContext = createContext<CallContextProps | undefined>(undefined);
@@ -48,6 +49,9 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
     );
     const [activeRoomId, setActiveRoomId] = useState<string | null>(null);
     const [activeToken, setActiveToken] = useState<string | null>(null);
+    const [activeLivekitUrl, setActiveLivekitUrl] = useState<string | null>(
+        null,
+    );
     const [currentUser, setCurrentUser] = useState<CallUser | null>(null);
 
     // Initialize socket connection and fetch user
@@ -88,6 +92,7 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
                         setIncomingCall(null);
                         setActiveRoomId(null);
                         setActiveToken(null);
+                        setActiveLivekitUrl(null);
                     });
 
                     newSocket.on("disconnect", () => {
@@ -111,10 +116,11 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
         };
     }, []);
 
-    const acceptIncomingCall = (token: string) => {
+    const acceptIncomingCall = (token: string, url: string) => {
         if (incomingCall) {
             setActiveRoomId(incomingCall.conversationId);
             setActiveToken(token);
+            setActiveLivekitUrl(url);
             setCallState("active");
             setIncomingCall(null);
         }
@@ -129,11 +135,13 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
         setCallState("none");
         setActiveRoomId(null);
         setActiveToken(null);
+        setActiveLivekitUrl(null);
     };
 
-    const startActiveCall = (roomId: string, token: string) => {
+    const startActiveCall = (roomId: string, token: string, url: string) => {
         setActiveRoomId(roomId);
         setActiveToken(token);
+        setActiveLivekitUrl(url);
         setCallState("active");
     };
 
@@ -146,6 +154,7 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
                 incomingCall,
                 activeRoomId,
                 activeToken,
+                activeLivekitUrl,
                 currentUser,
                 acceptIncomingCall,
                 declineIncomingCall,

@@ -293,14 +293,18 @@ export default function GroupChatScreen() {
                 recipientIds,
             });
 
-            // 2. Lấy token để join LiveKit
-            const token = await videoApi.generateToken({
+            // 2. Lấy token và URL để join LiveKit
+            const tokenResponse = await videoApi.generateToken({
                 roomId: conversationId,
                 participantName: currentUserId,
             });
 
             // 3. Chuyển sang màn hình gọi
-            startActiveCall(conversationId, token);
+            startActiveCall(
+                conversationId,
+                tokenResponse.token,
+                tokenResponse.url,
+            );
         } catch (error) {
             console.error("Lỗi khi bắt đầu cuộc gọi video:", error);
             Alert.alert("Lỗi", "Không thể bắt đầu cuộc gọi video.");

@@ -51,11 +51,20 @@ export interface EndCallRequest {
 }
 
 export const videoApi = {
-    generateToken: async (data: TokenRequest): Promise<string> => {
+    generateToken: async (
+        data: TokenRequest,
+    ): Promise<{ token: string; url: string }> => {
         const response = await videoApiClient.post("/token", data);
-        // Giả sử server trả về object có chứa token, ví dụ { token: "..." }
-        // Cần xem backend cấu trúc trả về như thế nào. Hiện tại return response.data.token.
-        return response.data.token || response.data;
+        console.log("Token response:", response.data);
+
+        const token =
+            response.data?.token || response.data?.data?.token || response.data;
+        const url = response.data?.url || response.data?.data?.url;
+
+        return {
+            token: typeof token === "string" ? token : JSON.stringify(token),
+            url: typeof url === "string" ? url : "",
+        };
     },
 
     inviteCall: async (data: InviteCallRequest) => {

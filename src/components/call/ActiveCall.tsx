@@ -1,36 +1,29 @@
-import React, { useEffect, useState } from "react";
 import {
-    View,
-    Text,
-    TouchableOpacity,
-    StyleSheet,
-    Modal,
-    SafeAreaView,
-} from "react-native";
-import {
+    AudioSession,
     LiveKitRoom,
+    useLocalParticipant,
     useTracks,
     VideoTrack,
-    AudioSession,
 } from "@livekit/react-native";
+import { Audio } from "expo-av";
+import { Camera } from "expo-camera";
 import { Track } from "livekit-client";
-import { PhoneOff, Mic, MicOff, Video, VideoOff } from "lucide-react-native";
-import { useCall } from "../../providers/CallProvider";
-import { API_BASE_URL } from "../../config/env";
+import { Mic, MicOff, PhoneOff, Video, VideoOff } from "lucide-react-native";
+import React, { useEffect, useState } from "react";
+import { Modal, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { videoApi } from "../../api/video/videoApi";
-
-// Thay đổi WebSocket URL cho LiveKit.
-// Thông thường LiveKit server chạy trên ws(s)://...
-// Ở đây giả định backend LiveKit server chạy trên cùng host nhưng protocol WS.
-// Vui lòng kiểm tra lại cấu hình LiveKit URL thực tế từ phía Backend.
-// Tạm thời lấy HOST từ API_BASE_URL.VIDEO nhưng đổi https thành wss.
-const LIVEKIT_URL = API_BASE_URL.VIDEO.replace("http", "ws");
+import { API_BASE_URL } from "../../config/env";
+import { useCall } from "../../providers/CallProvider";
 
 const CallRoomContent = () => {
     const { endActiveCall, activeRoomId } = useCall();
     const tracks = useTracks([Track.Source.Camera, Track.Source.ScreenShare]);
-    const [isMicOn, setIsMicOn] = useState(true);
-    const [isCamOn, setIsCamOn] = useState(true);
+    const { localParticipant } = useLocalParticipant();
+
+    // Khởi tạo trạng thái tắt camera và mic ban đầu
+    const [isMicOn, setIsMicOn] = useState(false);
+    const [isCamOn, setIsCamOn] = useState(false);
 
     const handleEndCall = async () => {
         if (activeRoomId) {
@@ -45,6 +38,22 @@ const CallRoomContent = () => {
             }
         }
         endActiveCall();
+    };
+
+    const toggleMic = async () => {
+        const nextState = !isMicOn;
+        setIsMicOn(nextState);
+        if (localParticipant) {
+            await localParticipant.setMicrophoneEnabled(nextState);
+        }
+    };
+
+    const toggleCam = async () => {
+        const nextState = !isCamOn;
+        setIsCamOn(nextState);
+        if (localParticipant) {
+            await localParticipant.setCameraEnabled(nextState);
+        }
     };
 
     return (
@@ -63,10 +72,7 @@ const CallRoomContent = () => {
                             key={trackRef.participant.identity + index}
                             style={styles.participantVideo}
                         >
-                            <VideoTrack
-                                trackRef={trackRef}
-                                style={StyleSheet.absoluteFill}
-                            />
+                            <VideoTrack trackRef={trackRef} />
                             <Text style={styles.participantName}>
                                 {trackRef.participant.name ||
                                     trackRef.participant.identity}
@@ -82,7 +88,7 @@ const CallRoomContent = () => {
                         styles.controlButton,
                         !isMicOn && styles.controlButtonOff,
                     ]}
-                    onPress={() => setIsMicOn(!isMicOn)}
+                    onPress={toggleMic}
                 >
                     {isMicOn ? (
                         <Mic color="white" size={24} />
@@ -103,7 +109,7 @@ const CallRoomContent = () => {
                         styles.controlButton,
                         !isCamOn && styles.controlButtonOff,
                     ]}
-                    onPress={() => setIsCamOn(!isCamOn)}
+                    onPress={toggleCam}
                 >
                     {isCamOn ? (
                         <Video color="white" size={24} />
@@ -117,7 +123,8 @@ const CallRoomContent = () => {
 };
 
 export const ActiveCall = () => {
-    const { callState, activeToken } = useCall();
+    const { callState, activeToken, activeLivekitUrl } = useCall();
+    const [permissionsGranted, setPermissionsGranted] = useState(false);
 
     useEffect(() => {
         // Cần khởi tạo AudioSession cho react-native webrtc (LiveKit)
@@ -125,23 +132,40 @@ export const ActiveCall = () => {
             await AudioSession.startAudioSession();
         };
         startAudio();
+
+        // Xin quyền truy cập Camera và Microphone trước khi render LiveKitRoom
+        const requestPermissions = async () => {
+            if (callState === "active") {
+                await Camera.requestCameraPermissionsAsync();
+                await Audio.requestPermissionsAsync();
+                setPermissionsGranted(true);
+            }
+        };
+
+        requestPermissions();
+
         return () => {
             AudioSession.stopAudioSession();
         };
-    }, []);
+    }, [callState]);
 
-    if (callState !== "active" || !activeToken) {
+    if (
+        callState !== "active" ||
+        !activeToken ||
+        !activeLivekitUrl ||
+        !permissionsGranted
+    ) {
         return null;
     }
 
     return (
         <Modal visible={true} transparent={false} animationType="fade">
             <LiveKitRoom
-                serverUrl={LIVEKIT_URL}
+                serverUrl={activeLivekitUrl}
                 token={activeToken}
                 connect={true}
-                audio={true}
-                video={true}
+                audio={false}
+                video={false}
                 onDisconnected={() => {
                     console.log("Disconnected from LiveKit");
                 }}

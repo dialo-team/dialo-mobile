@@ -34,13 +34,13 @@ export const IncomingCall = () => {
             });
 
             // 2. Generate token to join LiveKit
-            const token = await videoApi.generateToken({
+            const tokenResponse = await videoApi.generateToken({
                 roomId: incomingCall.conversationId,
                 participantName: currentUser.id,
             });
 
-            // 3. Update state to active and pass token
-            acceptIncomingCall(token);
+            // 3. Update state to active and pass token and url
+            acceptIncomingCall(tokenResponse.token, tokenResponse.url);
         } catch (error) {
             console.error("Failed to accept call:", error);
             declineIncomingCall();
