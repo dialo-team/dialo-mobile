@@ -8,12 +8,18 @@ import {
 import { Audio } from "expo-av";
 import { Camera } from "expo-camera";
 import { Track } from "livekit-client";
-import { Mic, MicOff, PhoneOff, Video, VideoOff } from "lucide-react-native";
+import {
+    Mic,
+    MicOff,
+    PhoneOff,
+    Video,
+    VideoOff,
+    SwitchCamera,
+} from "lucide-react-native";
 import React, { useEffect, useState } from "react";
 import { Modal, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { videoApi } from "../../api/video/videoApi";
-import { API_BASE_URL } from "../../config/env";
 import { useCall } from "../../providers/CallProvider";
 
 const CallRoomContent = () => {
@@ -56,6 +62,25 @@ const CallRoomContent = () => {
         }
     };
 
+    const switchCamera = () => {
+        const trackPub = localParticipant?.getTrackPublication(
+            Track.Source.Camera,
+        );
+        if (
+            trackPub &&
+            trackPub.videoTrack &&
+            trackPub.videoTrack.mediaStreamTrack
+        ) {
+            // react-native-webrtc cung cấp hàm _switchCamera() trên MediaStreamTrack để đổi camera trước/sau mượt mà
+            if (
+                typeof (trackPub.videoTrack.mediaStreamTrack as any)
+                    ._switchCamera === "function"
+            ) {
+                (trackPub.videoTrack.mediaStreamTrack as any)._switchCamera();
+            }
+        }
+    };
+
     return (
         <SafeAreaView style={styles.container}>
             <View style={styles.videoContainer}>
@@ -83,6 +108,16 @@ const CallRoomContent = () => {
             </View>
 
             <View style={styles.controlsContainer}>
+                {/* Nút Flip Camera hiển thị khi đang bật camera */}
+                {isCamOn && (
+                    <TouchableOpacity
+                        style={styles.controlButton}
+                        onPress={switchCamera}
+                    >
+                        <SwitchCamera color="white" size={24} />
+                    </TouchableOpacity>
+                )}
+
                 <TouchableOpacity
                     style={[
                         styles.controlButton,

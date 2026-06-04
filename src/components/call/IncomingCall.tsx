@@ -27,15 +27,22 @@ export const IncomingCall = () => {
     const handleAccept = async () => {
         if (!currentUser) return;
         try {
+            const id =
+                incomingCall.conversationId ||
+                incomingCall.roomId ||
+                incomingCall.groupId ||
+                "";
+            const caller = incomingCall.callerId || "";
+
             // 1. Accept the call via API
             await videoApi.acceptCall({
-                conversationId: incomingCall.conversationId,
-                callerId: incomingCall.callerId,
+                conversationId: id,
+                callerId: caller,
             });
 
             // 2. Generate token to join LiveKit
             const tokenResponse = await videoApi.generateToken({
-                roomId: incomingCall.conversationId,
+                roomId: id,
                 participantName: currentUser.id,
             });
 
@@ -49,9 +56,16 @@ export const IncomingCall = () => {
 
     const handleDecline = async () => {
         try {
+            const id =
+                incomingCall.conversationId ||
+                incomingCall.roomId ||
+                incomingCall.groupId ||
+                "";
+            const caller = incomingCall.callerId || "";
+
             await videoApi.declineCall({
-                conversationId: incomingCall.conversationId,
-                callerId: incomingCall.callerId,
+                conversationId: id,
+                callerId: caller,
             });
         } catch (error) {
             console.error("Failed to decline call:", error);

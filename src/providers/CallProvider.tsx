@@ -16,10 +16,12 @@ interface CallUser {
 }
 
 interface IncomingCallData {
-    conversationId: string;
-    callerId: string;
-    callerName: string;
-    callerAvatar: string;
+    conversationId?: string;
+    roomId?: string;
+    groupId?: string;
+    callerId?: string;
+    callerName?: string;
+    callerAvatar?: string;
 }
 
 type CallState = "none" | "incoming" | "active";
@@ -77,7 +79,7 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
                     newSocket.on("connect", () => {
                         console.log("Connected to Video Socket:", newSocket.id);
                         // Emit register event
-                        newSocket.emit("register", { userId: user.id });
+                        newSocket.emit("register", user.id);
                     });
 
                     newSocket.on("incoming-call", (data: IncomingCallData) => {
@@ -118,7 +120,12 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
 
     const acceptIncomingCall = (token: string, url: string) => {
         if (incomingCall) {
-            setActiveRoomId(incomingCall.conversationId);
+            const id =
+                incomingCall.conversationId ||
+                incomingCall.roomId ||
+                incomingCall.groupId ||
+                "";
+            setActiveRoomId(id);
             setActiveToken(token);
             setActiveLivekitUrl(url);
             setCallState("active");
